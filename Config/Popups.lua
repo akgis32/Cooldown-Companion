@@ -11,6 +11,8 @@ local CS = ST._configState
 local AceSerializer = LibStub("AceSerializer-3.0")
 local LibDeflate = LibStub("LibDeflate")
 
+local ResetConfigSelection = ST._ResetConfigSelection
+
 StaticPopupDialogs["CDC_DELETE_GROUP"] = {
     text = "Are you sure you want to delete group '%s'?",
     button1 = "Delete",
@@ -70,8 +72,7 @@ StaticPopupDialogs["CDC_DELETE_BUTTON"] = {
     OnAccept = function(self, data)
         if data and data.groupId and data.buttonIndex then
             CooldownCompanion:RemoveButtonFromGroup(data.groupId, data.buttonIndex)
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
+            ResetConfigSelection(false)
             CooldownCompanion:RefreshConfigPanel()
         end
     end,
@@ -96,8 +97,7 @@ StaticPopupDialogs["CDC_DELETE_SELECTED_BUTTONS"] = {
                 end
                 CooldownCompanion:RefreshGroupFrame(data.groupId)
             end
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
+            ResetConfigSelection(false)
             CooldownCompanion:RefreshConfigPanel()
         end
     end,
@@ -128,10 +128,7 @@ StaticPopupDialogs["CDC_DELETE_PROFILE"] = {
                 db:SetProfile(nextProfile)
                 db:DeleteProfile(data.profileName, true)
             end
-            CS.selectedGroup = nil
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
-            wipe(CS.selectedGroups)
+            ResetConfigSelection(true)
             CooldownCompanion:RefreshConfigPanel()
             CooldownCompanion:RefreshAllGroups()
         end
@@ -150,10 +147,7 @@ StaticPopupDialogs["CDC_RESET_PROFILE"] = {
         if data and data.profileName then
             local db = CooldownCompanion.db
             db:ResetProfile()
-            CS.selectedGroup = nil
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
-            wipe(CS.selectedGroups)
+            ResetConfigSelection(true)
             CooldownCompanion:RefreshConfigPanel()
             CooldownCompanion:RefreshAllGroups()
         end
@@ -174,10 +168,7 @@ StaticPopupDialogs["CDC_NEW_PROFILE"] = {
         if text and text ~= "" then
             local db = CooldownCompanion.db
             db:SetProfile(text)
-            CS.selectedGroup = nil
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
-            wipe(CS.selectedGroups)
+            ResetConfigSelection(true)
             CooldownCompanion:RefreshConfigPanel()
             CooldownCompanion:RefreshAllGroups()
         end
@@ -208,10 +199,7 @@ StaticPopupDialogs["CDC_RENAME_PROFILE"] = {
             db:SetProfile(newName)
             db:CopyProfile(data.oldName)
             db:DeleteProfile(data.oldName, true)
-            CS.selectedGroup = nil
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
-            wipe(CS.selectedGroups)
+            ResetConfigSelection(true)
             CooldownCompanion:RefreshConfigPanel()
             CooldownCompanion:RefreshAllGroups()
         end
@@ -241,10 +229,7 @@ StaticPopupDialogs["CDC_DUPLICATE_PROFILE"] = {
             local db = CooldownCompanion.db
             db:SetProfile(newName)
             db:CopyProfile(data.source)
-            CS.selectedGroup = nil
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
-            wipe(CS.selectedGroups)
+            ResetConfigSelection(true)
             CooldownCompanion:RefreshConfigPanel()
             CooldownCompanion:RefreshAllGroups()
         end
@@ -315,10 +300,7 @@ StaticPopupDialogs["CDC_IMPORT_PROFILE"] = {
                 for k, v in pairs(data) do
                     db.profile[k] = v
                 end
-                CS.selectedGroup = nil
-                CS.selectedButton = nil
-                wipe(CS.selectedButtons)
-                wipe(CS.selectedGroups)
+                ResetConfigSelection(true)
                 if db.profile.groups then
                     local charKey = db.keys.char
                     for _, group in pairs(db.profile.groups) do
@@ -433,10 +415,7 @@ StaticPopupDialogs["CDC_DELETE_SELECTED_GROUPS"] = {
             for _, gid in ipairs(data.groupIds) do
                 CooldownCompanion:DeleteGroup(gid)
             end
-            CS.selectedGroup = nil
-            wipe(CS.selectedGroups)
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
+            ResetConfigSelection(true)
             CooldownCompanion:RefreshConfigPanel()
         end
     end,

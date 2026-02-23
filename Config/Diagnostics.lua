@@ -110,7 +110,7 @@ local function BuildDiagnosticSnapshot()
     local specNameCache = {}
     for _, group in pairs(db.profile.groups) do
         if group.specs then
-            for _, sid in ipairs(group.specs) do
+            for sid in pairs(group.specs) do
                 if not specNameCache[sid] then
                     specNameCache[sid] = GetSpecializationNameForSpecID(sid) or nil
                 end

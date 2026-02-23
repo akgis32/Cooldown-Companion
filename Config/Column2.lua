@@ -23,6 +23,7 @@ local OnAutocompleteSelect = ST._OnAutocompleteSelect
 local SearchAutocomplete = ST._SearchAutocomplete
 local BuildGroupExportData = ST._BuildGroupExportData
 local EncodeExportData = ST._EncodeExportData
+local GroupsHaveForeignSpecs = ST._GroupsHaveForeignSpecs
 
 ------------------------------------------------------------------------
 -- COLUMN 2: Spells / Items
@@ -162,24 +163,11 @@ local function RefreshColumn2()
                         -- Check for foreign specs when moving global→char
                         local hasForeignSpecs = false
                         if targetSection == "char" then
-                            local numSpecs = GetNumSpecializations()
-                            local playerSpecIds = {}
-                            for i = 1, numSpecs do
-                                local specId = C_SpecializationInfo.GetSpecializationInfo(i)
-                                if specId then playerSpecIds[specId] = true end
-                            end
+                            local groupList = {}
                             for _, gid in ipairs(multiGroupIds) do
-                                local g = db.groups[gid]
-                                if g and g.isGlobal and g.specs then
-                                    for specId in pairs(g.specs) do
-                                        if not playerSpecIds[specId] then
-                                            hasForeignSpecs = true
-                                            break
-                                        end
-                                    end
-                                    if hasForeignSpecs then break end
-                                end
+                                if db.groups[gid] then groupList[#groupList + 1] = db.groups[gid] end
                             end
+                            hasForeignSpecs = GroupsHaveForeignSpecs(groupList, true)
                         end
 
                         local doMove = function()
@@ -250,24 +238,11 @@ local function RefreshColumn2()
                         -- Check for foreign specs when targeting char section
                         local hasForeignSpecs = false
                         if targetSection == "char" then
-                            local numSpecs = GetNumSpecializations()
-                            local playerSpecIds = {}
-                            for i = 1, numSpecs do
-                                local specId = C_SpecializationInfo.GetSpecializationInfo(i)
-                                if specId then playerSpecIds[specId] = true end
-                            end
+                            local groupList = {}
                             for _, gid in ipairs(multiGroupIds) do
-                                local g = db.groups[gid]
-                                if g and g.isGlobal and g.specs then
-                                    for specId in pairs(g.specs) do
-                                        if not playerSpecIds[specId] then
-                                            hasForeignSpecs = true
-                                            break
-                                        end
-                                    end
-                                    if hasForeignSpecs then break end
-                                end
+                                if db.groups[gid] then groupList[#groupList + 1] = db.groups[gid] end
                             end
+                            hasForeignSpecs = GroupsHaveForeignSpecs(groupList, true)
                         end
 
                         local doGroupIntoFolder = function()
@@ -318,14 +293,11 @@ local function RefreshColumn2()
 
         -- Make Global / Make Character
         local anyChar = false
-        local allGlobal = true
         for _, gid in ipairs(multiGroupIds) do
             local g = db.groups[gid]
-            if g then
-                if not g.isGlobal then
-                    anyChar = true
-                    allGlobal = false
-                end
+            if g and not g.isGlobal then
+                anyChar = true
+                break
             end
         end
 
@@ -346,25 +318,11 @@ local function RefreshColumn2()
                 CooldownCompanion:RefreshConfigPanel()
             else
                 -- Make all character — check for foreign specs
-                local hasForeignSpecs = false
-                local numSpecs = GetNumSpecializations()
-                local playerSpecIds = {}
-                for i = 1, numSpecs do
-                    local specId = C_SpecializationInfo.GetSpecializationInfo(i)
-                    if specId then playerSpecIds[specId] = true end
-                end
+                local groupList = {}
                 for _, gid in ipairs(multiGroupIds) do
-                    local g = db.groups[gid]
-                    if g and g.specs then
-                        for specId in pairs(g.specs) do
-                            if not playerSpecIds[specId] then
-                                hasForeignSpecs = true
-                                break
-                            end
-                        end
-                        if hasForeignSpecs then break end
-                    end
+                    if db.groups[gid] then groupList[#groupList + 1] = db.groups[gid] end
                 end
+                local hasForeignSpecs = GroupsHaveForeignSpecs(groupList, false)
 
                 local doToggle = function()
                     for _, gid in ipairs(multiGroupIds) do
@@ -594,8 +552,6 @@ local function RefreshColumn2()
         elseif buttonData.type == "item" then
             if C_Item.IsEquippableItem(buttonData.id) then
                 entryName = entryName .. "  |A:Crosshair_repairnpc_32:15:15|a"
-            elseif C_Item.IsConsumableItem(buttonData.id) then
-                entryName = entryName .. "  |A:auctionhouse-icon-coin-gold:12:12|a"
             else
                 entryName = entryName .. "  |A:auctionhouse-icon-coin-gold:12:12|a"
             end

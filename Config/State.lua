@@ -533,6 +533,38 @@ local function BuildHeroTalentSubTreeCheckboxes(container, group, configID, spec
 end
 
 ------------------------------------------------------------------------
+-- Shared selection / spec helpers (consumed by Popups, Panel, Column*, DragReorder)
+------------------------------------------------------------------------
+
+local function ResetConfigSelection(full)
+    CS.selectedButton = nil
+    wipe(CS.selectedButtons)
+    if full then
+        CS.selectedGroup = nil
+        wipe(CS.selectedGroups)
+    end
+end
+
+local function GroupsHaveForeignSpecs(groups, requireGlobal)
+    local numSpecs = GetNumSpecializations()
+    local playerSpecIds = {}
+    for i = 1, numSpecs do
+        local specId = C_SpecializationInfo.GetSpecializationInfo(i)
+        if specId then playerSpecIds[specId] = true end
+    end
+    for _, g in ipairs(groups) do
+        if g.specs and (not requireGlobal or g.isGlobal) then
+            for specId in pairs(g.specs) do
+                if not playerSpecIds[specId] then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+------------------------------------------------------------------------
 -- ST._ exports (consumed by later Config/ files at load time)
 ------------------------------------------------------------------------
 ST._CDM_VIEWER_NAMES = CDM_VIEWER_NAMES
@@ -552,3 +584,5 @@ ST._BUTTON_HEIGHT = BUTTON_HEIGHT
 ST._BUTTON_SPACING = BUTTON_SPACING
 ST._PROFILE_BAR_HEIGHT = PROFILE_BAR_HEIGHT
 ST._BuildHeroTalentSubTreeCheckboxes = BuildHeroTalentSubTreeCheckboxes
+ST._ResetConfigSelection = ResetConfigSelection
+ST._GroupsHaveForeignSpecs = GroupsHaveForeignSpecs

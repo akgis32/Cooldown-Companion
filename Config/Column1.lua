@@ -22,6 +22,7 @@ local StartDragTracking = ST._StartDragTracking
 local GetScaledCursorPosition = ST._GetScaledCursorPosition
 local BuildGroupExportData = ST._BuildGroupExportData
 local EncodeExportData = ST._EncodeExportData
+local GroupsHaveForeignSpecs = ST._GroupsHaveForeignSpecs
 
 ------------------------------------------------------------------------
 -- COLUMN 1: Groups
@@ -303,24 +304,10 @@ local function RefreshColumn1(preserveDrag)
                         info.notCheckable = true
                         info.func = function()
                             CloseDropDownMenus()
-                            if group.isGlobal and group.specs then
-                                local hasForeign = false
-                                local numSpecs = GetNumSpecializations()
-                                local playerSpecIds = {}
-                                for i = 1, numSpecs do
-                                    local specId = C_SpecializationInfo.GetSpecializationInfo(i)
-                                    if specId then playerSpecIds[specId] = true end
-                                end
-                                for specId in pairs(group.specs) do
-                                    if not playerSpecIds[specId] then
-                                        hasForeign = true
-                                        break
-                                    end
-                                end
-                                if hasForeign then
-                                    ShowPopupAboveConfig("CDC_UNGLOBAL_GROUP", group.name, { groupId = groupId })
-                                    return
-                                end
+                            if group.isGlobal and group.specs
+                               and GroupsHaveForeignSpecs({group}, false) then
+                                ShowPopupAboveConfig("CDC_UNGLOBAL_GROUP", group.name, { groupId = groupId })
+                                return
                             end
                             CooldownCompanion:ToggleGroupGlobal(groupId)
                             CooldownCompanion:RefreshConfigPanel()

@@ -12,6 +12,7 @@ local AceConfig = LibStub("AceConfig-3.0")
 local AceConfigDialog = LibStub("AceConfigDialog-3.0")
 
 -- Imports from earlier Config/ files
+local ResetConfigSelection = ST._ResetConfigSelection
 local ShowPopupAboveConfig = ST._ShowPopupAboveConfig
 local COLUMN_PADDING = ST._COLUMN_PADDING
 local TryReceiveCursorDrop = ST._TryReceiveCursorDrop
@@ -21,6 +22,15 @@ local RefreshColumn2 = ST._RefreshColumn2
 local RefreshColumn3 = ST._RefreshColumn3
 local RefreshColumn4 = ST._RefreshColumn4
 local RefreshProfileBar = ST._RefreshProfileBar
+
+-- Shared reset for profile change/copy/reset callbacks
+local function ResetConfigForProfileChange()
+    ResetConfigSelection(true)
+    wipe(CS.collapsedFolders)
+    CS.resourceBarPanelActive = false
+    CooldownCompanion:StopCastBarPreview()
+    CooldownCompanion:StopResourceBarPreview()
+end
 
 -- File-local aliases for buttonSettingsScroll (only needed within this file)
 local buttonSettingsScroll
@@ -190,10 +200,7 @@ local function CreateConfigPanel()
             CooldownCompanion:StopResourceBarPreview()
         else
             CS.resourceBarPanelActive = true
-            CS.selectedGroup = nil
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
-            wipe(CS.selectedGroups)
+            ResetConfigSelection(true)
         end
         UpdateResourceBarBtnHighlight()
         CooldownCompanion:RefreshConfigPanel()
@@ -972,15 +979,7 @@ function CooldownCompanion:SetupConfig()
 
     -- Profile callbacks to refresh on profile change
     self.db.RegisterCallback(self, "OnProfileChanged", function()
-        CS.selectedGroup = nil
-        CS.selectedButton = nil
-        wipe(CS.selectedButtons)
-        wipe(CS.selectedGroups)
-        wipe(CS.collapsedFolders)
-        CS.resourceBarPanelActive = false
-        CooldownCompanion:StopCastBarPreview()
-        CooldownCompanion:StopResourceBarPreview()
-
+        ResetConfigForProfileChange()
         CooldownCompanion:MigrateOrphanedGroups()
 
         if CS.configFrame and CS.configFrame.frame:IsShown() then
@@ -989,14 +988,7 @@ function CooldownCompanion:SetupConfig()
         self:RefreshAllGroups()
     end)
     self.db.RegisterCallback(self, "OnProfileCopied", function()
-        CS.selectedGroup = nil
-        CS.selectedButton = nil
-        wipe(CS.selectedButtons)
-        wipe(CS.selectedGroups)
-        wipe(CS.collapsedFolders)
-        CS.resourceBarPanelActive = false
-        CooldownCompanion:StopCastBarPreview()
-        CooldownCompanion:StopResourceBarPreview()
+        ResetConfigForProfileChange()
 
         -- Re-stamp character-scoped groups and folders after profile copy (matches import flow)
         local charKey = CooldownCompanion.db.keys.char
@@ -1021,14 +1013,7 @@ function CooldownCompanion:SetupConfig()
         self:RefreshAllGroups()
     end)
     self.db.RegisterCallback(self, "OnProfileReset", function()
-        CS.selectedGroup = nil
-        CS.selectedButton = nil
-        wipe(CS.selectedButtons)
-        wipe(CS.selectedGroups)
-        wipe(CS.collapsedFolders)
-        CS.resourceBarPanelActive = false
-        CooldownCompanion:StopCastBarPreview()
-        CooldownCompanion:StopResourceBarPreview()
+        ResetConfigForProfileChange()
 
         if CS.configFrame and CS.configFrame.frame:IsShown() then
             self:RefreshConfigPanel()

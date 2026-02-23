@@ -8,6 +8,7 @@ local CooldownCompanion = ST.Addon
 local CS = ST._configState
 
 local ShowPopupAboveConfig = ST._ShowPopupAboveConfig
+local GroupsHaveForeignSpecs = ST._GroupsHaveForeignSpecs
 
 -- File-local constants
 local DRAG_THRESHOLD = 8
@@ -545,53 +546,24 @@ local function FinishDrag()
             local sourceGroup = CooldownCompanion.db.profile.groups[state.sourceGroupId]
             if targetSection and targetSection ~= state.sourceSection
                and state.sourceSection == "global"
-               and sourceGroup and sourceGroup.specs then
-                local hasForeign = false
-                local numSpecs = GetNumSpecializations()
-                local playerSpecIds = {}
-                for i = 1, numSpecs do
-                    local specId = C_SpecializationInfo.GetSpecializationInfo(i)
-                    if specId then playerSpecIds[specId] = true end
-                end
-                for specId in pairs(sourceGroup.specs) do
-                    if not playerSpecIds[specId] then
-                        hasForeign = true
-                        break
-                    end
-                end
-                if hasForeign then
-                    ShowPopupAboveConfig("CDC_DRAG_UNGLOBAL_GROUP", sourceGroup.name, {
-                        dragState = state,
-                    })
-                    return
-                end
+               and sourceGroup and sourceGroup.specs
+               and GroupsHaveForeignSpecs({sourceGroup}, false) then
+                ShowPopupAboveConfig("CDC_DRAG_UNGLOBAL_GROUP", sourceGroup.name, {
+                    dragState = state,
+                })
+                return
             end
         end
         -- Check for cross-section global→char with foreign specs (multi-group)
         if dropTarget and state.kind == "multi-group" and state.sourceGroupIds then
             local targetSection = dropTarget.targetRow and dropTarget.targetRow.section
-            if targetSection then
-                local hasForeign = false
-                local numSpecs = GetNumSpecializations()
-                local playerSpecIds = {}
-                for i = 1, numSpecs do
-                    local specId = C_SpecializationInfo.GetSpecializationInfo(i)
-                    if specId then playerSpecIds[specId] = true end
-                end
+            if targetSection == "char" then
                 local db = CooldownCompanion.db.profile
+                local groupList = {}
                 for gid in pairs(state.sourceGroupIds) do
-                    local g = db.groups[gid]
-                    if g and g.isGlobal and targetSection == "char" and g.specs then
-                        for specId in pairs(g.specs) do
-                            if not playerSpecIds[specId] then
-                                hasForeign = true
-                                break
-                            end
-                        end
-                        if hasForeign then break end
-                    end
+                    if db.groups[gid] then groupList[#groupList + 1] = db.groups[gid] end
                 end
-                if hasForeign then
+                if GroupsHaveForeignSpecs(groupList, true) then
                     ShowPopupAboveConfig("CDC_UNGLOBAL_SELECTED_GROUPS", nil, {
                         groupIds = (function()
                             local ids = {}
@@ -612,25 +584,13 @@ local function FinishDrag()
             local targetSection = dropTarget.targetRow and dropTarget.targetRow.section
             if targetSection and targetSection ~= state.sourceSection
                and state.sourceSection == "global" then
-                local hasForeign = false
-                local numSpecs = GetNumSpecializations()
-                local playerSpecIds = {}
-                for i = 1, numSpecs do
-                    local specId = C_SpecializationInfo.GetSpecializationInfo(i)
-                    if specId then playerSpecIds[specId] = true end
-                end
-                for groupId, group in pairs(CooldownCompanion.db.profile.groups) do
-                    if group.folderId == state.sourceFolderId and group.specs then
-                        for specId in pairs(group.specs) do
-                            if not playerSpecIds[specId] then
-                                hasForeign = true
-                                break
-                            end
-                        end
-                        if hasForeign then break end
+                local folderGroups = {}
+                for _, group in pairs(CooldownCompanion.db.profile.groups) do
+                    if group.folderId == state.sourceFolderId then
+                        folderGroups[#folderGroups + 1] = group
                     end
                 end
-                if hasForeign then
+                if GroupsHaveForeignSpecs(folderGroups, false) then
                     ShowPopupAboveConfig("CDC_DRAG_UNGLOBAL_FOLDER", nil, {
                         dragState = state,
                     })
