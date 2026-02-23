@@ -397,18 +397,20 @@ local function BuildLoadConditionsTab(container)
     if not group.loadConditions then
         group.loadConditions = {
             raid = false, dungeon = false, delve = false, battleground = false,
-            arena = false, openWorld = false, rested = false,
+            arena = false, openWorld = false, rested = false, petBattle = true,
         }
     end
     local lc = group.loadConditions
 
-    local function CreateLoadConditionToggle(label, key)
+    local function CreateLoadConditionToggle(label, key, defaultVal)
         local cb = AceGUI:Create("CheckBox")
         cb:SetLabel(label)
-        cb:SetValue(lc[key] or false)
+        local val = lc[key]
+        if val == nil then val = defaultVal or false end
+        cb:SetValue(val)
         cb:SetFullWidth(true)
-        cb:SetCallback("OnValueChanged", function(widget, event, val)
-            lc[key] = val
+        cb:SetCallback("OnValueChanged", function(widget, event, newVal)
+            lc[key] = newVal
             CooldownCompanion:RefreshGroupFrame(groupId)
         end)
         return cb
@@ -435,10 +437,11 @@ local function BuildLoadConditionsTab(container)
         { key = "arena",         label = "Arena" },
         { key = "openWorld",     label = "Open World" },
         { key = "rested",        label = "Rested Area" },
+        { key = "petBattle",     label = "Pet Battle", default = true },
     }
 
     for _, cond in ipairs(conditions) do
-        container:AddChild(CreateLoadConditionToggle(cond.label, cond.key))
+        container:AddChild(CreateLoadConditionToggle(cond.label, cond.key, cond.default))
     end
     end -- not instanceCollapsed
 

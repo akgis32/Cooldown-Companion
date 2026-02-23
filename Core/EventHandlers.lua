@@ -134,6 +134,7 @@ function CooldownCompanion:CachePlayerState()
         self._currentInstanceType = inInstance and instanceType or "none"
     end
     self._isResting = IsResting()
+    self._inPetBattle = C_PetBattles.IsInBattle()
 end
 
 function CooldownCompanion:OnZoneChanged()
@@ -143,6 +144,16 @@ end
 
 function CooldownCompanion:OnRestingChanged()
     self._isResting = IsResting()
+    self:RefreshAllGroups()
+end
+
+function CooldownCompanion:OnPetBattleStart()
+    self._inPetBattle = true
+    self:RefreshAllGroups()
+end
+
+function CooldownCompanion:OnPetBattleEnd()
+    self._inPetBattle = false
     self:RefreshAllGroups()
 end
 
