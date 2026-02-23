@@ -1445,6 +1445,21 @@ local function BuildLayoutOrderPanel(container)
     local MAX_SLOTS = ST.MAX_CUSTOM_AURA_BARS or 3
     local customBars = CooldownCompanion:GetSpecCustomAuraBars()
 
+    -- Resolve the display color for a power type
+    local function GetResourceColor(pt)
+        local res = rbSettings.resources and rbSettings.resources[pt]
+        if pt == 4 then return res and res.comboColor or DEFAULT_COMBO_COLOR_CONFIG
+        elseif pt == 5 then return res and res.runeReadyColor or DEFAULT_RUNE_READY_COLOR_CONFIG
+        elseif pt == 7 then return res and res.shardReadyColor or DEFAULT_SHARD_READY_COLOR_CONFIG
+        elseif pt == 9 then return res and res.holyColor or DEFAULT_HOLY_COLOR_CONFIG
+        elseif pt == 12 then return res and res.chiColor or DEFAULT_CHI_COLOR_CONFIG
+        elseif pt == 16 then return res and res.arcaneColor or DEFAULT_ARCANE_COLOR_CONFIG
+        elseif pt == 19 then return res and res.essenceReadyColor or DEFAULT_ESSENCE_READY_COLOR_CONFIG
+        elseif pt == 100 then return res and res.mwBaseColor or DEFAULT_MW_BASE_COLOR_CONFIG
+        else return res and res.color or DEFAULT_POWER_COLORS_CONFIG[pt] or { 1, 1, 1 }
+        end
+    end
+
     local allSlots = {}
 
     -- Class resource slots
@@ -1467,6 +1482,7 @@ local function BuildLayoutOrderPanel(container)
             local name = POWER_NAMES_CONFIG[pt] or ("Power " .. pt)
             table.insert(allSlots, {
                 label = name,
+                color = GetResourceColor(pt),
                 getPos = function() return rbSettings.resources[pt].position or "below" end,
                 getOrder = function() return rbSettings.resources[pt].order or 1 end,
                 setPos = function(v) rbSettings.resources[pt].position = v end,
@@ -1491,6 +1507,7 @@ local function BuildLayoutOrderPanel(container)
             local captured = slotIdx
             table.insert(allSlots, {
                 label = slotName,
+                color = cab.barColor or {0.5, 0.5, 1},
                 getPos = function() return rbSettings.customAuraBarSlots[captured].position or "below" end,
                 getOrder = function() return rbSettings.customAuraBarSlots[captured].order or (1000 + captured) end,
                 setPos = function(v) rbSettings.customAuraBarSlots[captured].position = v end,
@@ -1505,8 +1522,10 @@ local function BuildLayoutOrderPanel(container)
         local cbAnchor = cbSettings.anchorGroupId or defaultAnchor
         local rbAnchor = rbSettings.anchorGroupId or defaultAnchor
         if cbAnchor and cbAnchor == rbAnchor then
+            local cbColor = cbSettings.barColor or { 1.0, 0.7, 0.0 }
             table.insert(allSlots, {
                 label = "Cast Bar",
+                color = cbColor,
                 getPos = function() return db.castBar.position or "below" end,
                 getOrder = function() return db.castBar.order or 2000 end,
                 setPos = function(v) db.castBar.position = v end,
@@ -1549,37 +1568,39 @@ local function BuildLayoutOrderPanel(container)
     local dividerIdx = #displayList + 1  -- where the group frame divider goes
     for _, s in ipairs(belowSlots) do table.insert(displayList, s) end
 
-    -- Section label for above bars
-    if #aboveSlots > 0 then
-        local aboveLabel = AceGUI:Create("Heading")
-        aboveLabel:SetText("Above Group Frame")
-        aboveLabel:SetFullWidth(true)
-        container:AddChild(aboveLabel)
-    end
-
     -- Render rows
     for rowIdx, slot in ipairs(displayList) do
-        -- Insert group frame divider between above and below sections
+        -- Insert icons divider between above and below sections
         if rowIdx == dividerIdx then
             local divLabel = AceGUI:Create("Heading")
-            divLabel:SetText("Below Group Frame")
+            divLabel:SetText("Icons")
             divLabel:SetFullWidth(true)
             container:AddChild(divLabel)
         end
 
-        local isAbove = slot.getPos() == "above"
-
-        -- Row: [↑][↓]  Name  [Above ▼]
+        -- Row: Name  [Up][Down]
         local rowGroup = AceGUI:Create("SimpleGroup")
         rowGroup:SetLayout("Flow")
         rowGroup:SetFullWidth(true)
         container:AddChild(rowGroup)
 
+        -- Slot name label (colored to match resource/bar color)
+        local nameLabel = AceGUI:Create("Label")
+        local c = slot.color
+        local coloredText = slot.label
+        if c then
+            local r, g, b = (c[1] or 1) * 255, (c[2] or 1) * 255, (c[3] or 1) * 255
+            coloredText = string.format("|cff%02x%02x%02x%s|r", math.floor(r + 0.5), math.floor(g + 0.5), math.floor(b + 0.5), slot.label)
+        end
+        nameLabel:SetText(coloredText)
+        nameLabel:SetRelativeWidth(0.48)
+        rowGroup:AddChild(nameLabel)
+
         -- Up button
         local upBtn = AceGUI:Create("Button")
-        upBtn:SetText("↑")
-        upBtn:SetWidth(32)
-        upBtn:SetDisabled(rowIdx == 1)
+        upBtn:SetText("Up")
+        upBtn:SetRelativeWidth(0.20)
+        upBtn:SetDisabled(rowIdx == 1 and slot.getPos() == "above")
         upBtn:SetCallback("OnClick", function()
             -- Swap order with the slot above in display order
             local prev = displayList[rowIdx - 1]
@@ -1590,7 +1611,7 @@ local function BuildLayoutOrderPanel(container)
                 slot.setOrder(prevOrder)
                 prev.setOrder(myOrder)
             else
-                -- Crossing the group-frame boundary (below ↑ to above):
+                -- Crossing the group-frame boundary (below to above):
                 -- slot should become the closest-to-group above bar (displayed last, just above divider)
                 local minAbove
                 for _, s in ipairs(aboveSlots) do
@@ -1606,9 +1627,9 @@ local function BuildLayoutOrderPanel(container)
 
         -- Down button
         local downBtn = AceGUI:Create("Button")
-        downBtn:SetText("↓")
-        downBtn:SetWidth(32)
-        downBtn:SetDisabled(rowIdx == #displayList)
+        downBtn:SetText("Down")
+        downBtn:SetRelativeWidth(0.24)
+        downBtn:SetDisabled(rowIdx == #displayList and slot.getPos() == "below")
         downBtn:SetCallback("OnClick", function()
             local nextSlot = displayList[rowIdx + 1]
             if nextSlot and nextSlot.getPos() == slot.getPos() then
@@ -1618,7 +1639,7 @@ local function BuildLayoutOrderPanel(container)
                 slot.setOrder(nextOrder)
                 nextSlot.setOrder(myOrder)
             else
-                -- Crossing boundary (only above → below is reachable via ↓)
+                -- Crossing boundary (only above to below is reachable via Down)
                 local minBelow
                 for _, s in ipairs(belowSlots) do
                     local o = s.getOrder()
@@ -1630,33 +1651,6 @@ local function BuildLayoutOrderPanel(container)
             ApplyAndRefresh()
         end)
         rowGroup:AddChild(downBtn)
-
-        -- Slot name label
-        local nameLabel = AceGUI:Create("Label")
-        nameLabel:SetText(slot.label)
-        nameLabel:SetWidth(160)
-        rowGroup:AddChild(nameLabel)
-
-        -- Position dropdown
-        local posDrop = AceGUI:Create("Dropdown")
-        posDrop:SetList({ below = "Below ▼", above = "Above ▲" }, { "below", "above" })
-        posDrop:SetValue(slot.getPos())
-        posDrop:SetWidth(110)
-        posDrop:SetCallback("OnValueChanged", function(widget, event, val)
-            local oldSide = slot.getPos()
-            if val == oldSide then return end
-            slot.setPos(val)
-            -- Append to end of the new side (furthest from group)
-            local maxOrder = 0
-            for _, s in ipairs(allSlots) do
-                if s ~= slot and s.getPos() == val and s.getOrder() > maxOrder then
-                    maxOrder = s.getOrder()
-                end
-            end
-            slot.setOrder(maxOrder + 1)
-            ApplyAndRefresh()
-        end)
-        rowGroup:AddChild(posDrop)
     end
 end
 
