@@ -5,7 +5,6 @@ local CS = ST._configState
 
 -- Imports from Helpers.lua
 local ColorHeading = ST._ColorHeading
-local AttachCollapseButton = ST._AttachCollapseButton
 
 ------------------------------------------------------------------------
 -- Frame Anchoring panels
@@ -18,18 +17,6 @@ local ANCHOR_POINTS = {
 }
 local ANCHOR_POINT_LABELS = {}
 for _, p in ipairs(ANCHOR_POINTS) do ANCHOR_POINT_LABELS[p] = p end
-
-local MIRROR_POINTS = {
-    LEFT         = "RIGHT",
-    RIGHT        = "LEFT",
-    TOPLEFT      = "TOPRIGHT",
-    TOPRIGHT     = "TOPLEFT",
-    BOTTOMLEFT   = "BOTTOMRIGHT",
-    BOTTOMRIGHT  = "BOTTOMLEFT",
-    TOP          = "TOP",
-    BOTTOM       = "BOTTOM",
-    CENTER       = "CENTER",
-}
 
 local UNIT_FRAME_OPTIONS = {
     [""]         = "Auto-detect",

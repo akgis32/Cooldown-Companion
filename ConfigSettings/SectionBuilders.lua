@@ -10,6 +10,7 @@ local AddAdvancedToggle = ST._AddAdvancedToggle
 local CreatePromoteButton = ST._CreatePromoteButton
 local CreateRevertButton = ST._CreateRevertButton
 local CreateCheckboxPromoteButton = ST._CreateCheckboxPromoteButton
+local CreateInfoButton = ST._CreateInfoButton
 
 -- Module-level aliases
 local tabInfoButtons = CS.tabInfoButtons
@@ -99,25 +100,10 @@ local function BuildCooldownTextControls(container, styleTable, refreshCallback)
         container:AddChild(cdAnchorDrop)
 
         -- (?) tooltip for shared positioning
-        local cdPosInfo = CreateFrame("Button", nil, cdAnchorDrop.frame)
-        cdPosInfo:SetSize(16, 16)
-        cdPosInfo:SetPoint("LEFT", cdAnchorDrop.label, "RIGHT", 4, 0)
-        local cdPosInfoIcon = cdPosInfo:CreateTexture(nil, "OVERLAY")
-        cdPosInfoIcon:SetSize(12, 12)
-        cdPosInfoIcon:SetPoint("CENTER")
-        cdPosInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        cdPosInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Shared Position")
-            GameTooltip:AddLine("Anchor and offset settings are shared between Cooldown Text and Aura Text since they use the same text element.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        cdPosInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        cdAnchorDrop:SetCallback("OnRelease", function()
-            cdPosInfo:ClearAllPoints()
-            cdPosInfo:Hide()
-            cdPosInfo:SetParent(nil)
-        end)
+        CreateInfoButton(cdAnchorDrop.frame, cdAnchorDrop.label, "LEFT", "RIGHT", 4, 0, {
+            "Shared Position",
+            {"Anchor and offset settings are shared between Cooldown Text and Aura Text since they use the same text element.", 1, 1, 1, true},
+        }, cdAnchorDrop)
 
         local cdXSlider = AceGUI:Create("Slider")
         cdXSlider:SetLabel("X Offset")
@@ -156,25 +142,10 @@ local function BuildAuraTextControls(container, styleTable, refreshCallback)
     container:AddChild(auraTextCb)
 
     -- (?) tooltip for shared positioning note
-    local auraPosInfo = CreateFrame("Button", nil, auraTextCb.frame)
-    auraPosInfo:SetSize(16, 16)
-    auraPosInfo:SetPoint("LEFT", auraTextCb.checkbg, "RIGHT", auraTextCb.text:GetStringWidth() + 4, 0)
-    local auraPosInfoIcon = auraPosInfo:CreateTexture(nil, "OVERLAY")
-    auraPosInfoIcon:SetSize(12, 12)
-    auraPosInfoIcon:SetPoint("CENTER")
-    auraPosInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    auraPosInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Shared Position")
-        GameTooltip:AddLine("Position (anchor, X/Y offset) is controlled in the Cooldown Text section above. Cooldown Text and Aura Duration Text share the same text element.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    auraPosInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    auraTextCb:SetCallback("OnRelease", function()
-        auraPosInfo:ClearAllPoints()
-        auraPosInfo:Hide()
-        auraPosInfo:SetParent(nil)
-    end)
+    CreateInfoButton(auraTextCb.frame, auraTextCb.checkbg, "LEFT", "RIGHT", auraTextCb.text:GetStringWidth() + 4, 0, {
+        "Shared Position",
+        {"Position (anchor, X/Y offset) is controlled in the Cooldown Text section above. Cooldown Text and Aura Duration Text share the same text element.", 1, 1, 1, true},
+    }, auraTextCb)
 
     if styleTable.showAuraText ~= false then
         local auraFontSizeSlider = AceGUI:Create("Slider")
@@ -806,62 +777,36 @@ local function BuildAssistedHighlightControls(container, styleTable, refreshCall
     end
 end
 
-local function BuildProcGlowControls(container, styleTable, refreshCallback)
-    -- Style dropdown
-    local procStyleDrop = AceGUI:Create("Dropdown")
-    procStyleDrop:SetLabel("Glow Style")
-    procStyleDrop:SetList({
-        ["solid"] = "Solid Border",
-        ["pixel"] = "Pixel Glow",
-        ["glow"] = "Glow",
-    }, {"solid", "pixel", "glow"})
-    procStyleDrop:SetValue(styleTable.procGlowStyle or "glow")
-    procStyleDrop:SetFullWidth(true)
-    procStyleDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        styleTable.procGlowStyle = val
-        refreshCallback()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(procStyleDrop)
-
-    -- Color picker
-    local procGlowColor = AceGUI:Create("ColorPicker")
-    procGlowColor:SetLabel("Glow Color")
-    procGlowColor:SetHasAlpha(true)
-    local pgc = styleTable.procGlowColor or {1, 1, 1, 1}
-    procGlowColor:SetColor(pgc[1], pgc[2], pgc[3], pgc[4])
-    procGlowColor:SetFullWidth(true)
-    procGlowColor:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
-        styleTable.procGlowColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    procGlowColor:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
-        styleTable.procGlowColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    container:AddChild(procGlowColor)
-
-    -- Size/thickness/speed sliders (conditional on style)
-    local currentStyle = styleTable.procGlowStyle or "glow"
+------------------------------------------------------------------------
+-- GENERIC GLOW/EFFECT HELPERS
+------------------------------------------------------------------------
+-- Shared slider block used by both glow style controls and bar effect
+-- controls. Builds conditional size/thickness/speed sliders based on
+-- the current glow style (solid/pixel/glow).
+--
+-- keys = { size = "...", thickness = "...", speed = "..." }
+-- pixelSizeMin: minimum for the pixel "Line Length" slider (1 for glow
+--   style controls, 2 for bar effect controls)
+local function BuildGlowSliders(container, styleTable, currentStyle, keys, refreshCallback, pixelSizeMin)
     if currentStyle == "solid" then
         local sizeSlider = AceGUI:Create("Slider")
         sizeSlider:SetLabel("Border Size")
         sizeSlider:SetSliderValues(1, 8, 0.1)
-        sizeSlider:SetValue(styleTable.procGlowSize or 2)
+        sizeSlider:SetValue(styleTable[keys.size] or 2)
         sizeSlider:SetFullWidth(true)
         sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.procGlowSize = val
+            styleTable[keys.size] = val
             refreshCallback()
         end)
         container:AddChild(sizeSlider)
     elseif currentStyle == "pixel" then
         local sizeSlider = AceGUI:Create("Slider")
         sizeSlider:SetLabel("Line Length")
-        sizeSlider:SetSliderValues(1, 12, 0.1)
-        sizeSlider:SetValue(styleTable.procGlowSize or 4)
+        sizeSlider:SetSliderValues(pixelSizeMin, 12, 0.1)
+        sizeSlider:SetValue(styleTable[keys.size] or 4)
         sizeSlider:SetFullWidth(true)
         sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.procGlowSize = val
+            styleTable[keys.size] = val
             refreshCallback()
         end)
         container:AddChild(sizeSlider)
@@ -869,10 +814,10 @@ local function BuildProcGlowControls(container, styleTable, refreshCallback)
         local thicknessSlider = AceGUI:Create("Slider")
         thicknessSlider:SetLabel("Line Thickness")
         thicknessSlider:SetSliderValues(1, 6, 0.1)
-        thicknessSlider:SetValue(styleTable.procGlowThickness or 2)
+        thicknessSlider:SetValue(styleTable[keys.thickness] or 2)
         thicknessSlider:SetFullWidth(true)
         thicknessSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.procGlowThickness = val
+            styleTable[keys.thickness] = val
             refreshCallback()
         end)
         container:AddChild(thicknessSlider)
@@ -880,10 +825,10 @@ local function BuildProcGlowControls(container, styleTable, refreshCallback)
         local speedSlider = AceGUI:Create("Slider")
         speedSlider:SetLabel("Speed")
         speedSlider:SetSliderValues(10, 200, 0.1)
-        speedSlider:SetValue(styleTable.procGlowSpeed or 60)
+        speedSlider:SetValue(styleTable[keys.speed] or 60)
         speedSlider:SetFullWidth(true)
         speedSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.procGlowSpeed = val
+            styleTable[keys.speed] = val
             refreshCallback()
         end)
         container:AddChild(speedSlider)
@@ -891,434 +836,175 @@ local function BuildProcGlowControls(container, styleTable, refreshCallback)
         local sizeSlider = AceGUI:Create("Slider")
         sizeSlider:SetLabel("Glow Size")
         sizeSlider:SetSliderValues(0, 60, 0.1)
-        sizeSlider:SetValue(styleTable.procGlowSize or 32)
+        sizeSlider:SetValue(styleTable[keys.size] or 32)
         sizeSlider:SetFullWidth(true)
         sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.procGlowSize = val
+            styleTable[keys.size] = val
             refreshCallback()
         end)
         container:AddChild(sizeSlider)
     end
+end
+
+-- Generic glow style builder (Group A): style dropdown + color picker +
+-- conditional sliders. Replaces BuildProcGlowControls,
+-- BuildPandemicGlowControls, BuildAuraIndicatorControls.
+--
+-- cfg = { styleKey, colorKey, colorLabel, sizeKey, thicknessKey,
+--         speedKey, defaultStyle, defaultColor }
+local function BuildGlowStyleControls(container, styleTable, refreshCallback, cfg)
+    local styleDrop = AceGUI:Create("Dropdown")
+    styleDrop:SetLabel("Glow Style")
+    styleDrop:SetList({
+        ["solid"] = "Solid Border",
+        ["pixel"] = "Pixel Glow",
+        ["glow"] = "Glow",
+    }, {"solid", "pixel", "glow"})
+    styleDrop:SetValue(styleTable[cfg.styleKey] or cfg.defaultStyle)
+    styleDrop:SetFullWidth(true)
+    styleDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        styleTable[cfg.styleKey] = val
+        refreshCallback()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(styleDrop)
+
+    local colorPicker = AceGUI:Create("ColorPicker")
+    colorPicker:SetLabel(cfg.colorLabel)
+    colorPicker:SetHasAlpha(true)
+    local c = styleTable[cfg.colorKey] or cfg.defaultColor
+    colorPicker:SetColor(c[1], c[2], c[3], c[4])
+    colorPicker:SetFullWidth(true)
+    colorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
+        styleTable[cfg.colorKey] = {r, g, b, a}
+        refreshCallback()
+    end)
+    colorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
+        styleTable[cfg.colorKey] = {r, g, b, a}
+        refreshCallback()
+    end)
+    container:AddChild(colorPicker)
+
+    BuildGlowSliders(container, styleTable, styleTable[cfg.styleKey] or cfg.defaultStyle, {
+        size = cfg.sizeKey, thickness = cfg.thicknessKey, speed = cfg.speedKey,
+    }, refreshCallback, 1)
+end
+
+-- Generic bar effect builder (Group B): primary color picker + effect
+-- dropdown (none/pixel/solid/glow) + conditional effect color +
+-- conditional sliders. Replaces BuildPandemicBarControls,
+-- BuildBarActiveAuraControls.
+--
+-- cfg = { colorKey, colorLabel, defaultColor, effectKey, effectLabel,
+--         effectColorKey, effectColorLabel, defaultEffectColor,
+--         effectSizeKey, effectThicknessKey, effectSpeedKey }
+local function BuildBarEffectControls(container, styleTable, refreshCallback, cfg)
+    local barColorPicker = AceGUI:Create("ColorPicker")
+    barColorPicker:SetLabel(cfg.colorLabel)
+    barColorPicker:SetHasAlpha(true)
+    local bc = styleTable[cfg.colorKey] or cfg.defaultColor
+    barColorPicker:SetColor(bc[1], bc[2], bc[3], bc[4])
+    barColorPicker:SetFullWidth(true)
+    barColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
+        styleTable[cfg.colorKey] = {r, g, b, a}
+        refreshCallback()
+    end)
+    barColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
+        styleTable[cfg.colorKey] = {r, g, b, a}
+        refreshCallback()
+    end)
+    container:AddChild(barColorPicker)
+
+    local effectDrop = AceGUI:Create("Dropdown")
+    effectDrop:SetLabel(cfg.effectLabel)
+    effectDrop:SetList({
+        ["none"] = "None",
+        ["pixel"] = "Pixel Glow",
+        ["solid"] = "Solid Border",
+        ["glow"] = "Proc Glow",
+    }, {"none", "pixel", "solid", "glow"})
+    effectDrop:SetValue(styleTable[cfg.effectKey] or "none")
+    effectDrop:SetFullWidth(true)
+    effectDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        styleTable[cfg.effectKey] = val
+        refreshCallback()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(effectDrop)
+
+    local currentEffect = styleTable[cfg.effectKey] or "none"
+    if currentEffect ~= "none" then
+        local effectColorPicker = AceGUI:Create("ColorPicker")
+        effectColorPicker:SetLabel(cfg.effectColorLabel)
+        effectColorPicker:SetHasAlpha(true)
+        local ec = styleTable[cfg.effectColorKey] or cfg.defaultEffectColor
+        effectColorPicker:SetColor(ec[1], ec[2], ec[3], ec[4])
+        effectColorPicker:SetFullWidth(true)
+        effectColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
+            styleTable[cfg.effectColorKey] = {r, g, b, a}
+            refreshCallback()
+        end)
+        effectColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
+            styleTable[cfg.effectColorKey] = {r, g, b, a}
+            refreshCallback()
+        end)
+        container:AddChild(effectColorPicker)
+
+        BuildGlowSliders(container, styleTable, currentEffect, {
+            size = cfg.effectSizeKey, thickness = cfg.effectThicknessKey, speed = cfg.effectSpeedKey,
+        }, refreshCallback, 2)
+    end
+end
+
+------------------------------------------------------------------------
+-- PUBLIC GLOW/EFFECT WRAPPERS (same signatures as original functions)
+------------------------------------------------------------------------
+local function BuildProcGlowControls(container, styleTable, refreshCallback)
+    BuildGlowStyleControls(container, styleTable, refreshCallback, {
+        styleKey = "procGlowStyle", colorKey = "procGlowColor", colorLabel = "Glow Color",
+        sizeKey = "procGlowSize", thicknessKey = "procGlowThickness", speedKey = "procGlowSpeed",
+        defaultStyle = "glow", defaultColor = {1, 1, 1, 1},
+    })
 end
 
 local function BuildPandemicGlowControls(container, styleTable, refreshCallback)
-    -- Style dropdown
-    local styleDrop = AceGUI:Create("Dropdown")
-    styleDrop:SetLabel("Glow Style")
-    styleDrop:SetList({
-        ["solid"] = "Solid Border",
-        ["pixel"] = "Pixel Glow",
-        ["glow"] = "Glow",
-    }, {"solid", "pixel", "glow"})
-    styleDrop:SetValue(styleTable.pandemicGlowStyle or "solid")
-    styleDrop:SetFullWidth(true)
-    styleDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        styleTable.pandemicGlowStyle = val
-        refreshCallback()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(styleDrop)
-
-    -- Color picker
-    local colorPicker = AceGUI:Create("ColorPicker")
-    colorPicker:SetLabel("Glow Color")
-    colorPicker:SetHasAlpha(true)
-    local c = styleTable.pandemicGlowColor or {1, 0.5, 0, 1}
-    colorPicker:SetColor(c[1], c[2], c[3], c[4])
-    colorPicker:SetFullWidth(true)
-    colorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
-        styleTable.pandemicGlowColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    colorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
-        styleTable.pandemicGlowColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    container:AddChild(colorPicker)
-
-    -- Size/thickness/speed sliders (conditional on style)
-    local currentStyle = styleTable.pandemicGlowStyle or "solid"
-    if currentStyle == "solid" then
-        local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Border Size")
-        sizeSlider:SetSliderValues(1, 8, 0.1)
-        sizeSlider:SetValue(styleTable.pandemicGlowSize or 2)
-        sizeSlider:SetFullWidth(true)
-        sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.pandemicGlowSize = val
-            refreshCallback()
-        end)
-        container:AddChild(sizeSlider)
-    elseif currentStyle == "pixel" then
-        local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Line Length")
-        sizeSlider:SetSliderValues(1, 12, 0.1)
-        sizeSlider:SetValue(styleTable.pandemicGlowSize or 4)
-        sizeSlider:SetFullWidth(true)
-        sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.pandemicGlowSize = val
-            refreshCallback()
-        end)
-        container:AddChild(sizeSlider)
-
-        local thicknessSlider = AceGUI:Create("Slider")
-        thicknessSlider:SetLabel("Line Thickness")
-        thicknessSlider:SetSliderValues(1, 6, 0.1)
-        thicknessSlider:SetValue(styleTable.pandemicGlowThickness or 2)
-        thicknessSlider:SetFullWidth(true)
-        thicknessSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.pandemicGlowThickness = val
-            refreshCallback()
-        end)
-        container:AddChild(thicknessSlider)
-
-        local speedSlider = AceGUI:Create("Slider")
-        speedSlider:SetLabel("Speed")
-        speedSlider:SetSliderValues(10, 200, 0.1)
-        speedSlider:SetValue(styleTable.pandemicGlowSpeed or 60)
-        speedSlider:SetFullWidth(true)
-        speedSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.pandemicGlowSpeed = val
-            refreshCallback()
-        end)
-        container:AddChild(speedSlider)
-    elseif currentStyle == "glow" then
-        local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Glow Size")
-        sizeSlider:SetSliderValues(0, 60, 0.1)
-        sizeSlider:SetValue(styleTable.pandemicGlowSize or 32)
-        sizeSlider:SetFullWidth(true)
-        sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.pandemicGlowSize = val
-            refreshCallback()
-        end)
-        container:AddChild(sizeSlider)
-    end
-end
-
-local function BuildPandemicBarControls(container, styleTable, refreshCallback)
-    -- Pandemic bar color
-    local barColorPicker = AceGUI:Create("ColorPicker")
-    barColorPicker:SetLabel("Pandemic Bar Color")
-    barColorPicker:SetHasAlpha(true)
-    local bpc = styleTable.barPandemicColor or {1, 0.5, 0, 1}
-    barColorPicker:SetColor(bpc[1], bpc[2], bpc[3], bpc[4])
-    barColorPicker:SetFullWidth(true)
-    barColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
-        styleTable.barPandemicColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    barColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
-        styleTable.barPandemicColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    container:AddChild(barColorPicker)
-
-    -- Effect dropdown
-    local effectDrop = AceGUI:Create("Dropdown")
-    effectDrop:SetLabel("Pandemic Effect")
-    effectDrop:SetList({
-        ["none"] = "None",
-        ["pixel"] = "Pixel Glow",
-        ["solid"] = "Solid Border",
-        ["glow"] = "Proc Glow",
-    }, {"none", "pixel", "solid", "glow"})
-    effectDrop:SetValue(styleTable.pandemicBarEffect or "none")
-    effectDrop:SetFullWidth(true)
-    effectDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        styleTable.pandemicBarEffect = val
-        refreshCallback()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(effectDrop)
-
-    local currentEffect = styleTable.pandemicBarEffect or "none"
-    if currentEffect ~= "none" then
-        -- Effect color
-        local effectColorPicker = AceGUI:Create("ColorPicker")
-        effectColorPicker:SetLabel("Pandemic Effect Color")
-        effectColorPicker:SetHasAlpha(true)
-        local ec = styleTable.pandemicBarEffectColor or {1, 0.5, 0, 1}
-        effectColorPicker:SetColor(ec[1], ec[2], ec[3], ec[4])
-        effectColorPicker:SetFullWidth(true)
-        effectColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
-            styleTable.pandemicBarEffectColor = {r, g, b, a}
-            refreshCallback()
-        end)
-        effectColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
-            styleTable.pandemicBarEffectColor = {r, g, b, a}
-            refreshCallback()
-        end)
-        container:AddChild(effectColorPicker)
-
-        -- Size/thickness/speed sliders (conditional on effect)
-        if currentEffect == "solid" then
-            local sizeSlider = AceGUI:Create("Slider")
-            sizeSlider:SetLabel("Border Size")
-            sizeSlider:SetSliderValues(1, 8, 0.1)
-            sizeSlider:SetValue(styleTable.pandemicBarEffectSize or 2)
-            sizeSlider:SetFullWidth(true)
-            sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.pandemicBarEffectSize = val
-                refreshCallback()
-            end)
-            container:AddChild(sizeSlider)
-        elseif currentEffect == "pixel" then
-            local sizeSlider = AceGUI:Create("Slider")
-            sizeSlider:SetLabel("Line Length")
-            sizeSlider:SetSliderValues(2, 12, 0.1)
-            sizeSlider:SetValue(styleTable.pandemicBarEffectSize or 4)
-            sizeSlider:SetFullWidth(true)
-            sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.pandemicBarEffectSize = val
-                refreshCallback()
-            end)
-            container:AddChild(sizeSlider)
-
-            local thicknessSlider = AceGUI:Create("Slider")
-            thicknessSlider:SetLabel("Line Thickness")
-            thicknessSlider:SetSliderValues(1, 6, 0.1)
-            thicknessSlider:SetValue(styleTable.pandemicBarEffectThickness or 2)
-            thicknessSlider:SetFullWidth(true)
-            thicknessSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.pandemicBarEffectThickness = val
-                refreshCallback()
-            end)
-            container:AddChild(thicknessSlider)
-
-            local speedSlider = AceGUI:Create("Slider")
-            speedSlider:SetLabel("Speed")
-            speedSlider:SetSliderValues(10, 200, 0.1)
-            speedSlider:SetValue(styleTable.pandemicBarEffectSpeed or 60)
-            speedSlider:SetFullWidth(true)
-            speedSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.pandemicBarEffectSpeed = val
-                refreshCallback()
-            end)
-            container:AddChild(speedSlider)
-        elseif currentEffect == "glow" then
-            local sizeSlider = AceGUI:Create("Slider")
-            sizeSlider:SetLabel("Glow Size")
-            sizeSlider:SetSliderValues(0, 60, 0.1)
-            sizeSlider:SetValue(styleTable.pandemicBarEffectSize or 32)
-            sizeSlider:SetFullWidth(true)
-            sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.pandemicBarEffectSize = val
-                refreshCallback()
-            end)
-            container:AddChild(sizeSlider)
-        end
-    end
+    BuildGlowStyleControls(container, styleTable, refreshCallback, {
+        styleKey = "pandemicGlowStyle", colorKey = "pandemicGlowColor", colorLabel = "Glow Color",
+        sizeKey = "pandemicGlowSize", thicknessKey = "pandemicGlowThickness", speedKey = "pandemicGlowSpeed",
+        defaultStyle = "solid", defaultColor = {1, 0.5, 0, 1},
+    })
 end
 
 local function BuildAuraIndicatorControls(container, styleTable, refreshCallback)
-    -- Style dropdown (no "none" — toggle handles enable/disable)
-    local styleDrop = AceGUI:Create("Dropdown")
-    styleDrop:SetLabel("Glow Style")
-    styleDrop:SetList({
-        ["solid"] = "Solid Border",
-        ["pixel"] = "Pixel Glow",
-        ["glow"] = "Glow",
-    }, {"solid", "pixel", "glow"})
-    styleDrop:SetValue(styleTable.auraGlowStyle or "pixel")
-    styleDrop:SetFullWidth(true)
-    styleDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        styleTable.auraGlowStyle = val
-        refreshCallback()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(styleDrop)
+    BuildGlowStyleControls(container, styleTable, refreshCallback, {
+        styleKey = "auraGlowStyle", colorKey = "auraGlowColor", colorLabel = "Indicator Color",
+        sizeKey = "auraGlowSize", thicknessKey = "auraGlowThickness", speedKey = "auraGlowSpeed",
+        defaultStyle = "pixel", defaultColor = {1, 0.84, 0, 0.9},
+    })
+end
 
-    -- Color picker
-    local colorPicker = AceGUI:Create("ColorPicker")
-    colorPicker:SetLabel("Indicator Color")
-    colorPicker:SetHasAlpha(true)
-    local c = styleTable.auraGlowColor or {1, 0.84, 0, 0.9}
-    colorPicker:SetColor(c[1], c[2], c[3], c[4])
-    colorPicker:SetFullWidth(true)
-    colorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
-        styleTable.auraGlowColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    colorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
-        styleTable.auraGlowColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    container:AddChild(colorPicker)
-
-    -- Size/thickness/speed sliders (conditional on style)
-    local currentStyle = styleTable.auraGlowStyle or "pixel"
-    if currentStyle == "solid" then
-        local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Border Size")
-        sizeSlider:SetSliderValues(1, 8, 0.1)
-        sizeSlider:SetValue(styleTable.auraGlowSize or 2)
-        sizeSlider:SetFullWidth(true)
-        sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.auraGlowSize = val
-            refreshCallback()
-        end)
-        container:AddChild(sizeSlider)
-    elseif currentStyle == "pixel" then
-        local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Line Length")
-        sizeSlider:SetSliderValues(1, 12, 0.1)
-        sizeSlider:SetValue(styleTable.auraGlowSize or 4)
-        sizeSlider:SetFullWidth(true)
-        sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.auraGlowSize = val
-            refreshCallback()
-        end)
-        container:AddChild(sizeSlider)
-
-        local thicknessSlider = AceGUI:Create("Slider")
-        thicknessSlider:SetLabel("Line Thickness")
-        thicknessSlider:SetSliderValues(1, 6, 0.1)
-        thicknessSlider:SetValue(styleTable.auraGlowThickness or 2)
-        thicknessSlider:SetFullWidth(true)
-        thicknessSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.auraGlowThickness = val
-            refreshCallback()
-        end)
-        container:AddChild(thicknessSlider)
-
-        local speedSlider = AceGUI:Create("Slider")
-        speedSlider:SetLabel("Speed")
-        speedSlider:SetSliderValues(10, 200, 0.1)
-        speedSlider:SetValue(styleTable.auraGlowSpeed or 60)
-        speedSlider:SetFullWidth(true)
-        speedSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.auraGlowSpeed = val
-            refreshCallback()
-        end)
-        container:AddChild(speedSlider)
-    elseif currentStyle == "glow" then
-        local sizeSlider = AceGUI:Create("Slider")
-        sizeSlider:SetLabel("Glow Size")
-        sizeSlider:SetSliderValues(0, 60, 0.1)
-        sizeSlider:SetValue(styleTable.auraGlowSize or 32)
-        sizeSlider:SetFullWidth(true)
-        sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.auraGlowSize = val
-            refreshCallback()
-        end)
-        container:AddChild(sizeSlider)
-    end
+local function BuildPandemicBarControls(container, styleTable, refreshCallback)
+    BuildBarEffectControls(container, styleTable, refreshCallback, {
+        colorKey = "barPandemicColor", colorLabel = "Pandemic Bar Color",
+        defaultColor = {1, 0.5, 0, 1},
+        effectKey = "pandemicBarEffect", effectLabel = "Pandemic Effect",
+        effectColorKey = "pandemicBarEffectColor", effectColorLabel = "Pandemic Effect Color",
+        defaultEffectColor = {1, 0.5, 0, 1},
+        effectSizeKey = "pandemicBarEffectSize", effectThicknessKey = "pandemicBarEffectThickness",
+        effectSpeedKey = "pandemicBarEffectSpeed",
+    })
 end
 
 local function BuildBarActiveAuraControls(container, styleTable, refreshCallback)
-    -- Bar aura color
-    local barColorPicker = AceGUI:Create("ColorPicker")
-    barColorPicker:SetLabel("Active Aura Bar Color")
-    barColorPicker:SetHasAlpha(true)
-    local bac = styleTable.barAuraColor or {0.2, 1.0, 0.2, 1.0}
-    barColorPicker:SetColor(bac[1], bac[2], bac[3], bac[4])
-    barColorPicker:SetFullWidth(true)
-    barColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
-        styleTable.barAuraColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    barColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
-        styleTable.barAuraColor = {r, g, b, a}
-        refreshCallback()
-    end)
-    container:AddChild(barColorPicker)
-
-    -- Effect dropdown
-    local effectDrop = AceGUI:Create("Dropdown")
-    effectDrop:SetLabel("Active Aura Effect")
-    effectDrop:SetList({
-        ["none"] = "None",
-        ["pixel"] = "Pixel Glow",
-        ["solid"] = "Solid Border",
-        ["glow"] = "Proc Glow",
-    }, {"none", "pixel", "solid", "glow"})
-    effectDrop:SetValue(styleTable.barAuraEffect or "none")
-    effectDrop:SetFullWidth(true)
-    effectDrop:SetCallback("OnValueChanged", function(widget, event, val)
-        styleTable.barAuraEffect = val
-        refreshCallback()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(effectDrop)
-
-    local currentEffect = styleTable.barAuraEffect or "none"
-    if currentEffect ~= "none" then
-        -- Effect color
-        local effectColorPicker = AceGUI:Create("ColorPicker")
-        effectColorPicker:SetLabel("Effect Color")
-        effectColorPicker:SetHasAlpha(true)
-        local ec = styleTable.barAuraEffectColor or {1, 0.84, 0, 0.9}
-        effectColorPicker:SetColor(ec[1], ec[2], ec[3], ec[4])
-        effectColorPicker:SetFullWidth(true)
-        effectColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
-            styleTable.barAuraEffectColor = {r, g, b, a}
-            refreshCallback()
-        end)
-        effectColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
-            styleTable.barAuraEffectColor = {r, g, b, a}
-            refreshCallback()
-        end)
-        container:AddChild(effectColorPicker)
-
-        -- Size/thickness/speed sliders (conditional on effect)
-        if currentEffect == "solid" then
-            local sizeSlider = AceGUI:Create("Slider")
-            sizeSlider:SetLabel("Border Size")
-            sizeSlider:SetSliderValues(1, 8, 0.1)
-            sizeSlider:SetValue(styleTable.barAuraEffectSize or 2)
-            sizeSlider:SetFullWidth(true)
-            sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.barAuraEffectSize = val
-                refreshCallback()
-            end)
-            container:AddChild(sizeSlider)
-        elseif currentEffect == "pixel" then
-            local sizeSlider = AceGUI:Create("Slider")
-            sizeSlider:SetLabel("Line Length")
-            sizeSlider:SetSliderValues(2, 12, 0.1)
-            sizeSlider:SetValue(styleTable.barAuraEffectSize or 4)
-            sizeSlider:SetFullWidth(true)
-            sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.barAuraEffectSize = val
-                refreshCallback()
-            end)
-            container:AddChild(sizeSlider)
-
-            local thicknessSlider = AceGUI:Create("Slider")
-            thicknessSlider:SetLabel("Line Thickness")
-            thicknessSlider:SetSliderValues(1, 6, 0.1)
-            thicknessSlider:SetValue(styleTable.barAuraEffectThickness or 2)
-            thicknessSlider:SetFullWidth(true)
-            thicknessSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.barAuraEffectThickness = val
-                refreshCallback()
-            end)
-            container:AddChild(thicknessSlider)
-
-            local speedSlider = AceGUI:Create("Slider")
-            speedSlider:SetLabel("Speed")
-            speedSlider:SetSliderValues(10, 200, 0.1)
-            speedSlider:SetValue(styleTable.barAuraEffectSpeed or 60)
-            speedSlider:SetFullWidth(true)
-            speedSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.barAuraEffectSpeed = val
-                refreshCallback()
-            end)
-            container:AddChild(speedSlider)
-        elseif currentEffect == "glow" then
-            local sizeSlider = AceGUI:Create("Slider")
-            sizeSlider:SetLabel("Glow Size")
-            sizeSlider:SetSliderValues(0, 60, 0.1)
-            sizeSlider:SetValue(styleTable.barAuraEffectSize or 32)
-            sizeSlider:SetFullWidth(true)
-            sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                styleTable.barAuraEffectSize = val
-                refreshCallback()
-            end)
-            container:AddChild(sizeSlider)
-        end
-    end
+    BuildBarEffectControls(container, styleTable, refreshCallback, {
+        colorKey = "barAuraColor", colorLabel = "Active Aura Bar Color",
+        defaultColor = {0.2, 1.0, 0.2, 1.0},
+        effectKey = "barAuraEffect", effectLabel = "Active Aura Effect",
+        effectColorKey = "barAuraEffectColor", effectColorLabel = "Effect Color",
+        defaultEffectColor = {1, 0.84, 0, 0.9},
+        effectSizeKey = "barAuraEffectSize", effectThicknessKey = "barAuraEffectThickness",
+        effectSpeedKey = "barAuraEffectSpeed",
+    })
 end
 
 local function BuildBarColorsControls(container, styleTable, refreshCallback)

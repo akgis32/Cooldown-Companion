@@ -10,6 +10,7 @@ local AddAdvancedToggle = ST._AddAdvancedToggle
 local CreatePromoteButton = ST._CreatePromoteButton
 local CreateRevertButton = ST._CreateRevertButton
 local CreateCheckboxPromoteButton = ST._CreateCheckboxPromoteButton
+local CreateInfoButton = ST._CreateInfoButton
 
 -- Imports from SectionBuilders.lua (used by BuildOverridesTab)
 local BuildCooldownTextControls = ST._BuildCooldownTextControls
@@ -204,31 +205,19 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     scroll:AddChild(auraCb)
 
     -- (?) tooltip for aura tracking
-    local auraWarn = CreateFrame("Button", nil, auraCb.frame)
-    auraWarn:SetSize(16, 16)
-    auraWarn:SetPoint("LEFT", auraCb.checkbg, "RIGHT", auraCb.text:GetStringWidth() + 4, 0)
-    local auraWarnIcon = auraWarn:CreateTexture(nil, "OVERLAY")
-    auraWarnIcon:SetSize(12, 12)
-    auraWarnIcon:SetPoint("CENTER")
-    auraWarnIcon:SetAtlas("QuestRepeatableTurnin")
-    auraWarn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if isHarmful then
-            GameTooltip:AddLine("Debuff Tracking")
-            GameTooltip:AddLine("When enabled, the cooldown swipe shows the remaining debuff or DoT duration on your target instead of the spell's cooldown. When the debuff expires, the normal cooldown display resumes.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player buffs and target debuffs are supported.", 1, 1, 1, true)
-        else
-            GameTooltip:AddLine("Buff Tracking")
-            GameTooltip:AddLine("When enabled, the cooldown swipe shows the remaining buff duration on yourself instead of the spell's cooldown. When the buff expires, the normal cooldown display resumes.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player buffs and target debuffs are supported.", 1, 1, 1, true)
-        end
-        GameTooltip:Show()
-    end)
-    auraWarn:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-    table.insert(infoButtons, auraWarn)
-    if CooldownCompanion.db.profile.hideInfoButtons then
-        auraWarn:Hide()
+    local auraWarnLines
+    if isHarmful then
+        auraWarnLines = {
+            "Debuff Tracking",
+            {"When enabled, the cooldown swipe shows the remaining debuff or DoT duration on your target instead of the spell's cooldown. When the debuff expires, the normal cooldown display resumes.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player buffs and target debuffs are supported.", 1, 1, 1, true},
+        }
+    else
+        auraWarnLines = {
+            "Buff Tracking",
+            {"When enabled, the cooldown swipe shows the remaining buff duration on yourself instead of the spell's cooldown. When the buff expires, the normal cooldown display resumes.\n\nThis spell must be tracked as a Buff or Debuff in the Blizzard Cooldown Manager (not just as a Cooldown). The CDM must be active but does not need to be visible.\n\nOnly player buffs and target debuffs are supported.", 1, 1, 1, true},
+        }
     end
+    CreateInfoButton(auraCb.frame, auraCb.checkbg, "LEFT", "RIGHT", auraCb.text:GetStringWidth() + 4, 0, auraWarnLines, infoButtons)
     end -- not buttonData.isPassive
 
     -- Spell ID Override row (hidden for passive aura buttons)
@@ -286,26 +275,10 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     scroll:AddChild(overrideRow)
 
     -- (?) tooltip for override
-    local overrideInfo = CreateFrame("Button", nil, auraEditBox.frame)
-    overrideInfo:SetSize(16, 16)
-    overrideInfo:SetPoint("TOPLEFT", auraEditBox.frame, "TOPLEFT", auraEditBox.label:GetStringWidth() + 4, -2)
-    local overrideInfoIcon = overrideInfo:CreateTexture(nil, "OVERLAY")
-    overrideInfoIcon:SetSize(12, 12)
-    overrideInfoIcon:SetPoint("CENTER")
-    overrideInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    overrideInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Spell ID Override")
-        GameTooltip:AddLine("Most spells are tracked automatically, but some abilities apply a buff or debuff with a different spell ID than the ability itself. If tracking isn't working, enter the buff/debuff spell ID here. Use commas for multiple IDs (e.g. 48517,48518 for both Eclipse forms).\n\nYou can also click \"Pick CDM\" to visually select a spell from the Cooldown Manager.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    overrideInfo:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-    table.insert(infoButtons, overrideInfo)
-    if CooldownCompanion.db.profile.hideInfoButtons then
-        overrideInfo:Hide()
-    end
+    CreateInfoButton(auraEditBox.frame, auraEditBox.frame, "TOPLEFT", "TOPLEFT", auraEditBox.label:GetStringWidth() + 4, -2, {
+        "Spell ID Override",
+        {"Most spells are tracked automatically, but some abilities apply a buff or debuff with a different spell ID than the ability itself. If tracking isn't working, enter the buff/debuff spell ID here. Use commas for multiple IDs (e.g. 48517,48518 for both Eclipse forms).\n\nYou can also click \"Pick CDM\" to visually select a spell from the Cooldown Manager.", 1, 1, 1, true},
+    }, infoButtons)
 
     -- Nudge Pick CDM button down to align with editbox
     pickCDMBtn.frame:SetScript("OnUpdate", function(self)

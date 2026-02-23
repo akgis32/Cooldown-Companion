@@ -12,6 +12,7 @@ local CS = ST._configState
 local BuildHeroTalentSubTreeCheckboxes = ST._BuildHeroTalentSubTreeCheckboxes
 local ColorHeading = ST._ColorHeading
 local AttachCollapseButton = ST._AttachCollapseButton
+local CreateInfoButton = ST._CreateInfoButton
 
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
@@ -97,24 +98,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
     scroll:AddChild(hideUnusableCb)
 
     -- (?) tooltip
-    local hideUnusableInfo = CreateFrame("Button", nil, hideUnusableCb.frame)
-    hideUnusableInfo:SetSize(16, 16)
-    hideUnusableInfo:SetPoint("LEFT", hideUnusableCb.checkbg, "RIGHT", hideUnusableCb.text:GetStringWidth() + 4, 0)
-    local hideUnusableInfoIcon = hideUnusableInfo:CreateTexture(nil, "OVERLAY")
-    hideUnusableInfoIcon:SetSize(12, 12)
-    hideUnusableInfoIcon:SetPoint("CENTER")
-    hideUnusableInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    hideUnusableInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Hide While Unusable")
-        GameTooltip:AddLine("Uses the same logic as unusable dimming, but completely hides the button instead of dimming it.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    hideUnusableInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    table.insert(infoButtons, hideUnusableInfo)
-    if CooldownCompanion.db.profile.hideInfoButtons then
-        hideUnusableInfo:Hide()
-    end
+    CreateInfoButton(hideUnusableCb.frame, hideUnusableCb.checkbg, "LEFT", "RIGHT", hideUnusableCb.text:GetStringWidth() + 4, 0, {
+        "Hide While Unusable",
+        {"Uses the same logic as unusable dimming, but completely hides the button instead of dimming it.", 1, 1, 1, true},
+    }, infoButtons)
 
     end -- not buttonData.isPassive
 
@@ -149,24 +136,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
                 scroll:AddChild(fallbackZeroChargesCb)
 
                 -- (?) tooltip
-                local fallbackZCInfo = CreateFrame("Button", nil, fallbackZeroChargesCb.frame)
-                fallbackZCInfo:SetSize(16, 16)
-                fallbackZCInfo:SetPoint("LEFT", fallbackZeroChargesCb.checkbg, "RIGHT", fallbackZeroChargesCb.text:GetStringWidth() + 4, 0)
-                local fallbackZCInfoIcon = fallbackZCInfo:CreateTexture(nil, "OVERLAY")
-                fallbackZCInfoIcon:SetSize(12, 12)
-                fallbackZCInfoIcon:SetPoint("CENTER")
-                fallbackZCInfoIcon:SetAtlas("QuestRepeatableTurnin")
-                fallbackZCInfo:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:AddLine("Use Baseline Alpha Fallback")
-                    GameTooltip:AddLine("Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true)
-                    GameTooltip:Show()
-                end)
-                fallbackZCInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                table.insert(infoButtons, fallbackZCInfo)
-                if CooldownCompanion.db.profile.hideInfoButtons then
-                    fallbackZCInfo:Hide()
-                end
+                CreateInfoButton(fallbackZeroChargesCb.frame, fallbackZeroChargesCb.checkbg, "LEFT", "RIGHT", fallbackZeroChargesCb.text:GetStringWidth() + 4, 0, {
+                    "Use Baseline Alpha Fallback",
+                    {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+                }, infoButtons)
             end
 
             -- Desaturate While At Zero Charges
@@ -213,24 +186,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
                 scroll:AddChild(fallbackZeroStacksCb)
 
                 -- (?) tooltip
-                local fallbackZSInfo = CreateFrame("Button", nil, fallbackZeroStacksCb.frame)
-                fallbackZSInfo:SetSize(16, 16)
-                fallbackZSInfo:SetPoint("LEFT", fallbackZeroStacksCb.checkbg, "RIGHT", fallbackZeroStacksCb.text:GetStringWidth() + 4, 0)
-                local fallbackZSInfoIcon = fallbackZSInfo:CreateTexture(nil, "OVERLAY")
-                fallbackZSInfoIcon:SetSize(12, 12)
-                fallbackZSInfoIcon:SetPoint("CENTER")
-                fallbackZSInfoIcon:SetAtlas("QuestRepeatableTurnin")
-                fallbackZSInfo:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:AddLine("Use Baseline Alpha Fallback")
-                    GameTooltip:AddLine("Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true)
-                    GameTooltip:Show()
-                end)
-                fallbackZSInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                table.insert(infoButtons, fallbackZSInfo)
-                if CooldownCompanion.db.profile.hideInfoButtons then
-                    fallbackZSInfo:Hide()
-                end
+                CreateInfoButton(fallbackZeroStacksCb.frame, fallbackZeroStacksCb.checkbg, "LEFT", "RIGHT", fallbackZeroStacksCb.text:GetStringWidth() + 4, 0, {
+                    "Use Baseline Alpha Fallback",
+                    {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+                }, infoButtons)
             end
 
             -- Desaturate While At Zero Stacks
@@ -277,24 +236,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
             scroll:AddChild(fallbackNotEquippedCb)
 
             -- (?) tooltip
-            local fallbackNEInfo = CreateFrame("Button", nil, fallbackNotEquippedCb.frame)
-            fallbackNEInfo:SetSize(16, 16)
-            fallbackNEInfo:SetPoint("LEFT", fallbackNotEquippedCb.checkbg, "RIGHT", fallbackNotEquippedCb.text:GetStringWidth() + 4, 0)
-            local fallbackNEInfoIcon = fallbackNEInfo:CreateTexture(nil, "OVERLAY")
-            fallbackNEInfoIcon:SetSize(12, 12)
-            fallbackNEInfoIcon:SetPoint("CENTER")
-            fallbackNEInfoIcon:SetAtlas("QuestRepeatableTurnin")
-            fallbackNEInfo:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:AddLine("Use Baseline Alpha Fallback")
-                GameTooltip:AddLine("Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true)
-                GameTooltip:Show()
-            end)
-            fallbackNEInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-            table.insert(infoButtons, fallbackNEInfo)
-            if CooldownCompanion.db.profile.hideInfoButtons then
-                fallbackNEInfo:Hide()
-            end
+            CreateInfoButton(fallbackNotEquippedCb.frame, fallbackNotEquippedCb.checkbg, "LEFT", "RIGHT", fallbackNotEquippedCb.text:GetStringWidth() + 4, 0, {
+                "Use Baseline Alpha Fallback",
+                {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+            }, infoButtons)
         end
     end
 
@@ -319,24 +264,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
     scroll:AddChild(hideAuraCb)
 
     -- (?) tooltip
-    local hideAuraInfo = CreateFrame("Button", nil, hideAuraCb.frame)
-    hideAuraInfo:SetSize(16, 16)
-    hideAuraInfo:SetPoint("LEFT", hideAuraCb.checkbg, "RIGHT", hideAuraCb.text:GetStringWidth() + 4, 0)
-    local hideAuraInfoIcon = hideAuraInfo:CreateTexture(nil, "OVERLAY")
-    hideAuraInfoIcon:SetSize(12, 12)
-    hideAuraInfoIcon:SetPoint("CENTER")
-    hideAuraInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    hideAuraInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Hide While Aura Active")
-        GameTooltip:AddLine("Requires Aura Tracking to be enabled above.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    hideAuraInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    table.insert(infoButtons, hideAuraInfo)
-    if CooldownCompanion.db.profile.hideInfoButtons then
-        hideAuraInfo:Hide()
-    end
+    CreateInfoButton(hideAuraCb.frame, hideAuraCb.checkbg, "LEFT", "RIGHT", hideAuraCb.text:GetStringWidth() + 4, 0, {
+        "Hide While Aura Active",
+        {"Requires Aura Tracking to be enabled above.", 1, 1, 1, true},
+    }, infoButtons)
 
     -- Baseline Alpha Fallback (only shown when hideWhileAuraActive is checked)
     if buttonData.hideWhileAuraActive then
@@ -350,24 +281,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
         scroll:AddChild(fallbackAuraCb)
 
         -- (?) tooltip
-        local fallbackAuraInfo = CreateFrame("Button", nil, fallbackAuraCb.frame)
-        fallbackAuraInfo:SetSize(16, 16)
-        fallbackAuraInfo:SetPoint("LEFT", fallbackAuraCb.checkbg, "RIGHT", fallbackAuraCb.text:GetStringWidth() + 4, 0)
-        local fallbackAuraInfoIcon = fallbackAuraInfo:CreateTexture(nil, "OVERLAY")
-        fallbackAuraInfoIcon:SetSize(12, 12)
-        fallbackAuraInfoIcon:SetPoint("CENTER")
-        fallbackAuraInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        fallbackAuraInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Use Baseline Alpha Fallback")
-            GameTooltip:AddLine("Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        fallbackAuraInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        table.insert(infoButtons, fallbackAuraInfo)
-        if CooldownCompanion.db.profile.hideInfoButtons then
-            fallbackAuraInfo:Hide()
-        end
+        CreateInfoButton(fallbackAuraCb.frame, fallbackAuraCb.checkbg, "LEFT", "RIGHT", fallbackAuraCb.text:GetStringWidth() + 4, 0, {
+            "Use Baseline Alpha Fallback",
+            {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+        }, infoButtons)
     end
 
     -- Hide While Aura Not Active
@@ -389,24 +306,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
     scroll:AddChild(hideNoAuraCb)
 
     -- (?) tooltip
-    local hideNoAuraInfo = CreateFrame("Button", nil, hideNoAuraCb.frame)
-    hideNoAuraInfo:SetSize(16, 16)
-    hideNoAuraInfo:SetPoint("LEFT", hideNoAuraCb.checkbg, "RIGHT", hideNoAuraCb.text:GetStringWidth() + 4, 0)
-    local hideNoAuraInfoIcon = hideNoAuraInfo:CreateTexture(nil, "OVERLAY")
-    hideNoAuraInfoIcon:SetSize(12, 12)
-    hideNoAuraInfoIcon:SetPoint("CENTER")
-    hideNoAuraInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    hideNoAuraInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Hide While Aura Not Active")
-        GameTooltip:AddLine("Requires Aura Tracking to be enabled above.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    hideNoAuraInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    table.insert(infoButtons, hideNoAuraInfo)
-    if CooldownCompanion.db.profile.hideInfoButtons then
-        hideNoAuraInfo:Hide()
-    end
+    CreateInfoButton(hideNoAuraCb.frame, hideNoAuraCb.checkbg, "LEFT", "RIGHT", hideNoAuraCb.text:GetStringWidth() + 4, 0, {
+        "Hide While Aura Not Active",
+        {"Requires Aura Tracking to be enabled above.", 1, 1, 1, true},
+    }, infoButtons)
 
     -- Desaturate While Aura Not Active (spell+aura only; passive buttons always desaturate)
     if not buttonData.isPassive then
@@ -423,24 +326,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
         scroll:AddChild(desatNoAuraCb)
 
         -- (?) tooltip
-        local desatNoAuraInfo = CreateFrame("Button", nil, desatNoAuraCb.frame)
-        desatNoAuraInfo:SetSize(16, 16)
-        desatNoAuraInfo:SetPoint("LEFT", desatNoAuraCb.checkbg, "RIGHT", desatNoAuraCb.text:GetStringWidth() + 4, 0)
-        local desatNoAuraInfoIcon = desatNoAuraInfo:CreateTexture(nil, "OVERLAY")
-        desatNoAuraInfoIcon:SetSize(12, 12)
-        desatNoAuraInfoIcon:SetPoint("CENTER")
-        desatNoAuraInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        desatNoAuraInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Desaturate While Aura Not Active")
-            GameTooltip:AddLine("Requires Aura Tracking to be enabled above.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        desatNoAuraInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        table.insert(infoButtons, desatNoAuraInfo)
-        if CooldownCompanion.db.profile.hideInfoButtons then
-            desatNoAuraInfo:Hide()
-        end
+        CreateInfoButton(desatNoAuraCb.frame, desatNoAuraCb.checkbg, "LEFT", "RIGHT", desatNoAuraCb.text:GetStringWidth() + 4, 0, {
+            "Desaturate While Aura Not Active",
+            {"Requires Aura Tracking to be enabled above.", 1, 1, 1, true},
+        }, infoButtons)
     end
 
     -- Baseline Alpha Fallback (only shown when hideWhileAuraNotActive is checked)
@@ -455,24 +344,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons)
         scroll:AddChild(fallbackCb)
 
         -- (?) tooltip
-        local fallbackInfo = CreateFrame("Button", nil, fallbackCb.frame)
-        fallbackInfo:SetSize(16, 16)
-        fallbackInfo:SetPoint("LEFT", fallbackCb.checkbg, "RIGHT", fallbackCb.text:GetStringWidth() + 4, 0)
-        local fallbackInfoIcon = fallbackInfo:CreateTexture(nil, "OVERLAY")
-        fallbackInfoIcon:SetSize(12, 12)
-        fallbackInfoIcon:SetPoint("CENTER")
-        fallbackInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        fallbackInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Use Baseline Alpha Fallback")
-            GameTooltip:AddLine("Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        fallbackInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        table.insert(infoButtons, fallbackInfo)
-        if CooldownCompanion.db.profile.hideInfoButtons then
-            fallbackInfo:Hide()
-        end
+        CreateInfoButton(fallbackCb.frame, fallbackCb.checkbg, "LEFT", "RIGHT", fallbackCb.text:GetStringWidth() + 4, 0, {
+            "Use Baseline Alpha Fallback",
+            {"Instead of fully hiding, show the button dimmed at the group's baseline alpha. The button keeps its layout position.", 1, 1, 1, true},
+        }, infoButtons)
     end
 
     -- Warning: aura-based toggles enabled but auraTracking is off

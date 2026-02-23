@@ -288,6 +288,121 @@ local function CreateCheckboxPromoteButton(cbWidget, anchorAfterFrame, sectionId
     return promoteBtn
 end
 
+------------------------------------------------------------------------
+-- INFO BUTTON HELPER
+------------------------------------------------------------------------
+-- Creates a (?) info button anchored to a frame. Replaces the repeated
+-- CreateFrame→SetSize→SetPoint→CreateTexture→SetAtlas→tooltip pattern.
+--
+-- tooltipLines: array of entries. Strings become title lines (AddLine).
+--   Tables {text, r, g, b, wrap} become body lines with color/wrapping.
+--
+-- cleanup: determines lifecycle management.
+--   If it's a table:  button is inserted and hideInfoButtons is applied.
+--   If it's an AceGUI widget: button is cleaned up via OnRelease callback.
+local function CreateInfoButton(parentFrame, anchorFrame, anchorPoint, anchorRelPoint, xOff, yOff, tooltipLines, cleanup)
+    local btn = CreateFrame("Button", nil, parentFrame)
+    btn:SetSize(16, 16)
+    btn:SetPoint(anchorPoint, anchorFrame, anchorRelPoint, xOff, yOff)
+    local icon = btn:CreateTexture(nil, "OVERLAY")
+    icon:SetSize(12, 12)
+    icon:SetPoint("CENTER")
+    icon:SetAtlas("QuestRepeatableTurnin")
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        for _, line in ipairs(tooltipLines) do
+            if type(line) == "table" then
+                GameTooltip:AddLine(line[1], line[2], line[3], line[4], line[5])
+            else
+                GameTooltip:AddLine(line)
+            end
+        end
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    if cleanup.SetCallback then
+        -- AceGUI widget: wire OnRelease cleanup
+        cleanup:SetCallback("OnRelease", function()
+            btn:ClearAllPoints()
+            btn:Hide()
+            btn:SetParent(nil)
+        end)
+    else
+        -- Array of buttons: insert and apply hideInfoButtons
+        table.insert(cleanup, btn)
+        if CooldownCompanion.db.profile.hideInfoButtons then
+            btn:Hide()
+        end
+    end
+
+    return btn
+end
+
+------------------------------------------------------------------------
+-- COMPACT MODE CONTROLS
+------------------------------------------------------------------------
+-- Builds the compact mode section shared by icon mode (GroupTabs) and
+-- bar mode (BarModeTabs): checkbox → advanced toggle → info button →
+-- conditional max-visible-buttons slider + its info button.
+local function BuildCompactModeControls(container, group, tabInfoButtons)
+    local compactCb = AceGUI:Create("CheckBox")
+    compactCb:SetLabel("Compact Mode")
+    compactCb:SetValue(group.compactLayout or false)
+    compactCb:SetFullWidth(true)
+    compactCb:SetCallback("OnValueChanged", function(widget, event, val)
+        group.compactLayout = val or false
+        CooldownCompanion:PopulateGroupButtons(CS.selectedGroup)
+        local frame = CooldownCompanion.groupFrames[CS.selectedGroup]
+        if frame then frame._layoutDirty = true end
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(compactCb)
+
+    local compactAdvExpanded, compactAdvBtn = AddAdvancedToggle(compactCb, "compactLayout", tabInfoButtons, group.compactLayout)
+
+    -- (?) tooltip for compact mode — anchor shifts when advanced toggle is visible
+    local compactAnchor, compactRelPoint, compactXOff
+    if group.compactLayout then
+        compactAnchor = compactAdvBtn
+        compactRelPoint = "RIGHT"
+        compactXOff = 4
+    else
+        compactAnchor = compactCb.checkbg
+        compactRelPoint = "RIGHT"
+        compactXOff = compactCb.text:GetStringWidth() + 6
+    end
+    CreateInfoButton(compactCb.frame, compactAnchor, "LEFT", compactRelPoint, compactXOff, 0, {
+        "Compact Mode",
+        {"When per-button visibility rules hide a button, shift remaining buttons to fill the gap and resize the group frame to fit visible buttons only.", 1, 1, 1, true},
+    }, tabInfoButtons)
+
+    if compactAdvExpanded and group.compactLayout then
+        local totalButtons = #group.buttons
+        local maxVisSlider = AceGUI:Create("Slider")
+        maxVisSlider:SetLabel("Max Visible Buttons")
+        maxVisSlider:SetSliderValues(1, math.max(totalButtons, 1), 1)
+        maxVisSlider:SetValue(group.maxVisibleButtons == 0 and totalButtons or group.maxVisibleButtons)
+        maxVisSlider:SetFullWidth(true)
+        maxVisSlider:SetCallback("OnValueChanged", function(widget, event, val)
+            val = math.floor(val + 0.5)
+            if val >= totalButtons then
+                group.maxVisibleButtons = 0
+            else
+                group.maxVisibleButtons = val
+            end
+            local frame = CooldownCompanion.groupFrames[CS.selectedGroup]
+            if frame then frame._layoutDirty = true end
+        end)
+        container:AddChild(maxVisSlider)
+
+        CreateInfoButton(maxVisSlider.frame, maxVisSlider.label, "LEFT", "CENTER", maxVisSlider.label:GetStringWidth() / 2 + 4, 0, {
+            "Max Visible Buttons",
+            {"Limits how many buttons can appear at once. The first buttons (by group order) that pass visibility checks are shown; the rest are hidden.", 1, 1, 1, true},
+        }, tabInfoButtons)
+    end
+end
+
 -- Shared bar texture option builder (used by CastBarPanels and BarModeTabs)
 local LSM = LibStub("LibSharedMedia-3.0")
 local function GetBarTextureOptions()
@@ -305,4 +420,6 @@ ST._AddAdvancedToggle = AddAdvancedToggle
 ST._CreatePromoteButton = CreatePromoteButton
 ST._CreateRevertButton = CreateRevertButton
 ST._CreateCheckboxPromoteButton = CreateCheckboxPromoteButton
+ST._CreateInfoButton = CreateInfoButton
+ST._BuildCompactModeControls = BuildCompactModeControls
 ST._GetBarTextureOptions = GetBarTextureOptions

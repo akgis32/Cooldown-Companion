@@ -12,6 +12,8 @@ local ColorHeading = ST._ColorHeading
 local AttachCollapseButton = ST._AttachCollapseButton
 local AddAdvancedToggle = ST._AddAdvancedToggle
 local CreateCheckboxPromoteButton = ST._CreateCheckboxPromoteButton
+local CreateInfoButton = ST._CreateInfoButton
+local BuildCompactModeControls = ST._BuildCompactModeControls
 local GetBarTextureOptions = ST._GetBarTextureOptions
 
 -- Imports from SectionBuilders.lua
@@ -393,25 +395,10 @@ local function BuildBarAppearanceTab(container, group, style)
         container:AddChild(flipTimeCheck)
 
         -- (?) tooltip for Flip Time Text
-        local flipTimeInfo = CreateFrame("Button", nil, flipTimeCheck.frame)
-        flipTimeInfo:SetSize(16, 16)
-        flipTimeInfo:SetPoint("LEFT", flipTimeCheck.checkbg, "RIGHT", flipTimeCheck.text:GetStringWidth() + 4, 0)
-        local flipTimeInfoIcon = flipTimeInfo:CreateTexture(nil, "OVERLAY")
-        flipTimeInfoIcon:SetSize(12, 12)
-        flipTimeInfoIcon:SetPoint("CENTER")
-        flipTimeInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        flipTimeInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Flip Time Text")
-            GameTooltip:AddLine("Applies to all time-based text, including cooldown time, aura time, and ready text.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        flipTimeInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        flipTimeCheck:SetCallback("OnRelease", function()
-            flipTimeInfo:ClearAllPoints()
-            flipTimeInfo:Hide()
-            flipTimeInfo:SetParent(nil)
-        end)
+        CreateInfoButton(flipTimeCheck.frame, flipTimeCheck.checkbg, "LEFT", "RIGHT", flipTimeCheck.text:GetStringWidth() + 4, 0, {
+            "Flip Time Text",
+            {"Applies to all time-based text, including cooldown time, aura time, and ready text.", 1, 1, 1, true},
+        }, flipTimeCheck)
 
         local fontSizeSlider = AceGUI:Create("Slider")
         fontSizeSlider:SetLabel("Font Size")
@@ -870,84 +857,8 @@ local function BuildBarAppearanceTab(container, group, style)
         container:AddChild(readyOutlineDrop)
     end
 
-    -- Compact Mode toggle
-    local compactCb = AceGUI:Create("CheckBox")
-    compactCb:SetLabel("Compact Mode")
-    compactCb:SetValue(group.compactLayout or false)
-    compactCb:SetFullWidth(true)
-    compactCb:SetCallback("OnValueChanged", function(widget, event, val)
-        group.compactLayout = val or false
-        CooldownCompanion:PopulateGroupButtons(CS.selectedGroup)
-        local frame = CooldownCompanion.groupFrames[CS.selectedGroup]
-        if frame then frame._layoutDirty = true end
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(compactCb)
-
-    local compactAdvExpanded, compactAdvBtn = AddAdvancedToggle(compactCb, "compactLayout", tabInfoButtons, group.compactLayout)
-
-    -- (?) tooltip for compact mode
-    local compactInfo = CreateFrame("Button", nil, compactCb.frame)
-    compactInfo:SetSize(16, 16)
-    if group.compactLayout then
-        compactInfo:SetPoint("LEFT", compactAdvBtn, "RIGHT", 4, 0)
-    else
-        compactInfo:SetPoint("LEFT", compactCb.checkbg, "RIGHT", compactCb.text:GetStringWidth() + 6, 0)
-    end
-    local compactInfoIcon = compactInfo:CreateTexture(nil, "OVERLAY")
-    compactInfoIcon:SetSize(12, 12)
-    compactInfoIcon:SetPoint("CENTER")
-    compactInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    compactInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Compact Mode")
-        GameTooltip:AddLine("When per-button visibility rules hide a button, shift remaining buttons to fill the gap and resize the group frame to fit visible buttons only.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    compactInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    table.insert(tabInfoButtons, compactInfo)
-    if CooldownCompanion.db.profile.hideInfoButtons then
-        compactInfo:Hide()
-    end
-
-    if compactAdvExpanded and group.compactLayout then
-        local totalButtons = #group.buttons
-        local maxVisSlider = AceGUI:Create("Slider")
-        maxVisSlider:SetLabel("Max Visible Buttons")
-        maxVisSlider:SetSliderValues(1, math.max(totalButtons, 1), 1)
-        maxVisSlider:SetValue(group.maxVisibleButtons == 0 and totalButtons or group.maxVisibleButtons)
-        maxVisSlider:SetFullWidth(true)
-        maxVisSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            val = math.floor(val + 0.5)
-            if val >= totalButtons then
-                group.maxVisibleButtons = 0
-            else
-                group.maxVisibleButtons = val
-            end
-            local frame = CooldownCompanion.groupFrames[CS.selectedGroup]
-            if frame then frame._layoutDirty = true end
-        end)
-        container:AddChild(maxVisSlider)
-
-        local maxVisInfo = CreateFrame("Button", nil, maxVisSlider.frame)
-        maxVisInfo:SetSize(16, 16)
-        maxVisInfo:SetPoint("LEFT", maxVisSlider.label, "CENTER", maxVisSlider.label:GetStringWidth() / 2 + 4, 0)
-        local maxVisInfoIcon = maxVisInfo:CreateTexture(nil, "OVERLAY")
-        maxVisInfoIcon:SetSize(12, 12)
-        maxVisInfoIcon:SetPoint("CENTER")
-        maxVisInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        maxVisInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Max Visible Buttons")
-            GameTooltip:AddLine("Limits how many buttons can appear at once. The first buttons (by group order) that pass visibility checks are shown; the rest are hidden.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        maxVisInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        table.insert(tabInfoButtons, maxVisInfo)
-        if CooldownCompanion.db.profile.hideInfoButtons then
-            maxVisInfo:Hide()
-        end
-    end
+    -- Compact Mode toggle + Max Visible Buttons slider
+    BuildCompactModeControls(container, group, tabInfoButtons)
 
     -- Apply "Hide CDC Tooltips" to tab info buttons (skip advanced toggles)
     if CooldownCompanion.db.profile.hideInfoButtons then

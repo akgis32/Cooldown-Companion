@@ -9,6 +9,8 @@ local AttachCollapseButton = ST._AttachCollapseButton
 local AddAdvancedToggle = ST._AddAdvancedToggle
 local CreatePromoteButton = ST._CreatePromoteButton
 local CreateCheckboxPromoteButton = ST._CreateCheckboxPromoteButton
+local CreateInfoButton = ST._CreateInfoButton
+local BuildCompactModeControls = ST._BuildCompactModeControls
 
 -- Imports from SectionBuilders.lua
 local BuildCooldownTextControls = ST._BuildCooldownTextControls
@@ -98,27 +100,14 @@ local function BuildLayoutTab(container)
     anchorRow:AddChild(pickBtn)
 
     -- (?) tooltip for anchor picking
-    local pickInfo = CreateFrame("Button", nil, pickBtn.frame)
-    pickInfo:SetSize(16, 16)
-    pickInfo:SetPoint("LEFT", pickBtn.frame, "RIGHT", 2, 0)
-    local pickInfoIcon = pickInfo:CreateTexture(nil, "OVERLAY")
-    pickInfoIcon:SetSize(12, 12)
-    pickInfoIcon:SetPoint("CENTER")
-    pickInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    pickInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Pick Frame")
-        GameTooltip:AddLine("Hides the config panel and highlights frames under your cursor. Left-click a frame to anchor this group to it, or right-click to cancel.", 1, 1, 1, true)
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("You can also type a frame name directly into the editbox.", 1, 1, 1, true)
-        GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Middle-click the draggable header to toggle lock/unlock.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    pickInfo:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-    table.insert(tabInfoButtons, pickInfo)
+    CreateInfoButton(pickBtn.frame, pickBtn.frame, "LEFT", "RIGHT", 2, 0, {
+        "Pick Frame",
+        {"Hides the config panel and highlights frames under your cursor. Left-click a frame to anchor this group to it, or right-click to cancel.", 1, 1, 1, true},
+        " ",
+        {"You can also type a frame name directly into the editbox.", 1, 1, 1, true},
+        " ",
+        {"Middle-click the draggable header to toggle lock/unlock.", 1, 1, 1, true},
+    }, tabInfoButtons)
 
     container:AddChild(anchorRow)
     pickBtn.frame:SetScript("OnUpdate", function(self)
@@ -311,21 +300,10 @@ local function BuildLayoutTab(container)
     end)
     container:AddChild(baseAlphaSlider)
 
-    local alphaInfo = CreateFrame("Button", nil, baseAlphaSlider.frame)
-    alphaInfo:SetSize(16, 16)
-    alphaInfo:SetPoint("LEFT", baseAlphaSlider.label, "CENTER", baseAlphaSlider.label:GetStringWidth() / 2 + 4, 0)
-    local alphaInfoIcon = alphaInfo:CreateTexture(nil, "OVERLAY")
-    alphaInfoIcon:SetSize(12, 12)
-    alphaInfoIcon:SetPoint("CENTER")
-    alphaInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    alphaInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Alpha")
-        GameTooltip:AddLine("Controls the transparency of this group. Alpha = 1 is fully visible. Alpha = 0 means completely hidden.\n\nThe first three options (In Combat, Out of Combat, Mounted) are 3-way toggles — click to cycle through Disabled, |cff00ff00Fully Visible|r, and |cffff0000Fully Hidden|r.\n\n|cff00ff00Fully Visible|r overrides alpha to 1 when the condition is met.\n\n|cffff0000Fully Hidden|r overrides alpha to 0 when the condition is met.\n\nIf both apply simultaneously, |cff00ff00Fully Visible|r takes priority.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    alphaInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    table.insert(tabInfoButtons, alphaInfo)
+    CreateInfoButton(baseAlphaSlider.frame, baseAlphaSlider.label, "LEFT", "CENTER", baseAlphaSlider.label:GetStringWidth() / 2 + 4, 0, {
+        "Alpha",
+        {"Controls the transparency of this group. Alpha = 1 is fully visible. Alpha = 0 means completely hidden.\n\nThe first three options (In Combat, Out of Combat, Mounted) are 3-way toggles — click to cycle through Disabled, |cff00ff00Fully Visible|r, and |cffff0000Fully Hidden|r.\n\n|cff00ff00Fully Visible|r overrides alpha to 1 when the condition is met.\n\n|cffff0000Fully Hidden|r overrides alpha to 0 when the condition is met.\n\nIf both apply simultaneously, |cff00ff00Fully Visible|r takes priority.", 1, 1, 1, true},
+    }, tabInfoButtons)
 
     do
         local function GetTriState(visibleKey, hiddenKey)
@@ -398,23 +376,10 @@ local function BuildLayoutTab(container)
         end)
         container:AddChild(mouseoverCb)
 
-        local mouseoverInfo = CreateFrame("Button", nil, mouseoverCb.frame)
-        mouseoverInfo:SetSize(16, 16)
-        mouseoverInfo:SetPoint("LEFT", mouseoverCb.text, "RIGHT", 4, 0)
-        local mouseoverInfoIcon = mouseoverInfo:CreateTexture(nil, "OVERLAY")
-        mouseoverInfoIcon:SetSize(12, 12)
-        mouseoverInfoIcon:SetPoint("CENTER")
-        mouseoverInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        mouseoverInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Mouseover")
-            GameTooltip:AddLine("When enabled, mousing over the group forces it to full visibility. Like all |cff00ff00Force Visible|r conditions, this overrides |cffff0000Force Hidden|r.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        mouseoverInfo:SetScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
-        table.insert(tabInfoButtons, mouseoverInfo)
+        CreateInfoButton(mouseoverCb.frame, mouseoverCb.text, "LEFT", "RIGHT", 4, 0, {
+            "Mouseover",
+            {"When enabled, mousing over the group forces it to full visibility. Like all |cff00ff00Force Visible|r conditions, this overrides |cffff0000Force Hidden|r.", 1, 1, 1, true},
+        }, tabInfoButtons)
 
         local fadeCb = AceGUI:Create("CheckBox")
         fadeCb:SetLabel("Custom Fade Settings")
@@ -500,24 +465,11 @@ local function BuildLayoutTab(container)
     end)
     container:AddChild(strataToggle)
 
-    local strataInfo = CreateFrame("Button", nil, strataToggle.frame)
-    strataInfo:SetSize(16, 16)
-    strataInfo:SetPoint("LEFT", strataToggle.checkbg, "RIGHT", strataToggle.text:GetStringWidth() + 4, 0)
-    local strataInfoIcon = strataInfo:CreateTexture(nil, "OVERLAY")
-    strataInfoIcon:SetSize(12, 12)
-    strataInfoIcon:SetPoint("CENTER")
-    strataInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    strataInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Custom Strata")
-        GameTooltip:AddLine("Controls the draw order of overlays on each icon: Cooldown Swipe, Charge Text, Proc Glow, and Assisted Highlight.", 1, 1, 1, true)
-        GameTooltip:AddLine("Layer 4 draws on top, Layer 1 on the bottom. When disabled, the default order is used.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    strataInfo:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-    table.insert(tabInfoButtons, strataInfo)
+    CreateInfoButton(strataToggle.frame, strataToggle.checkbg, "LEFT", "RIGHT", strataToggle.text:GetStringWidth() + 4, 0, {
+        "Custom Strata",
+        {"Controls the draw order of overlays on each icon: Cooldown Swipe, Charge Text, Proc Glow, and Assisted Highlight.", 1, 1, 1, true},
+        {"Layer 4 draws on top, Layer 1 on the bottom. When disabled, the default order is used.", 1, 1, 1, true},
+    }, tabInfoButtons)
 
     if customStrataEnabled then
         CS.InitPendingStrataOrder(CS.selectedGroup)
@@ -1009,25 +961,10 @@ local function BuildAppearanceTab(container)
         container:AddChild(cdAnchorDrop)
 
         -- (?) tooltip for shared positioning
-        local cdPosInfo = CreateFrame("Button", nil, cdAnchorDrop.frame)
-        cdPosInfo:SetSize(16, 16)
-        cdPosInfo:SetPoint("LEFT", cdAnchorDrop.label, "RIGHT", 4, 0)
-        local cdPosInfoIcon = cdPosInfo:CreateTexture(nil, "OVERLAY")
-        cdPosInfoIcon:SetSize(12, 12)
-        cdPosInfoIcon:SetPoint("CENTER")
-        cdPosInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        cdPosInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Shared Position")
-            GameTooltip:AddLine("Anchor and offset settings are shared between Cooldown Text and Aura Text since they use the same text element.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        cdPosInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        cdAnchorDrop:SetCallback("OnRelease", function()
-            cdPosInfo:ClearAllPoints()
-            cdPosInfo:Hide()
-            cdPosInfo:SetParent(nil)
-        end)
+        CreateInfoButton(cdAnchorDrop.frame, cdAnchorDrop.label, "LEFT", "RIGHT", 4, 0, {
+            "Shared Position",
+            {"Anchor and offset settings are shared between Cooldown Text and Aura Text since they use the same text element.", 1, 1, 1, true},
+        }, cdAnchorDrop)
 
         local cdXSlider = AceGUI:Create("Slider")
         cdXSlider:SetLabel("X Offset")
@@ -1202,28 +1139,13 @@ local function BuildAppearanceTab(container)
     local auraTextAdvExpanded, auraTextAdvBtn = AddAdvancedToggle(auraTextCb, "auraText", tabInfoButtons, style.showAuraText ~= false)
     local auraTextPromoteBtn = CreateCheckboxPromoteButton(auraTextCb, auraTextAdvBtn, "auraText", group, style)
 
-    local auraPosInfo = CreateFrame("Button", nil, auraTextCb.frame)
-    auraPosInfo:SetSize(16, 16)
-    auraPosInfo:SetPoint("LEFT", auraTextPromoteBtn, "RIGHT", 4, 0)
-    local auraPosInfoIcon = auraPosInfo:CreateTexture(nil, "OVERLAY")
-    auraPosInfoIcon:SetSize(12, 12)
-    auraPosInfoIcon:SetPoint("CENTER")
-    auraPosInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    auraPosInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Shared Position")
-        GameTooltip:AddLine("Position (anchor, X/Y offset) is controlled in the Cooldown Text section above. Cooldown Text and Aura Duration Text share the same text element.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    auraPosInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    local auraPosInfo = CreateInfoButton(auraTextCb.frame, auraTextPromoteBtn, "LEFT", "RIGHT", 4, 0, {
+        "Shared Position",
+        {"Position (anchor, X/Y offset) is controlled in the Cooldown Text section above. Cooldown Text and Aura Duration Text share the same text element.", 1, 1, 1, true},
+    }, auraTextCb)
     if style.showAuraText == false then
         auraPosInfo:Hide()
     end
-    auraTextCb:SetCallback("OnRelease", function()
-        auraPosInfo:ClearAllPoints()
-        auraPosInfo:Hide()
-        auraPosInfo:SetParent(nil)
-    end)
 
     if style.showAuraText ~= false and auraTextAdvExpanded then
         local auraFontSizeSlider = AceGUI:Create("Slider")
@@ -1483,84 +1405,8 @@ local function BuildAppearanceTab(container)
         container:AddChild(kbFontColor)
     end -- showKeybindText + kbAdvExpanded
 
-    -- Compact Mode toggle
-    local compactCb = AceGUI:Create("CheckBox")
-    compactCb:SetLabel("Compact Mode")
-    compactCb:SetValue(group.compactLayout or false)
-    compactCb:SetFullWidth(true)
-    compactCb:SetCallback("OnValueChanged", function(widget, event, val)
-        group.compactLayout = val or false
-        CooldownCompanion:PopulateGroupButtons(CS.selectedGroup)
-        local frame = CooldownCompanion.groupFrames[CS.selectedGroup]
-        if frame then frame._layoutDirty = true end
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(compactCb)
-
-    local compactAdvExpanded, compactAdvBtn = AddAdvancedToggle(compactCb, "compactLayout", tabInfoButtons, group.compactLayout)
-
-    -- (?) tooltip for compact mode
-    local compactInfo = CreateFrame("Button", nil, compactCb.frame)
-    compactInfo:SetSize(16, 16)
-    if group.compactLayout then
-        compactInfo:SetPoint("LEFT", compactAdvBtn, "RIGHT", 4, 0)
-    else
-        compactInfo:SetPoint("LEFT", compactCb.checkbg, "RIGHT", compactCb.text:GetStringWidth() + 6, 0)
-    end
-    local compactInfoIcon = compactInfo:CreateTexture(nil, "OVERLAY")
-    compactInfoIcon:SetSize(12, 12)
-    compactInfoIcon:SetPoint("CENTER")
-    compactInfoIcon:SetAtlas("QuestRepeatableTurnin")
-    compactInfo:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine("Compact Mode")
-        GameTooltip:AddLine("When per-button visibility rules hide a button, shift remaining buttons to fill the gap and resize the group frame to fit visible buttons only.", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    compactInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    table.insert(tabInfoButtons, compactInfo)
-    if CooldownCompanion.db.profile.hideInfoButtons then
-        compactInfo:Hide()
-    end
-
-    if compactAdvExpanded and group.compactLayout then
-        local totalButtons = #group.buttons
-        local maxVisSlider = AceGUI:Create("Slider")
-        maxVisSlider:SetLabel("Max Visible Buttons")
-        maxVisSlider:SetSliderValues(1, math.max(totalButtons, 1), 1)
-        maxVisSlider:SetValue(group.maxVisibleButtons == 0 and totalButtons or group.maxVisibleButtons)
-        maxVisSlider:SetFullWidth(true)
-        maxVisSlider:SetCallback("OnValueChanged", function(widget, event, val)
-            val = math.floor(val + 0.5)
-            if val >= totalButtons then
-                group.maxVisibleButtons = 0
-            else
-                group.maxVisibleButtons = val
-            end
-            local frame = CooldownCompanion.groupFrames[CS.selectedGroup]
-            if frame then frame._layoutDirty = true end
-        end)
-        container:AddChild(maxVisSlider)
-
-        local maxVisInfo = CreateFrame("Button", nil, maxVisSlider.frame)
-        maxVisInfo:SetSize(16, 16)
-        maxVisInfo:SetPoint("LEFT", maxVisSlider.label, "CENTER", maxVisSlider.label:GetStringWidth() / 2 + 4, 0)
-        local maxVisInfoIcon = maxVisInfo:CreateTexture(nil, "OVERLAY")
-        maxVisInfoIcon:SetSize(12, 12)
-        maxVisInfoIcon:SetPoint("CENTER")
-        maxVisInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        maxVisInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Max Visible Buttons")
-            GameTooltip:AddLine("Limits how many buttons can appear at once. The first buttons (by group order) that pass visibility checks are shown; the rest are hidden.", 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        maxVisInfo:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        table.insert(tabInfoButtons, maxVisInfo)
-        if CooldownCompanion.db.profile.hideInfoButtons then
-            maxVisInfo:Hide()
-        end
-    end
+    -- Compact Mode toggle + Max Visible Buttons slider
+    BuildCompactModeControls(container, group, tabInfoButtons)
 
     -- Border heading
     local borderHeading = AceGUI:Create("Heading")
@@ -1622,30 +1468,13 @@ local function BuildAppearanceTab(container)
         end)
         container:AddChild(masqueCb)
 
-        local masqueInfo = CreateFrame("Button", nil, masqueCb.frame)
-        masqueInfo:SetSize(16, 16)
-        masqueInfo:SetPoint("LEFT", masqueCb.checkbg, "RIGHT", masqueCb.text:GetStringWidth() + 4, 0)
-        local masqueInfoIcon = masqueInfo:CreateTexture(nil, "OVERLAY")
-        masqueInfoIcon:SetSize(12, 12)
-        masqueInfoIcon:SetPoint("CENTER")
-        masqueInfoIcon:SetAtlas("QuestRepeatableTurnin")
-        masqueInfo:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Masque Skinning")
-            GameTooltip:AddLine("Uses the Masque addon to apply custom button skins to this group. Configure skins via /masque or the Masque config panel.", 1, 1, 1, true)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("Overridden Settings:", 1, 0.82, 0)
-            GameTooltip:AddLine("Border Size, Border Color, Square Icons (forced on)", 0.7, 0.7, 0.7, true)
-            GameTooltip:Show()
-        end)
-        masqueInfo:SetScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
-        table.insert(tabInfoButtons, masqueInfo)
-
-        if CooldownCompanion.db.profile.hideInfoButtons then
-            masqueInfo:Hide()
-        end
+        CreateInfoButton(masqueCb.frame, masqueCb.checkbg, "LEFT", "RIGHT", masqueCb.text:GetStringWidth() + 4, 0, {
+            "Masque Skinning",
+            {"Uses the Masque addon to apply custom button skins to this group. Configure skins via /masque or the Masque config panel.", 1, 1, 1, true},
+            " ",
+            {"Overridden Settings:", 1, 0.82, 0},
+            {"Border Size, Border Color, Square Icons (forced on)", 0.7, 0.7, 0.7, true},
+        }, tabInfoButtons)
         end -- not masqueCollapsed
     end
 
