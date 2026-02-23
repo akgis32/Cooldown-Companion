@@ -31,31 +31,59 @@ local function RefreshColumn2()
     if not CS.col2Scroll then return end
     local col2 = CS.configFrame and CS.configFrame.col2
 
-    -- Resource bar panel mode: take over col2 with resource anchoring panel
+    -- Bars & Frames panel mode: take over col2 with a 3-tab TabGroup
     if CS.resourceBarPanelActive then
         CancelDrag()
         CS.HideAutocomplete()
         CS.col2Scroll.frame:Hide()
         if col2 and col2._infoBtn then col2._infoBtn:Hide() end
 
-        if not col2._resourceAnchoringScroll then
-            local scroll = AceGUI:Create("ScrollFrame")
-            scroll:SetLayout("List")
-            scroll.frame:SetParent(col2.content)
-            scroll.frame:ClearAllPoints()
-            scroll.frame:SetPoint("TOPLEFT", col2.content, "TOPLEFT", 0, 0)
-            scroll.frame:SetPoint("BOTTOMRIGHT", col2.content, "BOTTOMRIGHT", 0, 0)
-            col2._resourceAnchoringScroll = scroll
+        -- Create the tab group once
+        if not col2._barsPanelTabGroup then
+            local tabGroup = AceGUI:Create("TabGroup")
+            tabGroup:SetTabs({
+                { value = "resource_anchoring", text = "Resources" },
+                { value = "castbar_anchoring",  text = "Cast Bar" },
+                { value = "frame_anchoring",    text = "Unit Frames" },
+            })
+            tabGroup:SetLayout("Fill")
+
+            tabGroup:SetCallback("OnGroupSelected", function(widget, event, tab)
+                CS.barPanelCol2Tab = tab
+                widget:ReleaseChildren()
+
+                local scroll = AceGUI:Create("ScrollFrame")
+                scroll:SetLayout("List")
+                widget:AddChild(scroll)
+
+                if tab == "resource_anchoring" then
+                    ST._BuildResourceBarAnchoringPanel(scroll)
+                elseif tab == "castbar_anchoring" then
+                    ST._BuildCastBarAnchoringPanel(scroll)
+                elseif tab == "frame_anchoring" then
+                    ST._BuildFrameAnchoringPlayerPanel(scroll)
+                    ST._BuildFrameAnchoringTargetPanel(scroll)
+                end
+
+                -- Sync col3 to the selected col2 tab
+                ST._RefreshColumn3()
+            end)
+
+            tabGroup.frame:SetParent(col2.content)
+            tabGroup.frame:ClearAllPoints()
+            tabGroup.frame:SetPoint("TOPLEFT", col2.content, "TOPLEFT", 0, 0)
+            tabGroup.frame:SetPoint("BOTTOMRIGHT", col2.content, "BOTTOMRIGHT", 0, 0)
+            col2._barsPanelTabGroup = tabGroup
         end
-        col2._resourceAnchoringScroll:ReleaseChildren()
-        col2._resourceAnchoringScroll.frame:Show()
-        ST._BuildResourceBarAnchoringPanel(col2._resourceAnchoringScroll)
+
+        col2._barsPanelTabGroup.frame:Show()
+        col2._barsPanelTabGroup:SelectTab(CS.barPanelCol2Tab)
         return
     end
 
-    -- Hide resource anchoring scroll when not in resource bar mode
-    if col2 and col2._resourceAnchoringScroll then
-        col2._resourceAnchoringScroll.frame:Hide()
+    -- Hide bars panel tab group when not in bars panel mode
+    if col2 and col2._barsPanelTabGroup then
+        col2._barsPanelTabGroup.frame:Hide()
     end
     if col2 and col2._infoBtn then col2._infoBtn:Show() end
 

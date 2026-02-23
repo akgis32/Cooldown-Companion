@@ -11,10 +11,6 @@ local CreatePromoteButton = ST._CreatePromoteButton
 local CreateRevertButton = ST._CreateRevertButton
 local CreateCheckboxPromoteButton = ST._CreateCheckboxPromoteButton
 
--- Imports from panel files (loaded before this file)
-local BuildCastBarAnchoringPanel = ST._BuildCastBarAnchoringPanel
-local BuildFrameAnchoringPlayerPanel = ST._BuildFrameAnchoringPlayerPanel
-
 -- Imports from SectionBuilders.lua (used by BuildOverridesTab)
 local BuildCooldownTextControls = ST._BuildCooldownTextControls
 local BuildAuraTextControls = ST._BuildAuraTextControls
@@ -654,85 +650,57 @@ local function RefreshButtonSettingsColumn()
     local bsCol = cf.col3
     if not bsCol or not bsCol.bsTabGroup then return end
 
-    -- Cast bar overlay: replace button settings with anchoring/FX panel
-    if CS.castBarPanelActive then
-        bsCol.bsTabGroup.frame:Hide()
-        if bsCol.bsPlaceholder then bsCol.bsPlaceholder:Hide() end
-        if bsCol.multiSelectScroll then bsCol.multiSelectScroll.frame:Hide() end
-        if bsCol.resourceBarScroll then bsCol.resourceBarScroll.frame:Hide() end
-        if bsCol.frameAnchoringScroll then bsCol.frameAnchoringScroll.frame:Hide() end
-
-        if not bsCol.castBarScroll then
-            local scroll = AceGUI:Create("ScrollFrame")
-            scroll:SetLayout("List")
-            scroll.frame:SetParent(bsCol.content)
-            scroll.frame:ClearAllPoints()
-            scroll.frame:SetPoint("TOPLEFT", bsCol.content, "TOPLEFT", 0, 0)
-            scroll.frame:SetPoint("BOTTOMRIGHT", bsCol.content, "BOTTOMRIGHT", 0, 0)
-            bsCol.castBarScroll = scroll
-        end
-        bsCol.castBarScroll:ReleaseChildren()
-        bsCol.castBarScroll.frame:Show()
-        BuildCastBarAnchoringPanel(bsCol.castBarScroll)
-        return
-    end
-
-    -- Hide cast bar scroll when not in cast bar mode
-    if bsCol.castBarScroll then
-        bsCol.castBarScroll.frame:Hide()
-    end
-
-    -- Resource bar overlay: replace button settings with resource styling panel
+    -- Bars & Frames panel mode: show styling panel matching the active col2 tab
     if CS.resourceBarPanelActive then
         bsCol.bsTabGroup.frame:Hide()
         if bsCol.bsPlaceholder then bsCol.bsPlaceholder:Hide() end
         if bsCol.multiSelectScroll then bsCol.multiSelectScroll.frame:Hide() end
-        if bsCol.frameAnchoringScroll then bsCol.frameAnchoringScroll.frame:Hide() end
 
-        if not bsCol.resourceBarScroll then
+        -- Unit Frames tab: col3 shows a placeholder (anchoring is all in col2)
+        if CS.barPanelCol2Tab == "frame_anchoring" then
+            if bsCol._barsStylingScroll then
+                bsCol._barsStylingScroll.frame:Hide()
+            end
+            if not bsCol._barsStylingPlaceholder then
+                bsCol._barsStylingPlaceholder = bsCol.content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                bsCol._barsStylingPlaceholder:SetPoint("TOPLEFT", bsCol.content, "TOPLEFT", -1, 0)
+            end
+            bsCol._barsStylingPlaceholder:SetText("Frame anchoring settings are in the 'Unit Frames' tab.")
+            bsCol._barsStylingPlaceholder:Show()
+            return
+        end
+
+        -- Resources or Cast Bar tab: show the matching styling panel
+        if bsCol._barsStylingPlaceholder then
+            bsCol._barsStylingPlaceholder:Hide()
+        end
+
+        if not bsCol._barsStylingScroll then
             local scroll = AceGUI:Create("ScrollFrame")
             scroll:SetLayout("List")
             scroll.frame:SetParent(bsCol.content)
             scroll.frame:ClearAllPoints()
             scroll.frame:SetPoint("TOPLEFT", bsCol.content, "TOPLEFT", 0, 0)
             scroll.frame:SetPoint("BOTTOMRIGHT", bsCol.content, "BOTTOMRIGHT", 0, 0)
-            bsCol.resourceBarScroll = scroll
+            bsCol._barsStylingScroll = scroll
         end
-        bsCol.resourceBarScroll:ReleaseChildren()
-        bsCol.resourceBarScroll.frame:Show()
-        ST._BuildResourceBarStylingPanel(bsCol.resourceBarScroll)
+        bsCol._barsStylingScroll:ReleaseChildren()
+        bsCol._barsStylingScroll.frame:Show()
+
+        if CS.barPanelCol2Tab == "castbar_anchoring" then
+            ST._BuildCastBarStylingPanel(bsCol._barsStylingScroll)
+        else
+            ST._BuildResourceBarStylingPanel(bsCol._barsStylingScroll)
+        end
         return
     end
 
-    -- Hide resource bar scroll when not in resource bar mode
-    if bsCol.resourceBarScroll then
-        bsCol.resourceBarScroll.frame:Hide()
+    -- Hide bars styling scroll and placeholder when not in bars panel mode
+    if bsCol._barsStylingScroll then
+        bsCol._barsStylingScroll.frame:Hide()
     end
-
-    -- Frame anchoring overlay: replace button settings with player frame panel
-    if CS.frameAnchoringPanelActive then
-        bsCol.bsTabGroup.frame:Hide()
-        if bsCol.bsPlaceholder then bsCol.bsPlaceholder:Hide() end
-        if bsCol.multiSelectScroll then bsCol.multiSelectScroll.frame:Hide() end
-
-        if not bsCol.frameAnchoringScroll then
-            local scroll = AceGUI:Create("ScrollFrame")
-            scroll:SetLayout("List")
-            scroll.frame:SetParent(bsCol.content)
-            scroll.frame:ClearAllPoints()
-            scroll.frame:SetPoint("TOPLEFT", bsCol.content, "TOPLEFT", 0, 0)
-            scroll.frame:SetPoint("BOTTOMRIGHT", bsCol.content, "BOTTOMRIGHT", 0, 0)
-            bsCol.frameAnchoringScroll = scroll
-        end
-        bsCol.frameAnchoringScroll:ReleaseChildren()
-        bsCol.frameAnchoringScroll.frame:Show()
-        BuildFrameAnchoringPlayerPanel(bsCol.frameAnchoringScroll)
-        return
-    end
-
-    -- Hide frame anchoring scroll when not in frame anchoring mode
-    if bsCol.frameAnchoringScroll then
-        bsCol.frameAnchoringScroll.frame:Hide()
+    if bsCol._barsStylingPlaceholder then
+        bsCol._barsStylingPlaceholder:Hide()
     end
 
     -- Check for multiselect

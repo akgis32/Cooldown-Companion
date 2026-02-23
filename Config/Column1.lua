@@ -223,9 +223,6 @@ local function RefreshColumn1(preserveDrag)
                 end
                 CS.selectedButton = nil
                 wipe(CS.selectedButtons)
-                CS.castBarPanelActive = false
-                CS.frameAnchoringPanelActive = false
-                CooldownCompanion:StopCastBarPreview()
                 CooldownCompanion:RefreshConfigPanel()
             elseif button == "RightButton" then
                 if not CS.groupContextMenu then

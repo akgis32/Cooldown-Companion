@@ -16,40 +16,6 @@ local ShowPopupAboveConfig = ST._ShowPopupAboveConfig
 -- COLUMN 4: Group Settings / Tab Column
 ------------------------------------------------------------------------
 local function RefreshColumn4(container)
-    -- Cast Bar panel mode: show cast bar settings instead of group settings
-    if CS.castBarPanelActive then
-        if container.placeholderLabel then
-            container.placeholderLabel:Hide()
-        end
-        if container.tabGroup then
-            container.tabGroup.frame:Hide()
-        end
-        if container.customAuraScroll then
-            container.customAuraScroll.frame:Hide()
-        end
-        if container.frameAnchoringScroll then
-            container.frameAnchoringScroll.frame:Hide()
-        end
-        -- Create or reuse the cast bar scroll frame
-        if not container.castBarScroll then
-            local scroll = AceGUI:Create("ScrollFrame")
-            scroll:SetLayout("List")
-            scroll.frame:SetParent(container)
-            scroll.frame:ClearAllPoints()
-            scroll.frame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
-            scroll.frame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
-            container.castBarScroll = scroll
-        end
-        container.castBarScroll:ReleaseChildren()
-        container.castBarScroll.frame:Show()
-        ST._BuildCastBarStylingPanel(container.castBarScroll)
-        return
-    end
-    -- Hide cast bar scroll if it exists
-    if container.castBarScroll then
-        container.castBarScroll.frame:Hide()
-    end
-
     -- Resource Bar panel mode: show custom aura bar panel instead of group settings
     if CS.resourceBarPanelActive then
         if container.placeholderLabel then
@@ -57,9 +23,6 @@ local function RefreshColumn4(container)
         end
         if container.tabGroup then
             container.tabGroup.frame:Hide()
-        end
-        if container.frameAnchoringScroll then
-            container.frameAnchoringScroll.frame:Hide()
         end
         if not container.customAuraScroll then
             local scroll = AceGUI:Create("ScrollFrame")
@@ -78,33 +41,6 @@ local function RefreshColumn4(container)
     -- Hide custom aura scroll if it exists
     if container.customAuraScroll then
         container.customAuraScroll.frame:Hide()
-    end
-
-    -- Frame Anchoring panel mode: show target frame settings
-    if CS.frameAnchoringPanelActive then
-        if container.placeholderLabel then
-            container.placeholderLabel:Hide()
-        end
-        if container.tabGroup then
-            container.tabGroup.frame:Hide()
-        end
-        if not container.frameAnchoringScroll then
-            local scroll = AceGUI:Create("ScrollFrame")
-            scroll:SetLayout("List")
-            scroll.frame:SetParent(container)
-            scroll.frame:ClearAllPoints()
-            scroll.frame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
-            scroll.frame:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
-            container.frameAnchoringScroll = scroll
-        end
-        container.frameAnchoringScroll:ReleaseChildren()
-        container.frameAnchoringScroll.frame:Show()
-        ST._BuildFrameAnchoringTargetPanel(container.frameAnchoringScroll)
-        return
-    end
-    -- Hide frame anchoring scroll if it exists
-    if container.frameAnchoringScroll then
-        container.frameAnchoringScroll.frame:Hide()
     end
 
     -- Multi-group selection: show placeholder

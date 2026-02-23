@@ -147,9 +147,8 @@ ST._configState = {
     -- Tab UI state (populated by ConfigSettings, cleaned by both files)
     tabInfoButtons = {},
     appearanceTabElements = {},
-    castBarPanelActive = false,
     resourceBarPanelActive = false,
-    frameAnchoringPanelActive = false,
+    barPanelCol2Tab = "resource_anchoring",
 
     -- Static lookup tables
     fontOptions = GetFontOptions,
