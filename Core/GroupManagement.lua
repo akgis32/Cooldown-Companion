@@ -70,6 +70,9 @@ function CooldownCompanion:DeleteGroup(groupId)
         self.groupFrames[groupId]:Hide()
         self.groupFrames[groupId] = nil
     end
+    if self.alphaState then
+        self.alphaState[groupId] = nil
+    end
     self.db.profile.groups[groupId] = nil
 end
 

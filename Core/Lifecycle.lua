@@ -143,11 +143,13 @@ function CooldownCompanion:OnEnable()
     -- UNIT_TARGET requires RegisterUnitEvent (plain RegisterEvent does not
     -- receive it).  Marks dirty so the next ticker pass reads fresh CDM viewer
     -- data; catches pet/focus target changes that don't fire PLAYER_TARGET_CHANGED.
-    local utFrame = CreateFrame("Frame")
-    utFrame:RegisterUnitEvent("UNIT_TARGET", "player")
-    utFrame:SetScript("OnEvent", function()
-        self._cooldownsDirty = true
-    end)
+    if not self._unitTargetFrame then
+        self._unitTargetFrame = CreateFrame("Frame")
+        self._unitTargetFrame:SetScript("OnEvent", function()
+            self._cooldownsDirty = true
+        end)
+    end
+    self._unitTargetFrame:RegisterUnitEvent("UNIT_TARGET", "player")
 
     -- Rebuild viewer aura map when Cooldown Manager layout changes (user rearranges spells)
     EventRegistry:RegisterCallback("CooldownViewerSettings.OnDataChanged", function()
@@ -305,6 +307,14 @@ function CooldownCompanion:OnDisable()
         C_Spell.EnableSpellRangeCheck(spellId, false)
     end
     wipe(self._rangeCheckSpells)
+
+    -- Unregister UNIT_TARGET frame (keep reference for reuse on re-enable)
+    if self._unitTargetFrame then
+        self._unitTargetFrame:UnregisterAllEvents()
+    end
+
+    -- Unregister EventRegistry callback (not managed by Ace3)
+    EventRegistry:UnregisterCallback("CooldownViewerSettings.OnDataChanged", self)
 
     -- Hide all frames
     for _, frame in pairs(self.groupFrames) do
