@@ -492,6 +492,47 @@ local function EmbedWidget(widget, parent, x, y, width, widgetList)
 end
 
 ------------------------------------------------------------------------
+-- Shared helper: render hero talent sub-tree checkboxes for a given spec.
+-- Used by both Column1 (group filter inline panel) and ButtonConditions (load conditions tab).
+------------------------------------------------------------------------
+local function BuildHeroTalentSubTreeCheckboxes(container, group, configID, specId, indentOffset, groupId)
+    if not (group.specs and group.specs[specId] and configID) then return end
+    local subTreeIDs = C_ClassTalents.GetHeroTalentSpecsForClassSpec(nil, specId)
+    if not subTreeIDs then return end
+    for _, subTreeID in ipairs(subTreeIDs) do
+        local subTreeInfo = C_Traits.GetSubTreeInfo(configID, subTreeID)
+        if subTreeInfo then
+            local htCb = AceGUI:Create("CheckBox")
+            htCb:SetLabel(subTreeInfo.name or ("Hero " .. subTreeID))
+            htCb:SetFullWidth(true)
+            htCb:SetValue(group.heroTalents and group.heroTalents[subTreeID] or false)
+            htCb:SetCallback("OnValueChanged", function(widget, event, value)
+                if value then
+                    if not group.heroTalents then group.heroTalents = {} end
+                    group.heroTalents[subTreeID] = true
+                else
+                    if group.heroTalents then
+                        group.heroTalents[subTreeID] = nil
+                        if not next(group.heroTalents) then
+                            group.heroTalents = nil
+                        end
+                    end
+                end
+                CooldownCompanion:RefreshGroupFrame(groupId)
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+            container:AddChild(htCb)
+            htCb.checkbg:SetPoint("TOPLEFT", indentOffset, 0)
+            if subTreeInfo.iconElementID then
+                htCb:SetImage(136235)
+                htCb.image:SetAtlas(subTreeInfo.iconElementID, false)
+                htCb.image:SetTexCoord(0, 1, 0, 1)
+            end
+        end
+    end
+end
+
+------------------------------------------------------------------------
 -- ST._ exports (consumed by later Config/ files at load time)
 ------------------------------------------------------------------------
 ST._CDM_VIEWER_NAMES = CDM_VIEWER_NAMES
@@ -510,3 +551,4 @@ ST._COLUMN_PADDING = COLUMN_PADDING
 ST._BUTTON_HEIGHT = BUTTON_HEIGHT
 ST._BUTTON_SPACING = BUTTON_SPACING
 ST._PROFILE_BAR_HEIGHT = PROFILE_BAR_HEIGHT
+ST._BuildHeroTalentSubTreeCheckboxes = BuildHeroTalentSubTreeCheckboxes

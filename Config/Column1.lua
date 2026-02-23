@@ -10,6 +10,7 @@ local CS = ST._configState
 local AceGUI = LibStub("AceGUI-3.0")
 
 -- Imports from earlier Config/ files
+local BuildHeroTalentSubTreeCheckboxes = ST._BuildHeroTalentSubTreeCheckboxes
 local CleanRecycledEntry = ST._CleanRecycledEntry
 local SetupGroupRowIndicators = ST._SetupGroupRowIndicators
 local GetGroupIcon = ST._GetGroupIcon
@@ -494,43 +495,7 @@ local function RefreshColumn1(preserveDrag)
                 cb.checkbg:SetPoint("TOPLEFT", inFolder and 12 or 0, 0)
 
                 -- Hero talent sub-tree checkboxes (indented, only when spec is checked)
-                if group.specs and group.specs[specId] and configID then
-                    local subTreeIDs = C_ClassTalents.GetHeroTalentSpecsForClassSpec(nil, specId)
-                    if subTreeIDs then
-                        for _, subTreeID in ipairs(subTreeIDs) do
-                            local subTreeInfo = C_Traits.GetSubTreeInfo(configID, subTreeID)
-                            if subTreeInfo then
-                                local htCb = AceGUI:Create("CheckBox")
-                                htCb:SetLabel(subTreeInfo.name or ("Hero " .. subTreeID))
-                                htCb:SetFullWidth(true)
-                                htCb:SetValue(group.heroTalents and group.heroTalents[subTreeID] or false)
-                                htCb:SetCallback("OnValueChanged", function(widget, event, value)
-                                    if value then
-                                        if not group.heroTalents then group.heroTalents = {} end
-                                        group.heroTalents[subTreeID] = true
-                                    else
-                                        if group.heroTalents then
-                                            group.heroTalents[subTreeID] = nil
-                                            if not next(group.heroTalents) then
-                                                group.heroTalents = nil
-                                            end
-                                        end
-                                    end
-                                    CooldownCompanion:RefreshGroupFrame(groupId)
-                                    CooldownCompanion:RefreshConfigPanel()
-                                end)
-                                CS.col1Scroll:AddChild(htCb)
-                                htCb.checkbg:SetPoint("TOPLEFT", htIndent, 0)
-                                -- Set hero talent atlas icon
-                                if subTreeInfo.iconElementID then
-                                    htCb:SetImage(136235)  -- placeholder fileID for layout
-                                    htCb.image:SetAtlas(subTreeInfo.iconElementID, false)
-                                    htCb.image:SetTexCoord(0, 1, 0, 1)
-                                end
-                            end
-                        end
-                    end
-                end
+                BuildHeroTalentSubTreeCheckboxes(CS.col1Scroll, group, configID, specId, htIndent, groupId)
             end
 
             local playerSpecIds = {}
