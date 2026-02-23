@@ -116,8 +116,8 @@ end
 function CooldownCompanion:OnSpecChanged()
     self:CacheCurrentSpec()
     self:RefreshChargeFlags()
-    self:EvaluateResourceBars()
     self:RefreshAllGroups()
+    self:EvaluateResourceBars()
     self:RefreshConfigPanel()
     -- Rebuild viewer map after a short delay to let the viewer re-populate
     C_Timer.After(1, function()
