@@ -79,13 +79,16 @@ function CooldownCompanion:RefreshChargeFlags(typeFilter)
                 buttonData.hasCharges = chargeInfo and true or nil
                 if chargeInfo then
                     local mc = chargeInfo.maxCharges
-                    if mc and mc > (buttonData.maxCharges or 0) then
+                    if mc and not issecretvalue(mc) and mc > (buttonData.maxCharges or 0) then
                         buttonData.maxCharges = mc
                     end
                     -- Secondary source: display count
-                    local displayCount = tonumber(C_Spell.GetSpellDisplayCount(buttonData.id))
-                    if displayCount and displayCount > (buttonData.maxCharges or 0) then
-                        buttonData.maxCharges = displayCount
+                    local rawDisplayCount = C_Spell.GetSpellDisplayCount(buttonData.id)
+                    if not issecretvalue(rawDisplayCount) then
+                        local displayCount = tonumber(rawDisplayCount)
+                        if displayCount and displayCount > (buttonData.maxCharges or 0) then
+                            buttonData.maxCharges = displayCount
+                        end
                     end
                 end
             elseif buttonData.type == "item" and typeFilter ~= "spell" then
@@ -93,10 +96,12 @@ function CooldownCompanion:RefreshChargeFlags(typeFilter)
                 -- return 0, indistinguishable from "item not owned".
                 local plainCount = C_Item.GetItemCount(buttonData.id)
                 local chargeCount = C_Item.GetItemCount(buttonData.id, false, true)
-                if chargeCount > plainCount then
-                    buttonData.hasCharges = true
-                    if chargeCount > (buttonData.maxCharges or 0) then
-                        buttonData.maxCharges = chargeCount
+                if not issecretvalue(plainCount) and not issecretvalue(chargeCount) then
+                    if chargeCount > plainCount then
+                        buttonData.hasCharges = true
+                        if chargeCount > (buttonData.maxCharges or 0) then
+                            buttonData.maxCharges = chargeCount
+                        end
                     end
                 end
             end

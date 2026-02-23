@@ -195,6 +195,11 @@ function CooldownCompanion:OnEnable()
         end
     end
 
+    -- Enforce CDM hidden state immediately after hooks are installed.
+    -- Without this, viewers flash visible for ~1s after /reload until
+    -- the delayed ApplyCdmAlpha() in OnPlayerEnteringWorld fires.
+    self:ApplyCdmAlpha()
+
     -- Keybind text events
     self:RegisterEvent("UPDATE_BINDINGS", "OnBindingsChanged")
     self:RegisterEvent("ACTIONBAR_SLOT_CHANGED", "OnActionBarSlotChanged")
