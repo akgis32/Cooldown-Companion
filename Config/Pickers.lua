@@ -566,9 +566,39 @@ local function IsPassiveOrProc(spellId)
     return false
 end
 
+local NEVER_TRACKABLE_SPELL_IDS = {
+    -- Add explicit spellIDs here when confirmed (for example, Mobile Banking).
+}
+
+local NEVER_TRACKABLE_SPELL_SET = {}
+for _, spellID in ipairs(NEVER_TRACKABLE_SPELL_IDS) do
+    NEVER_TRACKABLE_SPELL_SET[spellID] = true
+end
+
+local function IsNeverTrackableSpell(spellId)
+    local id = tonumber(spellId)
+    if not id or id <= 0 then return false end
+    if NEVER_TRACKABLE_SPELL_SET[id] then return true end
+    if C_Spell.IsAutoAttackSpell(id) then return true end
+    if C_Spell.IsRangedAutoAttackSpell(id) then return true end
+    return false
+end
+
+local function ShouldSuppressSpellbookEntry(spellId, skillLineIndex, isAura)
+    if IsNeverTrackableSpell(spellId) then
+        return true
+    end
+    if isAura and skillLineIndex == Enum.SpellBookSkillLineIndex.General then
+        return true
+    end
+    return false
+end
+
 ------------------------------------------------------------------------
 -- ST._ exports
 ------------------------------------------------------------------------
 ST._IsSpellInCDMBuffBar = IsSpellInCDMBuffBar
 ST._IsSpellInCDMCooldown = IsSpellInCDMCooldown
 ST._IsPassiveOrProc = IsPassiveOrProc
+ST._IsNeverTrackableSpell = IsNeverTrackableSpell
+ST._ShouldSuppressSpellbookEntry = ShouldSuppressSpellbookEntry

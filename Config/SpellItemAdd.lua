@@ -11,6 +11,8 @@ local CS = ST._configState
 local IsSpellInCDMBuffBar = ST._IsSpellInCDMBuffBar
 local IsSpellInCDMCooldown = ST._IsSpellInCDMCooldown
 local IsPassiveOrProc = ST._IsPassiveOrProc
+local IsNeverTrackableSpell = ST._IsNeverTrackableSpell
+local ShouldSuppressSpellbookEntry = ST._ShouldSuppressSpellbookEntry
 local GetButtonIcon = ST._GetButtonIcon
 local CDM_VIEWER_NAMES = ST._CDM_VIEWER_NAMES
 
@@ -21,6 +23,15 @@ local autocompleteDropdown
 local AUTOCOMPLETE_MAX_ROWS = 8
 local AUTOCOMPLETE_ROW_HEIGHT = 22
 local AUTOCOMPLETE_ICON_SIZE = 16
+
+local function IsBlockedSpellForTracking(spellId)
+    return spellId and IsNeverTrackableSpell(spellId)
+end
+
+local function PrintBlockedSpellMessage(spellName)
+    local shownName = spellName or "that spell"
+    CooldownCompanion:Print("Cannot track " .. shownName .. ".")
+end
 
 ------------------------------------------------------------------------
 -- Helper: Add spell to selected group
@@ -48,6 +59,10 @@ local function TryAddSpell(input, isPetSpell, forceAura)
     if spellId and spellName then
         if spellName == "Single-Button Assistant" then
             CooldownCompanion:Print("Cannot track Single-Button Assistant")
+            return false
+        end
+        if IsBlockedSpellForTracking(spellId) then
+            PrintBlockedSpellMessage(spellName)
             return false
         end
         local passiveOrProc = IsPassiveOrProc(spellId)
@@ -167,6 +182,10 @@ local function TryAdd(input)
         -- ID-based input: check both spell and item
         local spellInfo = C_Spell.GetSpellInfo(id)
         local spellFound = spellInfo and spellInfo.name
+        if spellFound and IsBlockedSpellForTracking(id) then
+            PrintBlockedSpellMessage(spellInfo.name)
+            return false
+        end
         local passiveOrProc = spellFound and IsPassiveOrProc(id)
 
         -- Passive/proc spell: require CDM presence
@@ -255,6 +274,10 @@ local function TryAdd(input)
         end
 
         if spellId and spellName then
+            if IsBlockedSpellForTracking(spellId) then
+                PrintBlockedSpellMessage(spellName)
+                return false
+            end
             local passiveOrProc = IsPassiveOrProc(spellId)
             if passiveOrProc then
                 if IsSpellInCDMBuffBar(spellId) then
@@ -375,7 +398,10 @@ local function BuildAutocompleteCache()
                     and itemInfo.itemType ~= Enum.SpellBookItemType.FutureSpell
                 then
                     local id = itemInfo.spellID
-                    if not seen[id] then
+                    local isAura = IsPassiveOrProc(id)
+                    if ShouldSuppressSpellbookEntry(id, lineIdx, isAura) then
+                        -- Omit filtered entries to reduce autocomplete noise.
+                    elseif not seen[id] then
                         seen[id] = true
                         if dualCDMSet[id] then
                             -- Dual-CDM spell: insert separate Cooldown and Buff entries
@@ -422,7 +448,8 @@ local function BuildAutocompleteCache()
                 and not itemInfo.isPassive
             then
                 local id = itemInfo.spellID
-                if not seen[id] then
+                local isAura = IsPassiveOrProc(id)
+                if not ShouldSuppressSpellbookEntry(id, itemInfo.skillLineIndex, isAura) and not seen[id] then
                     seen[id] = true
                     table.insert(cache, {
                         id = id,
@@ -472,7 +499,7 @@ local function BuildAutocompleteCache()
                 local cdInfo = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
                 if cdInfo and cdInfo.spellID then
                     local id = cdInfo.spellID
-                    if not seen[id] then
+                    if not IsNeverTrackableSpell(id) and not seen[id] then
                         local spellInfo = C_Spell.GetSpellInfo(id)
                         if spellInfo and spellInfo.name and IsPassiveOrProc(id) then
                             seen[id] = true

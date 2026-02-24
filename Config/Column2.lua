@@ -21,6 +21,7 @@ local TryAdd = ST._TryAdd
 local TryReceiveCursorDrop = ST._TryReceiveCursorDrop
 local OnAutocompleteSelect = ST._OnAutocompleteSelect
 local SearchAutocomplete = ST._SearchAutocomplete
+local OpenAutoAddFlow = ST._OpenAutoAddFlow
 local BuildGroupExportData = ST._BuildGroupExportData
 local EncodeExportData = ST._EncodeExportData
 local GroupsHaveForeignSpecs = ST._GroupsHaveForeignSpecs
@@ -476,11 +477,15 @@ local function RefreshColumn2()
     spacer.noAutoHeight = true
     CS.col2Scroll:AddChild(spacer)
 
-    local addBtn = AceGUI:Create("Button")
-    addBtn:SetText("Add Spell/Item to Track")
-    addBtn:SetFullWidth(true)
-    addBtn.frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    addBtn:SetCallback("OnClick", function(_, _, button)
+    local addRow = AceGUI:Create("SimpleGroup")
+    addRow:SetFullWidth(true)
+    addRow:SetLayout("Flow")
+
+    local manualAddBtn = AceGUI:Create("Button")
+    manualAddBtn:SetText("Manual Add")
+    manualAddBtn:SetRelativeWidth(0.49)
+    manualAddBtn.frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    manualAddBtn:SetCallback("OnClick", function(_, _, button)
         if button == "RightButton" then
             if InCombatLockdown() then
                 CooldownCompanion:Print("Cannot open spellbook during combat.")
@@ -496,7 +501,27 @@ local function RefreshColumn2()
             end
         end
     end)
-    CS.col2Scroll:AddChild(addBtn)
+    addRow:AddChild(manualAddBtn)
+
+    local autoAddBtn = AceGUI:Create("Button")
+    autoAddBtn:SetText("Auto Add")
+    autoAddBtn:SetRelativeWidth(0.49)
+    autoAddBtn:SetCallback("OnClick", function()
+        OpenAutoAddFlow()
+    end)
+    autoAddBtn:SetCallback("OnEnter", function(widget)
+        GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
+        GameTooltip:AddLine("Auto Add")
+        GameTooltip:AddLine("Imports entries from Action Bars 1-6, Spellbook, or CDM Auras into the selected group.", 1, 1, 1, true)
+        GameTooltip:AddLine("A preview is shown before confirmation.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    autoAddBtn:SetCallback("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    addRow:AddChild(autoAddBtn)
+
+    CS.col2Scroll:AddChild(addRow)
 
     -- Separator
     local sep = AceGUI:Create("Heading")
@@ -507,7 +532,7 @@ local function RefreshColumn2()
     CS.col2Scroll:AddChild(sep)
 
     -- Spell/Item list
-    -- childOffset = 4 (inputBox, spacer, addBtn, sep are the first 4 children before draggable entries)
+    -- childOffset = 4 (inputBox, spacer, addRow, sep are the first 4 children before draggable entries)
     local numButtons = #group.buttons
     for i, buttonData in ipairs(group.buttons) do
         local entry = AceGUI:Create("InteractiveLabel")

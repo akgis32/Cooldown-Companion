@@ -68,6 +68,7 @@ Config\Popups.lua
 Config\Diagnostics.lua
 Config\Pickers.lua
 Config\SpellItemAdd.lua
+Config\AutoImport.lua
 Config\DragReorder.lua
 Config\Column1.lua
 Config\Column2.lua
