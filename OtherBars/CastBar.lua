@@ -1031,6 +1031,20 @@ function CooldownCompanion:ApplyCastBarSettings()
 end
 
 ------------------------------------------------------------------------
+-- Reposition: lightweight Y-offset recalculation for resource bar changes
+------------------------------------------------------------------------
+
+function CooldownCompanion:RepositionCastBar()
+    if not isApplied then return end
+    local cb = PlayerCastingBarFrame
+    if not cb then return end
+    local s = GetCastBarSettings()
+    if not s or not s.enabled then return end
+    local effectiveHeight = s.stylingEnabled and (s.height or 15) or 11
+    ApplyPosition(cb, s, effectiveHeight)
+end
+
+------------------------------------------------------------------------
 -- Evaluate: central decision point
 ------------------------------------------------------------------------
 function CooldownCompanion:EvaluateCastBar()

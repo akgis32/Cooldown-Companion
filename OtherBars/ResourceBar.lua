@@ -191,6 +191,9 @@ local isPreviewActive = false
 local pendingSpecChange = false
 local savedContainerAlpha = nil
 local alphaSyncFrame = nil
+local lastAppliedBarSpacing = nil
+local lastAppliedBarHeight = nil
+local layoutDirty = false
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -862,7 +865,11 @@ local function UpdateCustomAuraBar(barInfo)
 
     -- Hide When Inactive: hide the bar frame when aura is absent
     if cabConfig.hideWhenInactive then
+        local wasShown = barInfo.frame:IsShown()
         barInfo.frame:SetShown(auraPresent)
+        if wasShown ~= auraPresent then
+            layoutDirty = true
+        end
         if not auraPresent then return end
     end
 
@@ -1022,6 +1029,64 @@ function CooldownCompanion:RecolorCustomAuraBar(cabConfig)
 end
 
 ------------------------------------------------------------------------
+-- Relayout: reposition bars within their containers by visibility/order
+-- Called from ApplyResourceBars() and from OnUpdate when layoutDirty.
+------------------------------------------------------------------------
+
+local function CompareBarOrder(a, b)
+    if a._order ~= b._order then return a._order < b._order end
+    return (a.powerType or 0) < (b.powerType or 0)
+end
+
+local function RelayoutBars()
+    if not containerFrameAbove or not containerFrameBelow then return end
+    local barSpacing = lastAppliedBarSpacing or 3.6
+    local globalBarHeight = lastAppliedBarHeight or 12
+
+    local aboveBars = {}
+    local belowBars = {}
+    for _, barInfo in ipairs(resourceBarFrames) do
+        if barInfo and barInfo.frame and barInfo.frame:IsShown() then
+            if barInfo._side == "above" then
+                table.insert(aboveBars, barInfo)
+            else
+                table.insert(belowBars, barInfo)
+            end
+        end
+    end
+    table.sort(aboveBars, CompareBarOrder)
+    table.sort(belowBars, CompareBarOrder)
+
+    -- Stack above bars (order ascending = bottom to top; order=1 closest to group)
+    local currentY = 0
+    for _, barInfo in ipairs(aboveBars) do
+        barInfo.frame:ClearAllPoints()
+        barInfo.frame:SetPoint("BOTTOMLEFT", containerFrameAbove, "BOTTOMLEFT", 0, currentY)
+        barInfo.frame:SetPoint("BOTTOMRIGHT", containerFrameAbove, "BOTTOMRIGHT", 0, currentY)
+        local h = barInfo._effectiveHeight or globalBarHeight
+        barInfo.frame:SetHeight(h)
+        currentY = currentY + h + barSpacing
+    end
+    local aboveHeight = currentY > 0 and (currentY - barSpacing) or 1
+    containerFrameAbove:SetHeight(aboveHeight)
+    if #aboveBars > 0 then containerFrameAbove:Show() else containerFrameAbove:Hide() end
+
+    -- Stack below bars (order ascending = top to bottom; order=1 closest to group)
+    currentY = 0
+    for _, barInfo in ipairs(belowBars) do
+        barInfo.frame:ClearAllPoints()
+        barInfo.frame:SetPoint("TOPLEFT", containerFrameBelow, "TOPLEFT", 0, -currentY)
+        barInfo.frame:SetPoint("TOPRIGHT", containerFrameBelow, "TOPRIGHT", 0, -currentY)
+        local h = barInfo._effectiveHeight or globalBarHeight
+        barInfo.frame:SetHeight(h)
+        currentY = currentY + h + barSpacing
+    end
+    local belowHeight = currentY > 0 and (currentY - barSpacing) or 1
+    containerFrameBelow:SetHeight(belowHeight)
+    if #belowBars > 0 then containerFrameBelow:Show() else containerFrameBelow:Hide() end
+end
+
+------------------------------------------------------------------------
 -- OnUpdate handler (30 Hz)
 ------------------------------------------------------------------------
 
@@ -1051,6 +1116,12 @@ local function OnUpdate(self, elapsed)
             -- Frame hidden by hideWhenInactive; still update so it can re-show when aura returns
             UpdateCustomAuraBar(barInfo)
         end
+    end
+
+    if layoutDirty then
+        layoutDirty = false
+        RelayoutBars()
+        CooldownCompanion:RepositionCastBar()
     end
 end
 
@@ -1271,6 +1342,8 @@ function CooldownCompanion:ApplyResourceBars()
     -- Create or recycle bar frames
     local globalBarHeight = settings.barHeight or 12
     local barSpacing = settings.barSpacing or 3.6
+    lastAppliedBarSpacing = barSpacing
+    lastAppliedBarHeight = globalBarHeight
     local segmentGap = settings.segmentGap or 4
     local totalWidth = groupFrame:GetWidth()
 
@@ -1478,29 +1551,7 @@ function CooldownCompanion:ApplyResourceBars()
     local gap = math_abs(settings.yOffset or -3)
     lastAppliedWidth = totalWidth
 
-    -- Sort bars into above/below groups by order
-    local aboveBars = {}
-    local belowBars = {}
-    for i = 1, #filtered do
-        local barInfo = resourceBarFrames[i]
-        if barInfo and barInfo.frame and barInfo.frame:IsShown() then
-            if barInfo._side == "above" then
-                table.insert(aboveBars, barInfo)
-            else
-                table.insert(belowBars, barInfo)
-            end
-        end
-    end
-    table.sort(aboveBars, function(a, b)
-        if a._order ~= b._order then return a._order < b._order end
-        return (a.powerType or 0) < (b.powerType or 0)
-    end)
-    table.sort(belowBars, function(a, b)
-        if a._order ~= b._order then return a._order < b._order end
-        return (a.powerType or 0) < (b.powerType or 0)
-    end)
-
-    -- Anchor containers to group frame
+    -- Anchor containers to group frame (static — only changes on full Apply)
     containerFrameAbove:ClearAllPoints()
     containerFrameBelow:ClearAllPoints()
     containerFrameAbove:SetWidth(totalWidth)
@@ -1508,33 +1559,8 @@ function CooldownCompanion:ApplyResourceBars()
     containerFrameAbove:SetPoint("BOTTOMLEFT", groupFrame, "TOPLEFT", 0, gap)
     containerFrameBelow:SetPoint("TOPLEFT", groupFrame, "BOTTOMLEFT", 0, -gap)
 
-    -- Stack above bars (order ascending = bottom to top; order=1 closest to group)
-    local currentY = 0
-    for _, barInfo in ipairs(aboveBars) do
-        barInfo.frame:ClearAllPoints()
-        barInfo.frame:SetPoint("BOTTOMLEFT", containerFrameAbove, "BOTTOMLEFT", 0, currentY)
-        barInfo.frame:SetPoint("BOTTOMRIGHT", containerFrameAbove, "BOTTOMRIGHT", 0, currentY)
-        local h = barInfo._effectiveHeight or globalBarHeight
-        barInfo.frame:SetHeight(h)
-        currentY = currentY + h + barSpacing
-    end
-    local aboveHeight = currentY > 0 and (currentY - barSpacing) or 1
-    containerFrameAbove:SetHeight(aboveHeight)
-    if #aboveBars > 0 then containerFrameAbove:Show() else containerFrameAbove:Hide() end
-
-    -- Stack below bars (order ascending = top to bottom; order=1 closest to group)
-    currentY = 0
-    for _, barInfo in ipairs(belowBars) do
-        barInfo.frame:ClearAllPoints()
-        barInfo.frame:SetPoint("TOPLEFT", containerFrameBelow, "TOPLEFT", 0, -currentY)
-        barInfo.frame:SetPoint("TOPRIGHT", containerFrameBelow, "TOPRIGHT", 0, -currentY)
-        local h = barInfo._effectiveHeight or globalBarHeight
-        barInfo.frame:SetHeight(h)
-        currentY = currentY + h + barSpacing
-    end
-    local belowHeight = currentY > 0 and (currentY - barSpacing) or 1
-    containerFrameBelow:SetHeight(belowHeight)
-    if #belowBars > 0 then containerFrameBelow:Show() else containerFrameBelow:Hide() end
+    -- Position bars within containers (reusable for relayout on visibility change)
+    RelayoutBars()
 
     -- Enable OnUpdate
     if not onUpdateFrame then
@@ -1599,6 +1625,9 @@ function CooldownCompanion:RevertResourceBars()
     if not isApplied then return end
     isApplied = false
     lastAppliedWidth = nil
+    lastAppliedBarSpacing = nil
+    lastAppliedBarHeight = nil
+    layoutDirty = false
 
     -- Stop alpha sync and restore alpha
     if alphaSyncFrame then
