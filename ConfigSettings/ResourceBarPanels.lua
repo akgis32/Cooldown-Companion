@@ -270,8 +270,8 @@ local function BuildResourceBarAnchoringPanel(container)
     if not posCollapsed then
         local ySlider = AceGUI:Create("Slider")
         ySlider:SetLabel("Y Offset")
-        ySlider:SetSliderValues(-50, 50, 0.1)
-        ySlider:SetValue(settings.yOffset or -3)
+        ySlider:SetSliderValues(0, 50, 0.1)
+        ySlider:SetValue(settings.yOffset or 3)
         ySlider:SetFullWidth(true)
         ySlider:SetCallback("OnValueChanged", function(widget, event, val)
             settings.yOffset = val

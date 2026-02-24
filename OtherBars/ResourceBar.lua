@@ -1548,7 +1548,7 @@ function CooldownCompanion:ApplyResourceBars()
     activeResources = filtered
 
     -- Layout: per-element positioning using above/below containers
-    local gap = math_abs(settings.yOffset or -3)
+    local gap = settings.yOffset or 3
     lastAppliedWidth = totalWidth
 
     -- Anchor containers to group frame (static — only changes on full Apply)
@@ -1687,7 +1687,6 @@ function CooldownCompanion:EvaluateResourceBars()
 end
 
 -- Returns the total stacked height of bars on `side` with order < upToOrder.
--- Used by CastBar to compute its offset below/above the group frame.
 function CooldownCompanion:GetResourceBarStackHeight(side, upToOrder)
     if not isApplied then return 0 end
     local settings = GetResourceBarSettings()
@@ -1706,6 +1705,30 @@ function CooldownCompanion:GetResourceBarStackHeight(side, upToOrder)
     end
     if count == 0 then return 0 end
     return totalHeight + (count - 1) * barSpacing
+end
+
+-- Returns the last visible resource/custom aura bar on `side` with order < upToOrder.
+-- Used by CastBar to anchor as the next stacked element.
+function CooldownCompanion:GetResourceBarPredecessor(side, upToOrder)
+    if not isApplied then return nil end
+
+    local best = nil
+    for _, barInfo in ipairs(resourceBarFrames) do
+        if barInfo.frame and barInfo.frame:IsShown()
+            and barInfo._side == side
+            and barInfo._order < upToOrder then
+            if not best then
+                best = barInfo
+            elseif barInfo._order > best._order then
+                best = barInfo
+            elseif barInfo._order == best._order
+                and (barInfo.powerType or 0) > (best.powerType or 0) then
+                best = barInfo
+            end
+        end
+    end
+
+    return best and best.frame or nil
 end
 
 ------------------------------------------------------------------------

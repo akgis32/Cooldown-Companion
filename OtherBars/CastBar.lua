@@ -444,10 +444,11 @@ local function ApplyPosition(cb, s, height)
     cb:ClearAllPoints()
     local cbPosition = s.position or "below"
     local cbOrder = s.order or 2000
-    local stackOffset = CooldownCompanion:GetResourceBarStackHeight(cbPosition, cbOrder)
+    local predecessor = CooldownCompanion:GetResourceBarPredecessor(cbPosition, cbOrder)
     local rbSettings = CooldownCompanion.db and CooldownCompanion.db.profile
         and CooldownCompanion.db.profile.resourceBars
-    local gap = math.abs(rbSettings and (rbSettings.yOffset or -3) or -3)
+    local gap = rbSettings and (rbSettings.yOffset or 3) or 3
+    local barSpacing = rbSettings and (rbSettings.barSpacing or 3.6) or 3.6
 
     -- Inline icon: inset bar on the icon side so fill/spark stay within bar area
     local iconInsetLeft, iconInsetRight = 0, 0
@@ -460,12 +461,22 @@ local function ApplyPosition(cb, s, height)
         end
     end
 
-    if cbPosition == "above" then
-        cb:SetPoint("BOTTOMLEFT", groupFrame, "TOPLEFT", iconInsetLeft, gap + stackOffset)
-        cb:SetPoint("BOTTOMRIGHT", groupFrame, "TOPRIGHT", -iconInsetRight, gap + stackOffset)
+    if predecessor then
+        if cbPosition == "above" then
+            cb:SetPoint("BOTTOMLEFT", predecessor, "TOPLEFT", iconInsetLeft, barSpacing)
+            cb:SetPoint("BOTTOMRIGHT", predecessor, "TOPRIGHT", -iconInsetRight, barSpacing)
+        else
+            cb:SetPoint("TOPLEFT", predecessor, "BOTTOMLEFT", iconInsetLeft, -barSpacing)
+            cb:SetPoint("TOPRIGHT", predecessor, "BOTTOMRIGHT", -iconInsetRight, -barSpacing)
+        end
     else
-        cb:SetPoint("TOPLEFT", groupFrame, "BOTTOMLEFT", iconInsetLeft, -(gap + stackOffset))
-        cb:SetPoint("TOPRIGHT", groupFrame, "BOTTOMRIGHT", -iconInsetRight, -(gap + stackOffset))
+        if cbPosition == "above" then
+            cb:SetPoint("BOTTOMLEFT", groupFrame, "TOPLEFT", iconInsetLeft, gap)
+            cb:SetPoint("BOTTOMRIGHT", groupFrame, "TOPRIGHT", -iconInsetRight, gap)
+        else
+            cb:SetPoint("TOPLEFT", groupFrame, "BOTTOMLEFT", iconInsetLeft, -gap)
+            cb:SetPoint("TOPRIGHT", groupFrame, "BOTTOMRIGHT", -iconInsetRight, -gap)
+        end
     end
 
     cb:SetHeight(height or 15)

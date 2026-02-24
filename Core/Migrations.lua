@@ -33,6 +33,7 @@ function CooldownCompanion:RunAllMigrations()
     self:MigrateAuraIndicatorToGroupStyle()
     self:MigrateBarOrdering()
     self:MigrateRemoveAuraDurationCache()
+    self:MigrateResourceBarYOffset()
 end
 
 -- Clear all migration sentinel flags so migrations re-evaluate the actual data.
@@ -892,4 +893,13 @@ end
 -- It was never written to at runtime; this just cleans up stale SavedVariables.
 function CooldownCompanion:MigrateRemoveAuraDurationCache()
     self.db.profile.auraDurationCache = nil
+end
+
+-- Convert negative resourceBars.yOffset to positive.
+-- The slider range changed from [-50, 50] to [0, 50]; old default was -3.
+function CooldownCompanion:MigrateResourceBarYOffset()
+    local rb = self.db.profile.resourceBars
+    if rb and rb.yOffset and rb.yOffset < 0 then
+        rb.yOffset = math.abs(rb.yOffset)
+    end
 end
