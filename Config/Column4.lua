@@ -205,34 +205,43 @@ local function RefreshProfileBar(bar)
 
     -- Helper to create horizontally chained buttons
     local lastAnchor = profileDrop.frame
-    local function AddBarButton(text, width, onClick)
+    local createdButtons = {}
+    local PROFILE_BAR_BUTTON_MIN_WIDTH = 55
+    local PROFILE_BAR_BUTTON_EXTRA_PADDING = 8
+    local PROFILE_BAR_BUTTON_TRUNCATION_STEP = 4
+    local PROFILE_BAR_BUTTON_TRUNCATION_MAX_WIDTH = 220
+    local function AddBarButton(text, onClick)
         local btn = AceGUI:Create("Button")
         btn:SetText(text)
-        btn:SetWidth(width)
+        btn:SetAutoWidth(true)
         btn:SetCallback("OnClick", onClick)
         btn.frame:SetParent(bar)
         btn.frame:ClearAllPoints()
         btn.frame:SetPoint("LEFT", lastAnchor, "RIGHT", 4, 0)
         btn:SetHeight(22)
+        local measuredWidth = btn.frame:GetWidth() or 0
+        local desiredWidth = math.max(PROFILE_BAR_BUTTON_MIN_WIDTH, measuredWidth + PROFILE_BAR_BUTTON_EXTRA_PADDING)
+        btn:SetWidth(desiredWidth)
         btn.frame:Show()
         table.insert(CS.profileBarAceWidgets, btn)
+        table.insert(createdButtons, btn)
         lastAnchor = btn.frame
         return btn
     end
 
-    AddBarButton("New", 55, function()
+    AddBarButton("New", function()
         ShowPopupAboveConfig("CDC_NEW_PROFILE")
     end)
 
-    AddBarButton("Rename", 80, function()
+    AddBarButton("Rename", function()
         ShowPopupAboveConfig("CDC_RENAME_PROFILE", currentProfile, { oldName = currentProfile })
     end)
 
-    AddBarButton("Duplicate", 90, function()
+    AddBarButton("Duplicate", function()
         ShowPopupAboveConfig("CDC_DUPLICATE_PROFILE", nil, { source = currentProfile })
     end)
 
-    AddBarButton("Delete", 70, function()
+    AddBarButton("Delete", function()
         local allProfiles = db:GetProfiles()
         local isOnly = #allProfiles <= 1
         if isOnly then
@@ -242,13 +251,25 @@ local function RefreshProfileBar(bar)
         end
     end)
 
-    AddBarButton("Export", 75, function()
+    AddBarButton("Export", function()
         ShowPopupAboveConfig("CDC_EXPORT_PROFILE")
     end)
 
-    AddBarButton("Import", 75, function()
+    AddBarButton("Import", function()
         ShowPopupAboveConfig("CDC_IMPORT_PROFILE")
     end)
+
+    -- Keep widening while text truncates so skin/font variations don't clip labels.
+    for _, btn in ipairs(createdButtons) do
+        local fontString = btn.frame.GetFontString and btn.frame:GetFontString() or nil
+        if fontString and fontString.IsTruncated and fontString:IsTruncated() then
+            local width = btn.frame:GetWidth() or PROFILE_BAR_BUTTON_MIN_WIDTH
+            while width < PROFILE_BAR_BUTTON_TRUNCATION_MAX_WIDTH and fontString:IsTruncated() do
+                width = math.min(PROFILE_BAR_BUTTON_TRUNCATION_MAX_WIDTH, width + PROFILE_BAR_BUTTON_TRUNCATION_STEP)
+                btn:SetWidth(width)
+            end
+        end
+    end
 end
 
 ------------------------------------------------------------------------
