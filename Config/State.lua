@@ -144,6 +144,10 @@ ST._configState = {
     -- Spec filter inline expansion
     specExpandedGroupId = nil,
 
+    -- Auto Add flow state (Column 3 wizard mode)
+    autoAddFlowActive = false,
+    autoAddFlowState = nil,
+
     -- Tab UI state (populated by ConfigSettings, cleaned by both files)
     tabInfoButtons = {},
     appearanceTabElements = {},
@@ -297,6 +301,9 @@ local function CleanRecycledEntry(entry)
     if entry.frame._cdcOverrideBadge then entry.frame._cdcOverrideBadge:Hide() end
     if entry.frame._cdcCollapseIcon then entry.frame._cdcCollapseIcon:Hide() end
     entry.image:SetAlpha(1)
+    if entry.image and entry.image.SetDesaturated then
+        entry.image:SetDesaturated(false)
+    end
 end
 
 local function AcquireBadge(frame, index)
@@ -537,6 +544,9 @@ end
 ------------------------------------------------------------------------
 
 local function ResetConfigSelection(full)
+    if full and ST._CancelAutoAddFlow then
+        ST._CancelAutoAddFlow()
+    end
     CS.selectedButton = nil
     wipe(CS.selectedButtons)
     if full then
