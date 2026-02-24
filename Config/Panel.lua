@@ -877,12 +877,31 @@ function CooldownCompanion:RefreshConfigPanel()
             s.scrollvalue = saved.scrollvalue
         end
     end
+    local function clearScroll(widget)
+        if not widget then return end
+        local s = widget.status or widget.localstatus
+        if s then
+            s.offset = nil
+            s.scrollvalue = nil
+        end
+    end
+    local function getAutoAddScrollKey()
+        local state = CS.autoAddFlowState
+        if not (CS.autoAddFlowActive and state) then return nil end
+        return table.concat({
+            tostring(tonumber(state.serial) or 0),
+            tostring(state.groupID or ""),
+            tostring(state.source or ""),
+            tostring(tonumber(state.step) or 0),
+        }, ":")
+    end
 
     local saved1   = saveScroll(CS.col1Scroll)
     local saved2   = saveScroll(CS.col2Scroll)
-    local col3ForScroll = CS.configFrame and CS.configFrame.col3
-    local savedCab = col3ForScroll and col3ForScroll._customAuraScroll and saveScroll(col3ForScroll._customAuraScroll)
-    local savedAaf = col3ForScroll and col3ForScroll._autoAddScroll and saveScroll(col3ForScroll._autoAddScroll)
+    local col3Before = CS.configFrame and CS.configFrame.col3
+    local savedCab = col3Before and col3Before._customAuraScroll and saveScroll(col3Before._customAuraScroll)
+    local savedAaf = col3Before and col3Before._autoAddScroll and saveScroll(col3Before._autoAddScroll)
+    local savedAafKey = getAutoAddScrollKey()
     local savedBtn = saveScroll(buttonSettingsScroll)
 
     if CS.configFrame.profileBar:IsShown() then
@@ -912,14 +931,29 @@ function CooldownCompanion:RefreshConfigPanel()
     RefreshColumn3()
     RefreshColumn4(CS.col4Container)
 
+    -- Recompute Column 3 title after RefreshColumn3(), since it may cancel Auto Add.
+    if CS.resourceBarPanelActive then
+        CS.configFrame.col3:SetTitle("Custom Aura Bars")
+    elseif CS.autoAddFlowActive then
+        CS.configFrame.col3:SetTitle("Auto Add")
+    else
+        CS.configFrame.col3:SetTitle("Button Settings")
+    end
+
     -- Restore AceGUI scroll state.
     restoreScroll(CS.col1Scroll, saved1)
     restoreScroll(CS.col2Scroll, saved2)
-    if col3ForScroll and col3ForScroll._customAuraScroll then
-        restoreScroll(col3ForScroll._customAuraScroll, savedCab)
+    local col3After = CS.configFrame and CS.configFrame.col3
+    if col3After and col3After._customAuraScroll then
+        restoreScroll(col3After._customAuraScroll, savedCab)
     end
-    if col3ForScroll and col3ForScroll._autoAddScroll then
-        restoreScroll(col3ForScroll._autoAddScroll, savedAaf)
+    if col3After and col3After._autoAddScroll then
+        local currentAafKey = getAutoAddScrollKey()
+        if savedAaf and savedAafKey and currentAafKey and savedAafKey == currentAafKey then
+            restoreScroll(col3After._autoAddScroll, savedAaf)
+        else
+            clearScroll(col3After._autoAddScroll)
+        end
     end
     restoreScroll(buttonSettingsScroll, savedBtn)
 

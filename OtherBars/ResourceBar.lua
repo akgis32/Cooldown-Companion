@@ -1686,27 +1686,6 @@ function CooldownCompanion:EvaluateResourceBars()
     self:ApplyResourceBars()
 end
 
--- Returns the total stacked height of bars on `side` with order < upToOrder.
-function CooldownCompanion:GetResourceBarStackHeight(side, upToOrder)
-    if not isApplied then return 0 end
-    local settings = GetResourceBarSettings()
-    if not settings then return 0 end
-    local globalHeight = settings.barHeight or 12
-    local barSpacing = settings.barSpacing or 3.6
-    local totalHeight = 0
-    local count = 0
-    for _, barInfo in ipairs(resourceBarFrames) do
-        if barInfo.frame and barInfo.frame:IsShown()
-            and barInfo._side == side
-            and barInfo._order < upToOrder then
-            totalHeight = totalHeight + (barInfo._effectiveHeight or globalHeight)
-            count = count + 1
-        end
-    end
-    if count == 0 then return 0 end
-    return totalHeight + (count - 1) * barSpacing
-end
-
 -- Returns the last visible resource/custom aura bar on `side` with order < upToOrder.
 -- Used by CastBar to anchor as the next stacked element.
 function CooldownCompanion:GetResourceBarPredecessor(side, upToOrder)

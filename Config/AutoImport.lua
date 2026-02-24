@@ -246,8 +246,7 @@ local function BuildSpellbookPreview()
             -- Omit filtered spellbook entries silently to reduce preview noise.
             return
         end
-        local bucketKey = isAura and "auras" or "spells"
-        TryAddEntry(result, seen, bucketKey, {
+        TryAddEntry(result, seen, "spells", {
             type = "spell",
             id = spellID,
             name = spellName,
@@ -437,9 +436,6 @@ local function AddSelectableEntryRow(state, scroll, entry, onValueChanged)
     local row = AceGUI:Create("CheckBox")
     local icon = tonumber(entry.icon) or ICON_FALLBACK
     local label = "|T" .. icon .. ":15:15:0:0|t " .. (entry.name or "Unknown")
-    if state.showSources ~= false then
-        label = label .. "  |cff9d9d9d[" .. (entry.source or "Unknown Source") .. "]|r"
-    end
     row:SetLabel(label)
     row:SetValue(state.selectedEntries[entry.importKey] ~= false)
     row:SetFullWidth(true)
@@ -459,10 +455,9 @@ local function AddEmptyRow(scroll, text)
     scroll:AddChild(row)
 end
 
-local function AddSkippedRow(state, scroll, skipped)
+local function AddSkippedRow(scroll, skipped)
     local row = AceGUI:Create("Label")
-    local sourceLabel = state.showSources ~= false and (" [" .. (skipped.source or "Unknown Source") .. "]") or ""
-    local line = "- " .. (skipped.name or "Unknown") .. sourceLabel .. ": " .. (skipped.reason or "Skipped.")
+    local line = "- " .. (skipped.name or "Unknown") .. ": " .. (skipped.reason or "Skipped.")
     row:SetText(line)
     row:SetFullWidth(true)
     scroll:AddChild(row)
@@ -562,6 +557,7 @@ local function NormalizeFlowState(state)
     state.selectedBars = NormalizeBarSelection(state.selectedBars or CreateDefaultBarSelection())
     state.selectedEntries = state.selectedEntries or {}
     state.hasInteractedStep2 = state.hasInteractedStep2 == true
+    state.serial = tonumber(state.serial) or 0
     state.showSkipped = state.showSkipped == true
     state.showSources = true
     state.sortMode = SORT_SOURCE_THEN_NAME
@@ -656,10 +652,10 @@ local function RenderStep1(container, state)
 
     container:AddChild(sourceRow)
 
-    local hint = AceGUI:Create("Label")
-    hint:SetText("Select a source to continue.")
-    hint:SetFullWidth(true)
-    container:AddChild(hint)
+    local spacer = AceGUI:Create("Label")
+    spacer:SetText(" ")
+    spacer:SetFullWidth(true)
+    container:AddChild(spacer)
 
     local cancelBtn = AceGUI:Create("Button")
     cancelBtn:SetText("Cancel")
@@ -678,16 +674,13 @@ local function RenderStep2(container, state)
     container:AddChild(heading)
 
     local info = AceGUI:Create("Label")
-    info:SetText("Adjust bars to import. First valid change advances automatically.")
+    info:SetText("Adjust bars to import, then click Next.")
     info:SetFullWidth(true)
     container:AddChild(info)
 
     local function HandleStep2Interaction()
         state.hasInteractedStep2 = true
         PersistAutoAddPrefs(state)
-        if CountSelectedBars(state.selectedBars) > 0 then
-            AdvanceToReview(state)
-        end
         RefreshFlowUI()
     end
 
@@ -748,16 +741,28 @@ local function RenderStep2(container, state)
 
     local backBtn = AceGUI:Create("Button")
     backBtn:SetText("Back")
-    backBtn:SetRelativeWidth(0.5)
+    backBtn:SetRelativeWidth(0.33)
     backBtn:SetCallback("OnClick", function()
         state.step = AUTO_ADD_STEP_SOURCE
         RefreshFlowUI()
     end)
     navRow:AddChild(backBtn)
 
+    local nextBtn = AceGUI:Create("Button")
+    nextBtn:SetText("Next")
+    nextBtn:SetRelativeWidth(0.34)
+    nextBtn:SetCallback("OnClick", function()
+        if CountSelectedBars(state.selectedBars) == 0 then
+            return
+        end
+        AdvanceToReview(state)
+        RefreshFlowUI()
+    end)
+    navRow:AddChild(nextBtn)
+
     local cancelBtn = AceGUI:Create("Button")
     cancelBtn:SetText("Cancel")
-    cancelBtn:SetRelativeWidth(0.5)
+    cancelBtn:SetRelativeWidth(0.33)
     cancelBtn:SetCallback("OnClick", function()
         CancelAutoAddFlow()
         RefreshFlowUI()
@@ -769,32 +774,16 @@ end
 
 local function RenderStep3(container, state)
     local heading = AceGUI:Create("Heading")
-    heading:SetText("Step 3: Review and Confirm")
+    if state.source == SOURCE_ACTION_BARS then
+        heading:SetText("Step 3: Review and Add")
+    else
+        heading:SetText("Step 2: Review and Add")
+    end
     heading:SetFullWidth(true)
     container:AddChild(heading)
 
     local preview = BuildPreviewForFlowState(state)
     local spellCount, auraCount, itemCount, totalCount = CountPreviewEntries(preview)
-    local selectedSpellCount, selectedAuraCount, selectedItemCount, selectedTotalCount =
-        CountSelectedEntries(preview, state.selectedEntries)
-
-    local summary1 = AceGUI:Create("Label")
-    if totalCount > 0 then
-        summary1:SetText("Selected " .. selectedTotalCount .. " of " .. totalCount .. " addable entries.")
-    else
-        summary1:SetText("No addable entries found for this source.")
-    end
-    summary1:SetFullWidth(true)
-    container:AddChild(summary1)
-
-    local summary2 = AceGUI:Create("Label")
-    summary2:SetText(
-        "Spells " .. selectedSpellCount .. "/" .. spellCount
-        .. " | Auras " .. selectedAuraCount .. "/" .. auraCount
-        .. " | Items " .. selectedItemCount .. "/" .. itemCount
-    )
-    summary2:SetFullWidth(true)
-    container:AddChild(summary2)
 
     local selectRow = AceGUI:Create("SimpleGroup")
     selectRow:SetFullWidth(true)
@@ -860,7 +849,7 @@ local function RenderStep3(container, state)
         if state.showSkipped then
             AddSectionHeading(container, "Skipped")
             for _, skipped in ipairs(preview.skipped) do
-                AddSkippedRow(state, container, skipped)
+                AddSkippedRow(container, skipped)
             end
         end
     end
@@ -893,7 +882,7 @@ local function RenderStep3(container, state)
     navRow:AddChild(cancelBtn)
 
     local confirmBtn = AceGUI:Create("Button")
-    confirmBtn:SetText("Add Selected")
+    confirmBtn:SetText("Add")
     confirmBtn:SetRelativeWidth(0.34)
     confirmBtn:SetCallback("OnClick", function()
         local _, _, _, selectedCount = CountSelectedEntries(preview, state.selectedEntries)
@@ -936,6 +925,7 @@ local function OpenAutoAddFlow()
     end
 
     local prefs = EnsureAutoAddPrefs()
+    CS.autoAddFlowSerial = (tonumber(CS.autoAddFlowSerial) or 0) + 1
     CS.autoAddFlowActive = true
     CS.autoAddFlowState = {
         groupID = groupID,
@@ -945,6 +935,7 @@ local function OpenAutoAddFlow()
         selectedEntries = {},
         preview = nil,
         hasInteractedStep2 = false,
+        serial = CS.autoAddFlowSerial,
         showSkipped = prefs.showSkipped == true,
         showSources = true,
         sortMode = SORT_SOURCE_THEN_NAME,
