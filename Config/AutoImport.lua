@@ -27,6 +27,10 @@ local SORT_SOURCE_THEN_NAME = "source_then_name"
 local AUTO_ADD_STEP_SOURCE = 1
 local AUTO_ADD_STEP_OPTIONS = 2
 local AUTO_ADD_STEP_REVIEW = 3
+local SOURCE_GROUP_ORDER_CLASS = 1000
+local SOURCE_GROUP_ORDER_SPEC = 2000
+local SOURCE_GROUP_ORDER_PET = 3000
+local SOURCE_GROUP_ORDER_GENERAL = 4000
 
 local function CreateAutoAddPrefDefaults()
     local selectedBars = {}
@@ -114,6 +118,30 @@ local function CreatePreviewResult()
     }
 end
 
+local function GetPlayerClassInfo()
+    local localizedClassName, classFileName = UnitClass("player")
+    return localizedClassName, classFileName
+end
+
+local function IsSameText(valueA, valueB)
+    if valueA == nil or valueB == nil then
+        return false
+    end
+    return tostring(valueA):lower() == tostring(valueB):lower()
+end
+
+local function GetSpellbookSourceOrder(sourceLabel, lineInfo, lineIdx, playerClassName)
+    local index = tonumber(lineIdx) or 0
+    local specID = lineInfo and tonumber(lineInfo.specID) or 0
+    if specID > 0 then
+        return SOURCE_GROUP_ORDER_SPEC + index
+    end
+    if IsSameText(sourceLabel, playerClassName) then
+        return SOURCE_GROUP_ORDER_CLASS + index
+    end
+    return SOURCE_GROUP_ORDER_GENERAL + index
+end
+
 local function AddSkipped(result, sourceLabel, reason, name)
     result.skipped[#result.skipped + 1] = {
         source = sourceLabel,
@@ -150,6 +178,7 @@ local function BuildActionBarPreview(selectedBars)
     for barIndex = 1, ACTION_BAR_COUNT do
         if selectedBars[barIndex] then
             hasSelectedBar = true
+            local barSourceGroup = "Bar " .. barIndex
             for buttonIndex = 1, BUTTONS_PER_BAR do
                 local slot = ((barIndex - 1) * BUTTONS_PER_BAR) + buttonIndex
                 local sourceLabel = "Bar " .. barIndex .. " Slot " .. buttonIndex
@@ -174,6 +203,8 @@ local function BuildActionBarPreview(selectedBars)
                                     name = itemName,
                                     icon = C_Item.GetItemIconByID(itemID) or C_ActionBar.GetActionTexture(slot) or ICON_FALLBACK,
                                     source = sourceLabel,
+                                    sourceGroup = barSourceGroup,
+                                    sourceOrder = barIndex,
                                 }, sourceLabel)
                             end
                         end
@@ -198,6 +229,8 @@ local function BuildActionBarPreview(selectedBars)
                                         name = spellName,
                                         icon = spellInfo.iconID or C_ActionBar.GetActionTexture(slot) or ICON_FALLBACK,
                                         source = sourceLabel,
+                                        sourceGroup = barSourceGroup,
+                                        sourceOrder = barIndex,
                                     }, sourceLabel)
                                 end
                             end
@@ -222,8 +255,9 @@ end
 local function BuildSpellbookPreview()
     local result = CreatePreviewResult()
     local seen = {}
+    local playerClassName = GetPlayerClassInfo()
 
-    local function AddSpellbookEntry(itemInfo, sourceLabel, skillLineIndex)
+    local function AddSpellbookEntry(itemInfo, sourceLabel, sourceOrder, skillLineIndex)
         if not itemInfo or not itemInfo.spellID then return end
         if itemInfo.isOffSpec then return end
         if itemInfo.itemType == Enum.SpellBookItemType.Flyout then return end
@@ -252,6 +286,8 @@ local function BuildSpellbookPreview()
             name = spellName,
             icon = itemInfo.iconID or (spellInfo and spellInfo.iconID) or ICON_FALLBACK,
             source = sourceLabel,
+            sourceGroup = sourceLabel,
+            sourceOrder = sourceOrder,
         }, sourceLabel)
     end
 
@@ -260,19 +296,21 @@ local function BuildSpellbookPreview()
         local lineInfo = C_SpellBook.GetSpellBookSkillLineInfo(lineIdx)
         if lineInfo and not lineInfo.shouldHide then
             local sourceLabel = lineInfo.name or "Spellbook"
+            local sourceOrder = GetSpellbookSourceOrder(sourceLabel, lineInfo, lineIdx, playerClassName)
             for slotOffset = 1, lineInfo.numSpellBookItems do
                 local slotIdx = lineInfo.itemIndexOffset + slotOffset
                 local itemInfo = C_SpellBook.GetSpellBookItemInfo(slotIdx, Enum.SpellBookSpellBank.Player)
-                AddSpellbookEntry(itemInfo, sourceLabel, lineIdx)
+                AddSpellbookEntry(itemInfo, sourceLabel, sourceOrder, lineIdx)
             end
         end
     end
 
     local numPetSpells = C_SpellBook.HasPetSpells()
     if numPetSpells and numPetSpells > 0 then
+        local petSourceOrder = SOURCE_GROUP_ORDER_PET
         for slotIdx = 1, numPetSpells do
             local itemInfo = C_SpellBook.GetSpellBookItemInfo(slotIdx, Enum.SpellBookSpellBank.Pet)
-            AddSpellbookEntry(itemInfo, "Pet", itemInfo and itemInfo.skillLineIndex)
+            AddSpellbookEntry(itemInfo, "Pet", petSourceOrder, itemInfo and itemInfo.skillLineIndex)
         end
     end
 
@@ -288,7 +326,7 @@ local function BuildCDMAuraPreview()
     local result = CreatePreviewResult()
     local seen = {}
 
-    for _, catInfo in ipairs(CDM_AURA_CATEGORY_INFO) do
+    for catIndex, catInfo in ipairs(CDM_AURA_CATEGORY_INFO) do
         local cooldownIDs = C_CooldownViewer.GetCooldownViewerCategorySet(catInfo.category, false)
         if cooldownIDs then
             for _, cooldownID in ipairs(cooldownIDs) do
@@ -310,6 +348,8 @@ local function BuildCDMAuraPreview()
                             name = spellInfo.name,
                             icon = spellInfo.iconID or ICON_FALLBACK,
                             source = catInfo.label,
+                            sourceGroup = catInfo.label,
+                            sourceOrder = catIndex,
                         }, catInfo.label)
                     end
                 end
@@ -336,8 +376,20 @@ end
 
 local function SortEntriesBySourceThenName(entries)
     table.sort(entries, function(a, b)
-        local sourceA = LowerText(a and a.source)
-        local sourceB = LowerText(b and b.source)
+        local orderA = tonumber(a and a.sourceOrder)
+        local orderB = tonumber(b and b.sourceOrder)
+        if orderA and orderB and orderA ~= orderB then
+            return orderA < orderB
+        end
+        if orderA and not orderB then
+            return true
+        end
+        if orderB and not orderA then
+            return false
+        end
+
+        local sourceA = LowerText(a and (a.sourceGroup or a.source))
+        local sourceB = LowerText(b and (b.sourceGroup or b.source))
         if sourceA ~= sourceB then
             return sourceA < sourceB
         end
@@ -461,6 +513,96 @@ local function AddSkippedRow(scroll, skipped)
     row:SetText(line)
     row:SetFullWidth(true)
     scroll:AddChild(row)
+end
+
+local function BuildEntrySourceGroups(entries)
+    local groups = {}
+    local byLabel = {}
+
+    for _, entry in ipairs(entries) do
+        local label = tostring((entry and entry.sourceGroup) or (entry and entry.source) or "Other")
+        local group = byLabel[label]
+        if not group then
+            group = {
+                label = label,
+                order = tonumber(entry and entry.sourceOrder),
+                entries = {},
+            }
+            byLabel[label] = group
+            groups[#groups + 1] = group
+        elseif group.order == nil then
+            group.order = tonumber(entry and entry.sourceOrder)
+        end
+
+        group.entries[#group.entries + 1] = entry
+    end
+
+    table.sort(groups, function(a, b)
+        local orderA = a and a.order
+        local orderB = b and b.order
+        if orderA and orderB and orderA ~= orderB then
+            return orderA < orderB
+        end
+        if orderA and not orderB then
+            return true
+        end
+        if orderB and not orderA then
+            return false
+        end
+        return LowerText(a and a.label) < LowerText(b and b.label)
+    end)
+
+    return groups
+end
+
+local function WrapTextInPlayerClassColor(text)
+    local safeText = text or ""
+    local _, classFileName = GetPlayerClassInfo()
+    if classFileName then
+        local classColor = C_ClassColor.GetClassColor(classFileName)
+        if classColor then
+            if classColor.WrapTextInColorCode then
+                return classColor:WrapTextInColorCode(safeText)
+            end
+            local r = tonumber(classColor.r)
+            local g = tonumber(classColor.g)
+            local b = tonumber(classColor.b)
+            if r and g and b then
+                return string.format(
+                    "|cff%02x%02x%02x%s|r",
+                    math.floor(r * 255 + 0.5),
+                    math.floor(g * 255 + 0.5),
+                    math.floor(b * 255 + 0.5),
+                    safeText
+                )
+            end
+        end
+    end
+    return "|cffffd100" .. safeText .. "|r"
+end
+
+local function AddSourceGroupHeading(scroll, label, count)
+    local row = AceGUI:Create("Label")
+    local groupLabel = WrapTextInPlayerClassColor(label or "Other")
+    local groupCount = tonumber(count) or 0
+    row:SetText(groupLabel .. " |cffffffff(" .. groupCount .. ")|r")
+    row:SetFullWidth(true)
+    scroll:AddChild(row)
+end
+
+local function AddGroupedEntrySection(state, scroll, title, entries, onValueChanged)
+    if not entries or #entries == 0 then
+        return
+    end
+
+    AddSectionHeading(scroll, title .. " (" .. #entries .. ")")
+    local groups = BuildEntrySourceGroups(entries)
+    for _, group in ipairs(groups) do
+        AddSourceGroupHeading(scroll, group.label or "Other", #group.entries)
+        for _, entry in ipairs(group.entries) do
+            AddSelectableEntryRow(state, scroll, entry, onValueChanged)
+        end
+    end
 end
 
 local function ApplyPreviewToGroup(groupID, preview, selectedEntries, suppressRefresh)
@@ -783,7 +925,7 @@ local function RenderStep3(container, state)
     container:AddChild(heading)
 
     local preview = BuildPreviewForFlowState(state)
-    local spellCount, auraCount, itemCount, totalCount = CountPreviewEntries(preview)
+    local _, _, _, totalCount = CountPreviewEntries(preview)
 
     local selectRow = AceGUI:Create("SimpleGroup")
     selectRow:SetFullWidth(true)
@@ -809,26 +951,9 @@ local function RenderStep3(container, state)
 
     container:AddChild(selectRow)
 
-    if spellCount > 0 then
-        AddSectionHeading(container, "Spells (" .. spellCount .. ")")
-        for _, entry in ipairs(preview.spells) do
-            AddSelectableEntryRow(state, container, entry, RefreshFlowUI)
-        end
-    end
-
-    if auraCount > 0 then
-        AddSectionHeading(container, "Auras (" .. auraCount .. ")")
-        for _, entry in ipairs(preview.auras) do
-            AddSelectableEntryRow(state, container, entry, RefreshFlowUI)
-        end
-    end
-
-    if itemCount > 0 then
-        AddSectionHeading(container, "Items (" .. itemCount .. ")")
-        for _, entry in ipairs(preview.items) do
-            AddSelectableEntryRow(state, container, entry, RefreshFlowUI)
-        end
-    end
+    AddGroupedEntrySection(state, container, "Spells", preview.spells, RefreshFlowUI)
+    AddGroupedEntrySection(state, container, "Auras", preview.auras, RefreshFlowUI)
+    AddGroupedEntrySection(state, container, "Items", preview.items, RefreshFlowUI)
 
     if totalCount == 0 then
         AddEmptyRow(container, "No entries are currently addable from this source.")
