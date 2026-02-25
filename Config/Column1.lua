@@ -23,6 +23,7 @@ local GetScaledCursorPosition = ST._GetScaledCursorPosition
 local BuildGroupExportData = ST._BuildGroupExportData
 local EncodeExportData = ST._EncodeExportData
 local GroupsHaveForeignSpecs = ST._GroupsHaveForeignSpecs
+local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 
 ------------------------------------------------------------------------
 -- COLUMN 1: Groups
@@ -534,7 +535,7 @@ local function RefreshColumn1(preserveDrag)
                     CooldownCompanion:RefreshConfigPanel()
                 end)
                 CS.col1Scroll:AddChild(cb)
-                cb.checkbg:SetPoint("TOPLEFT", inFolder and 12 or 0, 0)
+                ApplyCheckboxIndent(cb, inFolder and 12 or 0)
 
                 -- Hero talent sub-tree checkboxes (indented, only when spec is checked)
                 BuildHeroTalentSubTreeCheckboxes(CS.col1Scroll, group, configID, specId, htIndent, groupId)
@@ -581,7 +582,7 @@ local function RefreshColumn1(preserveDrag)
                             CooldownCompanion:RefreshConfigPanel()
                         end)
                         CS.col1Scroll:AddChild(fcb)
-                        fcb.checkbg:SetPoint("TOPLEFT", inFolder and 12 or 0, 0)
+                        ApplyCheckboxIndent(fcb, inFolder and 12 or 0)
                     end
                 end
             end

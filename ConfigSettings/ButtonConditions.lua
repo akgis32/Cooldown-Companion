@@ -13,6 +13,7 @@ local BuildHeroTalentSubTreeCheckboxes = ST._BuildHeroTalentSubTreeCheckboxes
 local ColorHeading = ST._ColorHeading
 local AttachCollapseButton = ST._AttachCollapseButton
 local CreateInfoButton = ST._CreateInfoButton
+local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
@@ -793,7 +794,7 @@ local function BuildLoadConditionsTab(container)
                 CooldownCompanion:RefreshConfigPanel()
             end)
             container:AddChild(cb)
-            cb.checkbg:SetPoint("TOPLEFT")
+            ApplyCheckboxIndent(cb, 0)
 
             -- Hero talent sub-tree checkboxes (indented, only when spec is checked)
             BuildHeroTalentSubTreeCheckboxes(container, group, configID, specId, 20, groupId)
@@ -842,7 +843,7 @@ local function BuildLoadConditionsTab(container)
                     CooldownCompanion:RefreshConfigPanel()
                 end)
                 container:AddChild(fcb)
-                fcb.checkbg:SetPoint("TOPLEFT")
+                ApplyCheckboxIndent(fcb, 0)
             end
         end
     end

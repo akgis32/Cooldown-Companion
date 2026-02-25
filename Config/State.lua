@@ -10,6 +10,19 @@ local CooldownCompanion = ST.Addon
 local AceGUI = LibStub("AceGUI-3.0")
 local LSM = LibStub("LibSharedMedia-3.0")
 
+if AceGUI and not ST._aceguiCheckboxCreatePatched then
+    ST._aceguiCheckboxCreatePatched = true
+    local aceguiCreate = AceGUI.Create
+    AceGUI.Create = function(self, widgetType, ...)
+        local widget = aceguiCreate(self, widgetType, ...)
+        if widgetType == "CheckBox" and widget and widget.checkbg then
+            widget.checkbg:ClearAllPoints()
+            widget.checkbg:SetPoint("TOPLEFT")
+        end
+        return widget
+    end
+end
+
 -- Viewer frame names (mirrors Core.lua's local VIEWER_NAMES)
 local CDM_VIEWER_NAMES = {
     "EssentialCooldownViewer",
@@ -502,6 +515,13 @@ end
 -- Shared helper: render hero talent sub-tree checkboxes for a given spec.
 -- Used by both Column1 (group filter inline panel) and ButtonConditions (load conditions tab).
 ------------------------------------------------------------------------
+local function ApplyCheckboxIndent(checkbox, offsetX)
+    if not (checkbox and checkbox.checkbg) then return end
+    -- AceGUI checkboxes are pooled; normalize anchor state before applying offset.
+    checkbox.checkbg:ClearAllPoints()
+    checkbox.checkbg:SetPoint("TOPLEFT", offsetX or 0, 0)
+end
+
 local function BuildHeroTalentSubTreeCheckboxes(container, group, configID, specId, indentOffset, groupId)
     if not (group.specs and group.specs[specId] and configID) then return end
     local subTreeIDs = C_ClassTalents.GetHeroTalentSpecsForClassSpec(nil, specId)
@@ -529,7 +549,7 @@ local function BuildHeroTalentSubTreeCheckboxes(container, group, configID, spec
                 CooldownCompanion:RefreshConfigPanel()
             end)
             container:AddChild(htCb)
-            htCb.checkbg:SetPoint("TOPLEFT", indentOffset, 0)
+            ApplyCheckboxIndent(htCb, indentOffset)
             if subTreeInfo.iconElementID then
                 htCb:SetImage(136235)
                 htCb.image:SetAtlas(subTreeInfo.iconElementID, false)
@@ -594,5 +614,6 @@ ST._BUTTON_HEIGHT = BUTTON_HEIGHT
 ST._BUTTON_SPACING = BUTTON_SPACING
 ST._PROFILE_BAR_HEIGHT = PROFILE_BAR_HEIGHT
 ST._BuildHeroTalentSubTreeCheckboxes = BuildHeroTalentSubTreeCheckboxes
+ST._ApplyCheckboxIndent = ApplyCheckboxIndent
 ST._ResetConfigSelection = ResetConfigSelection
 ST._GroupsHaveForeignSpecs = GroupsHaveForeignSpecs
