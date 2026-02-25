@@ -33,6 +33,7 @@ local UpdateIconModeGlows = ST._UpdateIconModeGlows
 
 -- Imports from BarMode
 local UpdateBarDisplay = ST._UpdateBarDisplay
+local IsConfigButtonForceVisible = ST.IsConfigButtonForceVisible
 
 -- IsItemEquippable from Helpers (exported on CooldownCompanion)
 local IsItemEquippable = CooldownCompanion.IsItemEquippable
@@ -633,9 +634,24 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     -- Per-button visibility evaluation (after charge tracking)
     EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverrideActive)
 
-    -- Track if hidden state changed (for compact layout dirty flag)
-    if button._visibilityHidden ~= button._prevVisibilityHidden then
+    -- Config panel QOL: selected buttons in column 2 are always fully visible.
+    local forceVisibleByConfig = IsConfigButtonForceVisible(button)
+    if forceVisibleByConfig then
+        button._visibilityHidden = false
+        button._visibilityAlphaOverride = 1
+    end
+    button._forceVisibleByConfig = forceVisibleByConfig or nil
+
+    -- Track visibility/force-visible state changes for compact layout reflow.
+    local visibilityChanged = button._visibilityHidden ~= button._prevVisibilityHidden
+    if visibilityChanged then
         button._prevVisibilityHidden = button._visibilityHidden
+    end
+    local forceVisibleChanged = button._forceVisibleByConfig ~= button._prevForceVisibleByConfig
+    if forceVisibleChanged then
+        button._prevForceVisibleByConfig = button._forceVisibleByConfig
+    end
+    if visibilityChanged or forceVisibleChanged then
         local groupFrame = button:GetParent()
         if groupFrame then groupFrame._layoutDirty = true end
     end

@@ -593,7 +593,8 @@ function CooldownCompanion:UpdateGroupLayout(groupId)
 
     local visibleIndex = 0
     for _, button in ipairs(frame.buttons) do
-        local shouldHide = button._visibilityHidden or visibleIndex >= maxVis
+        local forceVisible = button._forceVisibleByConfig
+        local shouldHide = (not forceVisible) and (button._visibilityHidden or visibleIndex >= maxVis)
         local wasShown = button:IsShown()
         if shouldHide then
             if wasShown then

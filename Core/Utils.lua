@@ -169,3 +169,42 @@ end
 function ST.FormatColorKey(c)
     return string_format("%.2f%.2f%.2f%.2f", c[1], c[2], c[3], c[4] or 1)
 end
+
+--------------------------------------------------------------------------------
+-- Config Selection Helpers
+--------------------------------------------------------------------------------
+
+-- Returns true when this runtime button is selected in Config Column 2.
+-- Selection override is active only while the config panel is visible.
+function ST.IsConfigButtonForceVisible(button)
+    if not button then return false end
+
+    local CS = ST._configState
+    if not CS or not CS.selectedGroup then
+        return false
+    end
+
+    local configFrame = CS.configFrame
+    if not configFrame or not configFrame.frame or not configFrame.frame:IsShown() then
+        return false
+    end
+
+    if button._groupId ~= CS.selectedGroup then
+        return false
+    end
+
+    local index = button.index
+    if not index then
+        return false
+    end
+
+    if CS.selectedButton == index then
+        return true
+    end
+
+    if CS.selectedButtons[index] then
+        return true
+    end
+
+    return false
+end
