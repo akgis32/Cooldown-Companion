@@ -190,22 +190,34 @@ function CooldownCompanion:IsButtonUsable(buttonData)
         local slot, slotBank = C_SpellBook.FindSpellBookSlotForSpell(
             buttonData.id, false, true, false, false
         )
-        if not slot or slotBank ~= Enum.SpellBookSpellBank.Player then
+        if slot and slotBank == Enum.SpellBookSpellBank.Player then
+            local itemType, _, spellID = C_SpellBook.GetSpellBookItemType(slot, slotBank)
+            if spellID
+                and not C_SpellBook.IsSpellBookItemOffSpec(slot, slotBank)
+                and itemType ~= Enum.SpellBookItemType.FutureSpell
+                and spellID == buttonData.id
+            then
+                return true
+            end
+        end
+
+        -- Flyout child spells can be valid even when they don't resolve to a
+        -- direct spell slot via FindSpellBookSlotForSpell.
+        local flyoutSlot = C_SpellBook.FindFlyoutSlotBySpellID(buttonData.id)
+        if not flyoutSlot then
             return false
         end
 
-        local itemType, _, spellID = C_SpellBook.GetSpellBookItemType(slot, slotBank)
-        if not spellID then
+        local flyoutBank = Enum.SpellBookSpellBank.Player
+        local flyoutType = C_SpellBook.GetSpellBookItemType(flyoutSlot, flyoutBank)
+        if flyoutType ~= Enum.SpellBookItemType.Flyout then
             return false
         end
-        if C_SpellBook.IsSpellBookItemOffSpec(slot, slotBank) then
-            return false
-        end
-        if itemType == Enum.SpellBookItemType.FutureSpell then
+        if C_SpellBook.IsSpellBookItemOffSpec(flyoutSlot, flyoutBank) then
             return false
         end
 
-        return spellID == buttonData.id
+        return true
     elseif buttonData.type == "item" then
         if buttonData.hasCharges then return true end
         if not CooldownCompanion.IsItemEquippable(buttonData) then return true end
