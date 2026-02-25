@@ -8,20 +8,45 @@ local CooldownCompanion = ST.Addon
 
 -- Localize frequently-used globals
 local tonumber = tonumber
+local issecretvalue = issecretvalue
 local InCombatLockdown = InCombatLockdown
 local IsItemInRange = C_Item.IsItemInRange
 local IsUsableItem = C_Item.IsUsableItem
 
 -- Update charge count state for a spell with hasCharges enabled.
+-- chargeSpellID should be the effective runtime spell ID (override-aware).
 -- Returns the raw charges API table (may be nil) for use by callers.
-local function UpdateChargeTracking(button, buttonData)
-    local charges = C_Spell.GetSpellCharges(buttonData.id)
+local function UpdateChargeTracking(button, buttonData, chargeSpellID)
+    local spellID = chargeSpellID or buttonData.id
+    local charges = C_Spell.GetSpellCharges(spellID)
 
     -- Try to read current charges as plain number (works outside restricted)
-    local cur = tonumber(C_Spell.GetSpellDisplayCount(buttonData.id))
+    local cur = tonumber(C_Spell.GetSpellDisplayCount(spellID))
+    if cur == nil and charges and charges.currentCharges ~= nil and not issecretvalue(charges.currentCharges) then
+        cur = charges.currentCharges
+    end
+    if cur == nil then
+        -- Tertiary fallback: cast count can reflect cast availability semantics
+        -- for some spells; for standard charge spells this still tracks charges.
+        local castCount = C_Spell.GetSpellCastCount(spellID)
+        if castCount ~= nil and not issecretvalue(castCount) then
+            cur = castCount
+        end
+    end
+    button._currentReadableCharges = cur
 
-    -- Update persisted maxCharges when readable
-    if cur and cur > (buttonData.maxCharges or 0) then
+    -- Update persisted maxCharges when readable. Prefer API maxCharges over
+    -- display count, which can reflect current charges instead of true max.
+    local persistedMax = buttonData.maxCharges or 0
+    if charges and charges.maxCharges ~= nil and not issecretvalue(charges.maxCharges) then
+        if charges.maxCharges > persistedMax then
+            buttonData.maxCharges = charges.maxCharges
+            persistedMax = charges.maxCharges
+        end
+    end
+
+    -- Fallback: if maxCharges is unavailable, keep upward-only observed max.
+    if cur and cur > persistedMax then
         buttonData.maxCharges = cur
     end
     local mx = buttonData.maxCharges  -- Cached from outside combat
@@ -30,7 +55,7 @@ local function UpdateChargeTracking(button, buttonData)
     -- GetSpellChargeDuration returns nil for maxCharges=1 (Blizzard doesn't treat
     -- single-charge as charge spells for duration purposes).
     if mx and mx > 1 then
-        button._chargeDurationObj = C_Spell.GetSpellChargeDuration(buttonData.id)
+        button._chargeDurationObj = C_Spell.GetSpellChargeDuration(spellID)
     end
 
     -- Display charge text via secret-safe widget methods
@@ -48,7 +73,7 @@ local function UpdateChargeTracking(button, buttonData)
             -- Secret: pass directly to SetText (C-level renders it)
             -- Can't compare secrets, so always call SetText
             button._chargeText = nil
-            button.count:SetText(C_Spell.GetSpellDisplayCount(buttonData.id))
+            button.count:SetText(C_Spell.GetSpellDisplayCount(spellID))
         end
     end
 

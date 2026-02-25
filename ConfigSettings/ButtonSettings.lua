@@ -40,6 +40,97 @@ local BuildBarReadyTextControls = ST._BuildBarReadyTextControls
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
 
+local function BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
+    local soundHeading = AceGUI:Create("Heading")
+    soundHeading:SetText("Sound Alerts")
+    ColorHeading(soundHeading)
+    soundHeading:SetHeight(22)
+    soundHeading:SetFullWidth(true)
+    soundHeading.label:ClearAllPoints()
+    soundHeading.label:SetPoint("CENTER", soundHeading.frame, "CENTER", 0, 2)
+    soundHeading.left:ClearAllPoints()
+    soundHeading.left:SetPoint("LEFT", soundHeading.frame, "LEFT", 3, 0)
+    soundHeading.left:SetPoint("RIGHT", soundHeading.label, "LEFT", -5, 0)
+    soundHeading.right:ClearAllPoints()
+    soundHeading.right:SetPoint("RIGHT", soundHeading.frame, "RIGHT", -3, 0)
+    soundHeading.right:SetPoint("LEFT", soundHeading.label, "RIGHT", 5, 0)
+    scroll:AddChild(soundHeading)
+
+    local soundInfoBtn = CreateInfoButton(soundHeading.frame, soundHeading.label, "LEFT", "RIGHT", 4, 0, {
+        "Sound Alerts",
+        {"Sound alerts are played through the Master channel and follow your game's Master volume setting.", 1, 1, 1, true},
+    }, infoButtons)
+    soundHeading.right:ClearAllPoints()
+    soundHeading.right:SetPoint("RIGHT", soundHeading.frame, "RIGHT", -3, 0)
+    soundHeading.right:SetPoint("LEFT", soundInfoBtn, "RIGHT", 4, 0)
+
+    local validEvents = CooldownCompanion:GetScopedValidSoundAlertEventsForButton(buttonData)
+    if not validEvents then
+        local noEvents = AceGUI:Create("Label")
+        noEvents:SetText("|cff888888No alertable sound events are available for this button under its current entry type, tracking mode, and Blizzard Cooldown Manager mapping.|r")
+        noEvents:SetFullWidth(true)
+        scroll:AddChild(noEvents)
+        return
+    end
+
+    local soundOptions = CooldownCompanion:GetSoundAlertOptions()
+    local eventOrder = CooldownCompanion:GetSoundAlertEventOrder()
+
+    for _, eventKey in ipairs(eventOrder) do
+        if validEvents[eventKey] then
+            local row = AceGUI:Create("SimpleGroup")
+            row:SetFullWidth(true)
+            row:SetLayout("Flow")
+
+            local soundDrop = AceGUI:Create("Dropdown")
+            soundDrop:SetLabel(CooldownCompanion:GetSoundAlertEventLabelForButton(buttonData, eventKey))
+            soundDrop:SetList(soundOptions)
+            soundDrop:SetValue(CooldownCompanion:GetButtonSoundAlertSelection(buttonData, eventKey))
+            soundDrop:SetFullWidth(true)
+            soundDrop:SetCallback("OnOpened", function(widget)
+                if not widget.pullout then return end
+
+                -- Inline preview: click the right-side badge on a row to test that sound
+                -- without selecting it or closing the dropdown.
+                for _, item in widget.pullout:IterateItems() do
+                    if item.SetUtilityAction then
+                        local itemValue = item and item.userdata and item.userdata.value
+                        if itemValue and itemValue ~= "None" then
+                            item:SetUtilityAction(function(itemWidget)
+                                local previewValue = itemWidget and itemWidget.userdata and itemWidget.userdata.value
+                                if previewValue and previewValue ~= "None" then
+                                    CooldownCompanion:PreviewSoundAlertSelection(buttonData, previewValue)
+                                end
+                            end)
+                        else
+                            item:SetUtilityAction(nil)
+                        end
+                    end
+                end
+            end)
+
+            soundDrop:SetCallback("OnValueChanged", function(widget, event, val)
+                CooldownCompanion:SetButtonSoundAlertEvent(buttonData, eventKey, val)
+            end)
+
+            row:AddChild(soundDrop)
+            scroll:AddChild(row)
+        end
+    end
+end
+
+local function BuildSpellSoundAlertsTab(scroll, buttonData, infoButtons)
+    if buttonData.type ~= "spell" then
+        local notSpellLabel = AceGUI:Create("Label")
+        notSpellLabel:SetText("|cff888888Sound alerts are available for spell buttons only.|r")
+        notSpellLabel:SetFullWidth(true)
+        scroll:AddChild(notSpellLabel)
+        return
+    end
+
+    BuildSpellSoundAlertsSection(scroll, buttonData, infoButtons)
+end
+
 local function BuildSpellSettings(scroll, buttonData, infoButtons)
     local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
     if not group then return end
@@ -407,7 +498,6 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     end -- hasViewerFrame and auraTracking
     end -- canTrackAura
     end -- not auraCollapsed
-
 
     end -- buttonData.type == "spell"
 
@@ -887,3 +977,4 @@ ST._RefreshButtonSettingsColumn = RefreshButtonSettingsColumn
 ST._RefreshButtonSettingsMultiSelect = RefreshButtonSettingsMultiSelect
 ST._BuildCustomNameSection = BuildCustomNameSection
 ST._BuildOverridesTab = BuildOverridesTab
+ST._BuildSpellSoundAlertsTab = BuildSpellSoundAlertsTab

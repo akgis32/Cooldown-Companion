@@ -12,6 +12,7 @@ local tonumber = tonumber
 local tostring = tostring
 local ipairs = ipairs
 local pairs = pairs
+local issecretvalue = issecretvalue
 
 -- Imports from Helpers
 local scratchCooldown = ST._scratchCooldown
@@ -57,6 +58,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     -- Fetch cooldown data and update the cooldown widget.
     -- isOnGCD is NeverSecret (always readable even during restricted combat).
     local fetchOk, isOnGCD
+    local spellCooldownInfo
 
     -- Aura tracking: check for active buff/debuff and override cooldown swipe
     local auraOverrideActive = false
@@ -277,23 +279,23 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         if buttonData.type == "spell" and not buttonData.isPassive then
             -- Get isOnGCD (NeverSecret) via GetSpellCooldown.
             -- SetCooldown accepts secret startTime/duration values.
-            local cooldownInfo = C_Spell.GetSpellCooldown(cooldownSpellId)
-            if cooldownInfo then
-                isOnGCD = cooldownInfo.isOnGCD
+            spellCooldownInfo = C_Spell.GetSpellCooldown(cooldownSpellId)
+            if spellCooldownInfo then
+                isOnGCD = spellCooldownInfo.isOnGCD
                 if not fetchOk then
-                    button.cooldown:SetCooldown(cooldownInfo.startTime, cooldownInfo.duration)
+                    button.cooldown:SetCooldown(spellCooldownInfo.startTime, spellCooldownInfo.duration)
                 end
                 fetchOk = true
             end
             -- GCD-only detection: compare spell's cooldown against GCD reference (61304).
             -- More reliable than isOnGCD at GCD boundaries (Blizzard CooldownViewer pattern).
-            if cooldownInfo then
+            if spellCooldownInfo then
                 local gcdInfo = CooldownCompanion._gcdInfo
                 if gcdInfo then
                     if buttonData._cooldownSecrecy == 0 then
                         -- NeverSecret: direct comparison is safe
-                        isGCDOnly = (cooldownInfo.startTime == gcdInfo.startTime
-                            and cooldownInfo.duration == gcdInfo.duration)
+                        isGCDOnly = (spellCooldownInfo.startTime == gcdInfo.startTime
+                            and spellCooldownInfo.duration == gcdInfo.duration)
                     else
                         -- Secret cooldown: both signals must agree to avoid false positives.
                         -- isOnGCD (NeverSecret) = Blizzard's per-spell GCD flag.
@@ -319,10 +321,12 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                     -- secrets internally).  button.cooldown:IsShown() is unreliable
                     -- — force-shown by UpdateIconModeVisuals, not auto-hidden by
                     -- SetCooldown(0,0).
-                    scratchCooldown:Hide()
-                    scratchCooldown:SetCooldown(cooldownInfo.startTime, cooldownInfo.duration)
-                    useIt = scratchCooldown:IsShown()
-                    scratchCooldown:Hide()
+                    if spellCooldownInfo then
+                        scratchCooldown:Hide()
+                        scratchCooldown:SetCooldown(spellCooldownInfo.startTime, spellCooldownInfo.duration)
+                        useIt = scratchCooldown:IsShown()
+                        scratchCooldown:Hide()
+                    end
                 end
                 if useIt then
                     button._durationObj = spellCooldownDuration
@@ -420,7 +424,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     local charges
     if buttonData.hasCharges then
       if buttonData.type == "spell" then
-        charges = UpdateChargeTracking(button, buttonData)
+        charges = UpdateChargeTracking(button, buttonData, cooldownSpellId)
 
         -- Bar mode: charge bars are driven by the recharge DurationObject, not
         -- the main spell CD. Save and clear the main CD, let the charge block
@@ -529,6 +533,95 @@ function CooldownCompanion:UpdateButtonCooldown(button)
             cc = style.chargeFontColor or {1, 1, 1, 1}
         end
         button.count:SetTextColor(cc[1], cc[2], cc[3], cc[4])
+    end
+
+    -- Per-button sound alerts (Blizzard-scoped events, CDM-valid only).
+    if buttonData.type == "spell" then
+        local soundCfg = buttonData.soundAlerts
+        local hasSoundConfig = soundCfg and type(soundCfg.events) == "table" and next(soundCfg.events) ~= nil
+        if hasSoundConfig then
+            local currentCharges
+            local maxCharges
+            local chargeRecharging = false
+            local chargeCooldownStartTime
+            if buttonData.hasCharges then
+                if button._currentReadableCharges ~= nil then
+                    currentCharges = button._currentReadableCharges
+                elseif charges and charges.currentCharges ~= nil
+                   and not issecretvalue(charges.currentCharges) then
+                    currentCharges = charges.currentCharges
+                end
+
+                if charges and charges.maxCharges ~= nil and not issecretvalue(charges.maxCharges) then
+                    maxCharges = charges.maxCharges
+                elseif buttonData.maxCharges and buttonData.maxCharges > 0 then
+                    maxCharges = buttonData.maxCharges
+                end
+
+                chargeRecharging = button._chargeRecharging and true or false
+                if charges and charges.cooldownStartTime ~= nil
+                   and not issecretvalue(charges.cooldownStartTime) then
+                    chargeCooldownStartTime = charges.cooldownStartTime
+                end
+            end
+
+            local cooldownActive
+            if buttonData.hasCharges then
+                -- Charge spells: cooldown-active means zero available charges.
+                if currentCharges ~= nil then
+                    cooldownActive = (currentCharges == 0)
+                else
+                    cooldownActive = button._mainCDShown == true
+                end
+            elseif auraOverrideActive then
+                -- Aura visuals can replace button.cooldown, so probe spell cooldown
+                -- directly for sound-event state.
+                local probeInfo = C_Spell.GetSpellCooldown(cooldownSpellId)
+                if probeInfo then
+                    local probeIsOnGCD = probeInfo.isOnGCD and true or false
+                    local probeIsGCDOnly = false
+                    local gcdInfo = CooldownCompanion._gcdInfo
+                    if gcdInfo then
+                        if buttonData._cooldownSecrecy == 0 then
+                            probeIsGCDOnly = (probeInfo.startTime == gcdInfo.startTime
+                                and probeInfo.duration == gcdInfo.duration)
+                        else
+                            probeIsGCDOnly = probeIsOnGCD and CooldownCompanion._gcdActive
+                        end
+                    end
+
+                    scratchCooldown:Hide()
+                    scratchCooldown:SetCooldown(probeInfo.startTime, probeInfo.duration)
+                    cooldownActive = scratchCooldown:IsShown() and not probeIsGCDOnly
+                    scratchCooldown:Hide()
+                else
+                    cooldownActive = false
+                end
+            else
+                if spellCooldownInfo then
+                    scratchCooldown:Hide()
+                    scratchCooldown:SetCooldown(spellCooldownInfo.startTime, spellCooldownInfo.duration)
+                    cooldownActive = scratchCooldown:IsShown() and not isGCDOnly
+                    scratchCooldown:Hide()
+                else
+                    cooldownActive = false
+                end
+            end
+
+            self:UpdateButtonSoundAlerts(
+                button,
+                cooldownSpellId,
+                isOnGCD or false,
+                cooldownActive and true or false,
+                auraOverrideActive and true or false,
+                currentCharges,
+                maxCharges,
+                chargeRecharging,
+                chargeCooldownStartTime
+            )
+        else
+            button._sndInitialized = nil
+        end
     end
 
     -- Per-button visibility evaluation (after charge tracking)

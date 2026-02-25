@@ -664,10 +664,11 @@ local function CreateConfigPanel()
     scroll2.frame:Show()
     CS.col2Scroll = scroll2
 
-    -- Button Settings TabGroup (Settings + Overrides tabs)
+    -- Button Settings TabGroup (Settings + Sound Alerts + Overrides tabs)
     local bsTabGroup = AceGUI:Create("TabGroup")
     bsTabGroup:SetTabs({
         { value = "settings",  text = "Settings" },
+        { value = "soundalerts", text = "Sound Alerts" },
         { value = "overrides", text = "Overrides" },
     })
     bsTabGroup:SetLayout("Fill")
@@ -709,6 +710,8 @@ local function CreateConfigPanel()
             end
             ST._BuildVisibilitySettings(scroll, buttonData, CS.buttonSettingsInfoButtons)
             ST._BuildCustomNameSection(scroll, buttonData)
+        elseif tab == "soundalerts" then
+            ST._BuildSpellSoundAlertsTab(scroll, buttonData, CS.buttonSettingsInfoButtons)
         elseif tab == "overrides" then
             ST._BuildOverridesTab(scroll, buttonData, CS.buttonSettingsInfoButtons)
         end

@@ -247,6 +247,9 @@ function CooldownCompanion:BuildViewerAuraMap()
         end
     end
 
+    -- Rebuild spell -> cooldown alert capability mapping used by per-button sound alerts.
+    self:RebuildSoundAlertSpellMap()
+
     -- Re-enforce mouse state for hidden CDM after map rebuild
     if self.db.profile.cdmHidden and not self._cdmPickMode then
         for _, name2 in ipairs(VIEWER_NAMES) do

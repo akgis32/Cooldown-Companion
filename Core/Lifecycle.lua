@@ -74,6 +74,8 @@ function CooldownCompanion:OnInitialize()
     LSM.RegisterCallback(self, "LibSharedMedia_Registered", function(event, mediatype, key)
         if mediatype == "font" or mediatype == "statusbar" then
             self:RefreshAllMedia()
+        elseif mediatype == "sound" then
+            self:RefreshConfigPanel()
         end
     end)
 
