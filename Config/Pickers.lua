@@ -7,7 +7,6 @@ local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
 
-local CDM_VIEWER_NAMES = ST._CDM_VIEWER_NAMES
 local issecretvalue = issecretvalue
 local canaccessvalue = canaccessvalue
 
@@ -30,6 +29,13 @@ end
 
 local function IsAccessibleNumber(value)
     if type(value) ~= "number" then return false end
+    if issecretvalue and issecretvalue(value) then return false end
+    if canaccessvalue and not canaccessvalue(value) then return false end
+    return true
+end
+
+local function IsAccessibleString(value)
+    if type(value) ~= "string" then return false end
     if issecretvalue and issecretvalue(value) then return false end
     if canaccessvalue and not canaccessvalue(value) then return false end
     return true
@@ -64,6 +70,76 @@ local function GetAccessibleRect(region)
         return nil, nil, nil, nil
     end
     return left, bottom, width, height
+end
+
+local function GetAccessibleSpellID(value)
+    if not IsAccessibleNumber(value) then return nil end
+    if value <= 0 then return nil end
+    return value
+end
+
+local function ResolveCDMItemSpellID(item)
+    if not item then return nil end
+
+    if item.GetSpellID then
+        local spellID = GetAccessibleSpellID(item:GetSpellID())
+        if spellID then
+            return spellID
+        end
+    end
+
+    local info = item.GetCooldownInfo and item:GetCooldownInfo() or item.cooldownInfo
+    if not info then
+        return nil
+    end
+
+    local spellID = GetAccessibleSpellID(info.overrideTooltipSpellID)
+    if spellID then return spellID end
+
+    spellID = GetAccessibleSpellID(info.overrideSpellID)
+    if spellID then return spellID end
+
+    spellID = GetAccessibleSpellID(info.spellID)
+    if spellID then return spellID end
+
+    return nil
+end
+
+local function ResolveCDMItemName(item, spellID)
+    if item and item.GetNameText then
+        local name = item:GetNameText()
+        if IsAccessibleString(name) and name ~= "" then
+            return name
+        end
+    end
+
+    if spellID then
+        local spellInfo = C_Spell.GetSpellInfo(spellID)
+        if spellInfo and spellInfo.name then
+            return spellInfo.name
+        end
+        return tostring(spellID)
+    end
+
+    return ""
+end
+
+local function ExpandCDMSettingsAuraCategories(settingsPanel)
+    if not settingsPanel or not settingsPanel.categoryPool then return end
+
+    for categoryDisplay in settingsPanel.categoryPool:EnumerateActive() do
+        if categoryDisplay.GetCategoryObject and categoryDisplay.IsCollapsed and categoryDisplay.SetCollapsed then
+            local catObj = categoryDisplay:GetCategoryObject()
+            if catObj and catObj.GetCategory then
+                local category = catObj:GetCategory()
+                local isAuraCat = category == Enum.CooldownViewerCategory.TrackedBuff
+                    or category == Enum.CooldownViewerCategory.TrackedBar
+                if isAuraCat and categoryDisplay:IsCollapsed() then
+                    categoryDisplay:SetCollapsed(false)
+                end
+            end
+        end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -386,9 +462,11 @@ local function StartPickCDM(callback)
         -- Instruction text at top
         local instructions = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         instructions:SetPoint("TOP", overlay, "TOP", 0, -30)
-        instructions:SetText("Click a buff/debuff in the Cooldown Manager  |  Right-click or Escape to cancel")
+        overlay.defaultInstructionsText = "Click a Tracked Buff/Bar aura in CDM Settings (Auras tab)  |  Right-click or Escape to cancel"
+        instructions:SetText(overlay.defaultInstructionsText)
         instructions:SetTextColor(1, 1, 1, 0.9)
         overlay.instructions = instructions
+        overlay.instructionsResetTime = nil
 
         -- Cursor-following label showing spell name/ID
         local label = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -405,44 +483,21 @@ local function StartPickCDM(callback)
         highlight:Hide()
         overlay.highlight = highlight
 
-        -- OnUpdate: detect CDM child under cursor
+        -- OnUpdate: detect CDM Settings item under cursor
         overlay:SetScript("OnUpdate", function(self, dt)
+            if self.instructionsResetTime and GetTime() >= self.instructionsResetTime then
+                self.instructionsResetTime = nil
+                self.instructions:SetText(self.defaultInstructionsText)
+                self.instructions:SetTextColor(1, 1, 1, 0.9)
+            end
+
             local cx, cy = GetCursorPosition()
             local scale = UIParent:GetEffectiveScale()
             cx, cy = cx / scale, cy / scale
 
             local bestChild, bestArea, bestSpellID, bestName, bestIsAuraViewer
 
-            for _, viewerName in ipairs(CDM_VIEWER_NAMES) do
-                local viewer = _G[viewerName]
-                if viewer then
-                    local isAuraViewer = viewerName == "BuffIconCooldownViewer" or viewerName == "BuffBarCooldownViewer"
-                    for _, child in pairs({viewer:GetChildren()}) do
-                        if child.cooldownInfo and IsVisibleSafe(child) then
-                            local left, bottom, width, height = GetAccessibleRect(child)
-                            if left and width and width > 0 and height > 0 then
-                                if cx >= left and cx <= left + width and cy >= bottom and cy <= bottom + height then
-                                    local area = width * height
-                                    if not bestArea or area < bestArea then
-                                        local info = child.cooldownInfo
-                                        local sid = info.overrideSpellID or info.spellID
-                                        if sid then
-                                            bestChild = child
-                                            bestArea = area
-                                            bestSpellID = sid
-                                            bestIsAuraViewer = isAuraViewer
-                                            local spellInfo = C_Spell.GetSpellInfo(sid)
-                                            bestName = spellInfo and spellInfo.name or tostring(sid)
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-
-            -- Also scan the CDM Settings panel (CooldownViewerSettings) if open
+            -- Scan the CDM Settings panel (CooldownViewerSettings)
             local settingsPanel = CooldownViewerSettings
             if settingsPanel and IsVisibleSafe(settingsPanel) and settingsPanel.categoryPool then
                 for categoryDisplay in settingsPanel.categoryPool:EnumerateActive() do
@@ -456,15 +511,13 @@ local function StartPickCDM(callback)
                                     if cx >= left and cx <= left + width and cy >= bottom and cy <= bottom + height then
                                         local area = width * height
                                         if not bestArea or area < bestArea then
-                                            local info = item:GetCooldownInfo()
-                                            local sid = info and (info.overrideSpellID or info.spellID)
+                                            local sid = ResolveCDMItemSpellID(item)
                                             if sid then
                                                 bestChild = item
                                                 bestArea = area
                                                 bestSpellID = sid
                                                 bestIsAuraViewer = isAuraCat
-                                                local spellInfo = C_Spell.GetSpellInfo(sid)
-                                                bestName = spellInfo and spellInfo.name or tostring(sid)
+                                                bestName = ResolveCDMItemName(item, sid)
                                             end
                                         end
                                     end
@@ -476,6 +529,7 @@ local function StartPickCDM(callback)
             end
 
             self.currentSpellID = bestSpellID
+            self.currentIsAura = bestIsAuraViewer and true or false
 
             if not bestChild then
                 self.label:SetText("")
@@ -516,7 +570,17 @@ local function StartPickCDM(callback)
         overlay:SetScript("OnEvent", function(self, event, button)
             if event ~= "GLOBAL_MOUSE_DOWN" then return end
             if button == "LeftButton" then
-                FinishPickCDM(self.currentSpellID)
+                if self.currentSpellID and self.currentIsAura then
+                    FinishPickCDM(self.currentSpellID)
+                elseif self.currentSpellID then
+                    self.instructions:SetText("Only Tracked Buff/Bar entries can be selected")
+                    self.instructions:SetTextColor(1, 0.3, 0.3, 1)
+                    self.instructionsResetTime = GetTime() + 1.5
+                else
+                    self.instructions:SetText("Hover a Tracked Buff/Bar aura in CDM Settings")
+                    self.instructions:SetTextColor(1, 0.3, 0.3, 1)
+                    self.instructionsResetTime = GetTime() + 1.5
+                end
             elseif button == "RightButton" then
                 FinishPickCDM(nil)
             end
@@ -543,16 +607,37 @@ local function StartPickCDM(callback)
         pickCDMOverlay = overlay
     end
 
+    local settingsPanel = CooldownViewerSettings
+    if not settingsPanel and UIParentLoadAddOn then
+        UIParentLoadAddOn("Blizzard_CooldownViewer")
+        settingsPanel = CooldownViewerSettings
+    end
+
+    if settingsPanel and not IsShownSafe(settingsPanel) then
+        if settingsPanel.TogglePanel then
+            settingsPanel:TogglePanel()
+        elseif settingsPanel.Show then
+            settingsPanel:Show()
+        end
+    end
+
+    if settingsPanel and settingsPanel.SetDisplayMode then
+        settingsPanel:SetDisplayMode("auras")
+        ExpandCDMSettingsAuraCategories(settingsPanel)
+        C_Timer.After(0, function()
+            ExpandCDMSettingsAuraCategories(settingsPanel)
+        end)
+    end
+
     -- Hide config panel, show overlay
     if CS.configFrame and IsShownSafe(CS.configFrame.frame) then
         CS.configFrame.frame:Hide()
     end
-    -- Temporarily show CDM if hidden
-    if CooldownCompanion.db.profile.cdmHidden then
-        CooldownCompanion._cdmPickMode = true
-        CooldownCompanion:ApplyCdmAlpha()
-    end
     pickCDMOverlay.currentSpellID = nil
+    pickCDMOverlay.currentIsAura = false
+    pickCDMOverlay.instructionsResetTime = nil
+    pickCDMOverlay.instructions:SetText(pickCDMOverlay.defaultInstructionsText)
+    pickCDMOverlay.instructions:SetTextColor(1, 1, 1, 0.9)
     pickCDMOverlay.label:SetText("")
     pickCDMOverlay.highlight:Hide()
     pickCDMOverlay:Show()

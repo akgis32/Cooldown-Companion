@@ -357,7 +357,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     if auraEditBox.editbox.Instructions then auraEditBox.editbox.Instructions:Hide() end
     auraEditBox:SetLabel("Spell ID Override")
     auraEditBox:SetText(buttonData.auraSpellID and tostring(buttonData.auraSpellID) or "")
-    auraEditBox:SetRelativeWidth(0.72)
+    auraEditBox:SetRelativeWidth(0.70)
     auraEditBox:SetCallback("OnEnterPressed", function(widget, event, text)
         text = text:gsub("%s", "")
         buttonData.auraSpellID = text ~= "" and text or nil
@@ -368,7 +368,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
 
     local pickCDMBtn = AceGUI:Create("Button")
     pickCDMBtn:SetText("Pick CDM")
-    pickCDMBtn:SetRelativeWidth(0.28)
+    pickCDMBtn:SetRelativeWidth(0.30)
     pickCDMBtn:SetCallback("OnClick", function()
         local grp = CS.selectedGroup
         local btn = CS.selectedButton
@@ -391,7 +391,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     pickCDMBtn:SetCallback("OnEnter", function(widget)
         GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
         GameTooltip:AddLine("Pick from Cooldown Manager")
-        GameTooltip:AddLine("Click a buff or debuff icon either from the on-screen Cooldown Manager viewer or from the Blizzard CDM Settings panel to populate the Spell ID Override.", 1, 1, 1, true)
+        GameTooltip:AddLine("Opens Blizzard CDM Settings and switches to the Auras tab. Click a Tracked Buff/Tracked Bar aura there to populate the Spell ID Override.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
     pickCDMBtn:SetCallback("OnLeave", function()
