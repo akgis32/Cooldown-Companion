@@ -332,6 +332,9 @@ local function UpdateBarDisplay(button, fetchOk)
     -- Loss of control overlay on bar icon
     UpdateLossOfControl(button)
 
+    -- Bar aura visuals in bar mode are driven by barAuraEffect, not icon-mode aura flags.
+    local barAuraVisualsEnabled = style.barAuraEffect ~= "none"
+
     -- Bar aura color: override bar fill when aura is active (pandemic overrides aura color)
     local wantAuraColor
     if button._pandemicPreview then
@@ -339,7 +342,7 @@ local function UpdateBarDisplay(button, fetchOk)
     elseif button._auraActive then
         if button._inPandemic and style.showPandemicGlow ~= false then
             wantAuraColor = (button.style and button.style.barPandemicColor) or DEFAULT_BAR_PANDEMIC_COLOR
-        elseif button.buttonData.auraIndicatorEnabled or style.auraGlowStyle ~= "none" then
+        elseif barAuraVisualsEnabled then
             wantAuraColor = (button.style and button.style.barAuraColor) or DEFAULT_BAR_AURA_COLOR
         end
     end
@@ -367,7 +370,7 @@ local function UpdateBarDisplay(button, fetchOk)
     -- Bar aura effect (pandemic overrides effect color)
     local barAuraEffectPandemic = button._pandemicPreview or (button._auraActive and button._inPandemic and style.showPandemicGlow ~= false)
     local barAuraEffectShow = button._barAuraEffectPreview or button._pandemicPreview
-        or (button._auraActive and (barAuraEffectPandemic or button.buttonData.auraIndicatorEnabled or style.auraGlowStyle ~= "none"))
+        or (button._auraActive and (barAuraEffectPandemic or barAuraVisualsEnabled))
     SetBarAuraEffect(button, barAuraEffectShow, barAuraEffectPandemic or false)
 
     -- Keep the cooldown widget hidden — SetCooldown auto-shows it
