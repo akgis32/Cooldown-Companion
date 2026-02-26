@@ -564,6 +564,14 @@ local function UpdateIconModeGlows(button, buttonData, style)
     if button.auraGlow then
         local showAuraGlow = false
         local pandemicOverride = false
+        local auraIndicatorEnabled = buttonData.auraIndicatorEnabled
+        -- Allow per-button override sections to explicitly disable aura glow,
+        -- even when legacy per-button enable flags are set.
+        if buttonData.overrideSections
+           and buttonData.overrideSections.auraIndicator
+           and style.auraGlowStyle == "none" then
+            auraIndicatorEnabled = false
+        end
         if button._pandemicPreview then
             showAuraGlow = true
             pandemicOverride = true
@@ -573,7 +581,7 @@ local function UpdateIconModeGlows(button, buttonData, style)
             if button._inPandemic and style.showPandemicGlow ~= false then
                 showAuraGlow = true
                 pandemicOverride = true
-            elseif buttonData.auraIndicatorEnabled or style.auraGlowStyle ~= "none" then
+            elseif auraIndicatorEnabled or style.auraGlowStyle ~= "none" then
                 showAuraGlow = true
             end
         end

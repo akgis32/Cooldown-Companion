@@ -450,7 +450,7 @@ ST.OVERRIDE_SECTIONS = {
     },
     pandemicGlow = {
         label = "Pandemic Glow",
-        keys = {"pandemicGlowStyle", "pandemicGlowColor", "pandemicGlowSize", "pandemicGlowThickness", "pandemicGlowSpeed"},
+        keys = {"showPandemicGlow", "pandemicGlowStyle", "pandemicGlowColor", "pandemicGlowSize", "pandemicGlowThickness", "pandemicGlowSpeed"},
         modes = {icons = true},
     },
     auraIndicator = {
@@ -461,7 +461,7 @@ ST.OVERRIDE_SECTIONS = {
     -- Bar Mode — Appearance Tab
     pandemicBar = {
         label = "Pandemic Indicator",
-        keys = {"barPandemicColor", "pandemicBarEffect", "pandemicBarEffectColor", "pandemicBarEffectSize", "pandemicBarEffectThickness", "pandemicBarEffectSpeed"},
+        keys = {"showPandemicGlow", "barPandemicColor", "pandemicBarEffect", "pandemicBarEffectColor", "pandemicBarEffectSize", "pandemicBarEffectThickness", "pandemicBarEffectSpeed"},
         modes = {bars = true},
     },
     barActiveAura = {

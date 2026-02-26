@@ -907,11 +907,50 @@ local LCG_GLOW_STYLE_ORDER = {"solid", "pixel", "glow", "lcgButton", "lcgAutoCas
 --
 -- cfg = { styleKey, colorKey, colorLabel, sizeKey, thicknessKey,
 --         speedKey, defaultStyle, defaultColor }
-local function BuildGlowStyleControls(container, styleTable, refreshCallback, cfg)
+local function BuildGlowStyleControls(container, styleTable, refreshCallback, cfg, opts)
+    local isOverrideMode = opts and opts.isOverride == true
+    local isEnabled
+    if cfg.enableKey then
+        local enabledVal = styleTable[cfg.enableKey]
+        if enabledVal == nil and opts and opts.fallbackStyle then
+            enabledVal = opts.fallbackStyle[cfg.enableKey]
+        end
+        isEnabled = enabledVal ~= false
+    else
+        isEnabled = styleTable[cfg.styleKey] ~= "none"
+    end
+
+    if isOverrideMode and cfg.enableLabel then
+        local enableCb = AceGUI:Create("CheckBox")
+        enableCb:SetLabel(cfg.enableLabel)
+        enableCb:SetValue(isEnabled)
+        enableCb:SetFullWidth(true)
+        enableCb:SetCallback("OnValueChanged", function(widget, event, val)
+            if cfg.enableKey then
+                styleTable[cfg.enableKey] = val
+                if val and styleTable[cfg.styleKey] == "none" then
+                    styleTable[cfg.styleKey] = cfg.defaultStyle
+                end
+            else
+                styleTable[cfg.styleKey] = val and cfg.defaultStyle or "none"
+            end
+            refreshCallback()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(enableCb)
+
+        if not isEnabled then
+            return
+        end
+    end
+
     if styleTable[cfg.styleKey] == "lcgProc" then
         styleTable[cfg.styleKey] = "glow"
     end
     local currentStyle = NormalizeLegacyGlowStyle(styleTable[cfg.styleKey] or cfg.defaultStyle)
+    if currentStyle == "none" then
+        currentStyle = cfg.defaultStyle
+    end
 
     local styleDrop = AceGUI:Create("Dropdown")
     styleDrop:SetLabel("Glow Style")
@@ -925,6 +964,9 @@ local function BuildGlowStyleControls(container, styleTable, refreshCallback, cf
     styleDrop:SetValue(currentStyle)
     styleDrop:SetFullWidth(true)
     styleDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        if cfg.enableKey then
+            styleTable[cfg.enableKey] = true
+        end
         styleTable[cfg.styleKey] = val
         refreshCallback()
         CooldownCompanion:RefreshConfigPanel()
@@ -960,7 +1002,36 @@ end
 -- cfg = { colorKey, colorLabel, defaultColor, effectKey, effectLabel,
 --         effectColorKey, effectColorLabel, defaultEffectColor,
 --         effectSizeKey, effectThicknessKey, effectSpeedKey }
-local function BuildBarEffectControls(container, styleTable, refreshCallback, cfg)
+local function BuildBarEffectControls(container, styleTable, refreshCallback, cfg, opts)
+    local isOverrideMode = opts and opts.isOverride == true
+    local isEnabled
+    if cfg.enableKey then
+        local enabledVal = styleTable[cfg.enableKey]
+        if enabledVal == nil and opts and opts.fallbackStyle then
+            enabledVal = opts.fallbackStyle[cfg.enableKey]
+        end
+        isEnabled = enabledVal ~= false
+    else
+        isEnabled = (styleTable[cfg.effectKey] or "none") ~= "none"
+    end
+
+    if isOverrideMode and cfg.enableLabel then
+        local enableCb = AceGUI:Create("CheckBox")
+        enableCb:SetLabel(cfg.enableLabel)
+        enableCb:SetValue(isEnabled)
+        enableCb:SetFullWidth(true)
+        enableCb:SetCallback("OnValueChanged", function(widget, event, val)
+            styleTable[cfg.enableKey] = val
+            refreshCallback()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(enableCb)
+
+        if not isEnabled then
+            return
+        end
+    end
+
     local barColorPicker = AceGUI:Create("ColorPicker")
     barColorPicker:SetLabel(cfg.colorLabel)
     barColorPicker:SetHasAlpha(true)
@@ -1021,49 +1092,53 @@ end
 ------------------------------------------------------------------------
 -- PUBLIC GLOW/EFFECT WRAPPERS (same signatures as original functions)
 ------------------------------------------------------------------------
-local function BuildProcGlowControls(container, styleTable, refreshCallback)
+local function BuildProcGlowControls(container, styleTable, refreshCallback, opts)
     BuildGlowStyleControls(container, styleTable, refreshCallback, {
         styleKey = "procGlowStyle", colorKey = "procGlowColor", colorLabel = "Glow Color",
         sizeKey = "procGlowSize", thicknessKey = "procGlowThickness", speedKey = "procGlowSpeed",
         defaultStyle = "glow", defaultColor = {1, 1, 1, 1},
+        enableLabel = "Show Proc Glow",
         styleOptions = LCG_GLOW_STYLE_OPTIONS,
         styleOrder = LCG_GLOW_STYLE_ORDER,
-    })
+    }, opts)
 end
 
-local function BuildPandemicGlowControls(container, styleTable, refreshCallback)
+local function BuildPandemicGlowControls(container, styleTable, refreshCallback, opts)
     BuildGlowStyleControls(container, styleTable, refreshCallback, {
         styleKey = "pandemicGlowStyle", colorKey = "pandemicGlowColor", colorLabel = "Glow Color",
         sizeKey = "pandemicGlowSize", thicknessKey = "pandemicGlowThickness", speedKey = "pandemicGlowSpeed",
         defaultStyle = "solid", defaultColor = {1, 0.5, 0, 1},
+        enableKey = "showPandemicGlow", enableLabel = "Show Pandemic Glow",
         styleOptions = LCG_GLOW_STYLE_OPTIONS,
         styleOrder = LCG_GLOW_STYLE_ORDER,
-    })
+    }, opts)
 end
 
-local function BuildAuraIndicatorControls(container, styleTable, refreshCallback)
+local function BuildAuraIndicatorControls(container, styleTable, refreshCallback, opts)
     BuildGlowStyleControls(container, styleTable, refreshCallback, {
         styleKey = "auraGlowStyle", colorKey = "auraGlowColor", colorLabel = "Indicator Color",
         sizeKey = "auraGlowSize", thicknessKey = "auraGlowThickness", speedKey = "auraGlowSpeed",
         defaultStyle = "pixel", defaultColor = {1, 0.84, 0, 0.9},
+        enableLabel = "Show Active Aura Glow",
         styleOptions = LCG_GLOW_STYLE_OPTIONS,
         styleOrder = LCG_GLOW_STYLE_ORDER,
-    })
+    }, opts)
 end
 
-local function BuildPandemicBarControls(container, styleTable, refreshCallback)
+local function BuildPandemicBarControls(container, styleTable, refreshCallback, opts)
     BuildBarEffectControls(container, styleTable, refreshCallback, {
         colorKey = "barPandemicColor", colorLabel = "Pandemic Bar Color",
         defaultColor = {1, 0.5, 0, 1},
+        enableKey = "showPandemicGlow", enableLabel = "Show Pandemic Color/Glow",
         effectKey = "pandemicBarEffect", effectLabel = "Pandemic Effect",
         effectColorKey = "pandemicBarEffectColor", effectColorLabel = "Pandemic Effect Color",
         defaultEffectColor = {1, 0.5, 0, 1},
         effectSizeKey = "pandemicBarEffectSize", effectThicknessKey = "pandemicBarEffectThickness",
         effectSpeedKey = "pandemicBarEffectSpeed",
-    })
+    }, opts)
 end
 
-local function BuildBarActiveAuraControls(container, styleTable, refreshCallback)
+local function BuildBarActiveAuraControls(container, styleTable, refreshCallback, opts)
     BuildBarEffectControls(container, styleTable, refreshCallback, {
         colorKey = "barAuraColor", colorLabel = "Active Aura Bar Color",
         defaultColor = {0.2, 1.0, 0.2, 1.0},
@@ -1072,7 +1147,7 @@ local function BuildBarActiveAuraControls(container, styleTable, refreshCallback
         defaultEffectColor = {1, 0.84, 0, 0.9},
         effectSizeKey = "barAuraEffectSize", effectThicknessKey = "barAuraEffectThickness",
         effectSpeedKey = "barAuraEffectSpeed",
-    })
+    }, opts)
 end
 
 local function BuildBarColorsControls(container, styleTable, refreshCallback)
@@ -1159,7 +1234,7 @@ local function BuildBarNameTextControls(container, styleTable, refreshCallback)
         flipNameCheck:SetValue(styleTable.barNameTextReverse or false)
         flipNameCheck:SetFullWidth(true)
         flipNameCheck:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.barNameTextReverse = val or nil
+            styleTable.barNameTextReverse = val
             refreshCallback()
         end)
         container:AddChild(flipNameCheck)

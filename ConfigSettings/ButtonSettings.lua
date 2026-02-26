@@ -880,6 +880,14 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
     local overrides = buttonData.styleOverrides
     if not overrides then return end
 
+    local function GetEffectiveOverrideValue(key)
+        local val = overrides[key]
+        if val ~= nil then
+            return val
+        end
+        return group.style and group.style[key]
+    end
+
     local refreshCallback = function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
     end
@@ -944,8 +952,11 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                 if not overrideCollapsed then
                 local builder = sectionBuilders[sectionId]
                 if builder then
-                    builder(scroll, overrides, refreshCallback)
-                    if sectionId == "procGlow" then
+                    builder(scroll, overrides, refreshCallback, {
+                        isOverride = true,
+                        fallbackStyle = group.style,
+                    })
+                    if sectionId == "procGlow" and overrides.procGlowStyle ~= "none" then
                         local procPreviewBtn = AceGUI:Create("Button")
                         procPreviewBtn:SetText("Preview Proc Glow (3s)")
                         procPreviewBtn:SetFullWidth(true)
@@ -955,7 +966,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                             end
                         end)
                         scroll:AddChild(procPreviewBtn)
-                    elseif sectionId == "auraIndicator" then
+                    elseif sectionId == "auraIndicator" and overrides.auraGlowStyle ~= "none" then
                         local auraPreviewBtn = AceGUI:Create("Button")
                         auraPreviewBtn:SetText("Preview Active Aura Glow (3s)")
                         auraPreviewBtn:SetFullWidth(true)
@@ -965,7 +976,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                             end
                         end)
                         scroll:AddChild(auraPreviewBtn)
-                    elseif sectionId == "pandemicGlow" then
+                    elseif sectionId == "pandemicGlow" and GetEffectiveOverrideValue("showPandemicGlow") ~= false then
                         local pandemicPreviewBtn = AceGUI:Create("Button")
                         pandemicPreviewBtn:SetText("Preview Pandemic Glow (3s)")
                         pandemicPreviewBtn:SetFullWidth(true)
