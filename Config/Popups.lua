@@ -651,12 +651,43 @@ local function ImportGroupData(text)
         if type(importedManualIcon) ~= "number" and type(importedManualIcon) ~= "string" then
             importedManualIcon = nil
         end
+        local importedSpecs = nil
+        if type(data.folder.specs) == "table" then
+            importedSpecs = {}
+            for specId, enabled in pairs(data.folder.specs) do
+                local numSpecId = tonumber(specId)
+                if numSpecId and enabled then
+                    importedSpecs[numSpecId] = true
+                end
+            end
+            if not next(importedSpecs) then
+                importedSpecs = nil
+            end
+        end
+        local importedHeroTalents = nil
+        if type(data.folder.heroTalents) == "table" then
+            importedHeroTalents = {}
+            for subTreeID, enabled in pairs(data.folder.heroTalents) do
+                local numSubTreeID = tonumber(subTreeID)
+                if numSubTreeID and enabled then
+                    importedHeroTalents[numSubTreeID] = true
+                end
+            end
+            if not next(importedHeroTalents) then
+                importedHeroTalents = nil
+            end
+        end
+        if not importedSpecs then
+            importedHeroTalents = nil
+        end
         db.folders[folderId] = {
             name = data.folder.name or "Imported Folder",
             order = folderId,
             section = "char",
             createdBy = charKey,
             manualIcon = importedManualIcon,
+            specs = importedSpecs,
+            heroTalents = importedHeroTalents,
         }
         local count = 0
         for _, srcGroup in ipairs(data.groups) do
@@ -670,6 +701,9 @@ local function ImportGroupData(text)
             db.groups[groupId] = group
             CooldownCompanion:CreateGroupFrame(groupId)
             count = count + 1
+        end
+        if importedSpecs then
+            CooldownCompanion:ApplyFolderSpecFilterToChildren(folderId)
         end
         CooldownCompanion:Print("Imported folder: " .. (data.folder.name or "Unnamed") .. " (" .. count .. " groups)")
 

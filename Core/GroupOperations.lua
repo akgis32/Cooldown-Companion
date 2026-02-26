@@ -38,14 +38,163 @@ function CooldownCompanion:IsGroupVisibleToCurrentChar(groupId)
 end
 
 function CooldownCompanion:GetEffectiveSpecs(group)
+    if not group then return nil, false end
+    local folderId = group.folderId
+    if folderId then
+        local folders = self.db and self.db.profile and self.db.profile.folders
+        local folder = folders and folders[folderId]
+        if folder and folder.specs and next(folder.specs) then
+            return folder.specs, true
+        end
+    end
     return group.specs, false
 end
 
+function CooldownCompanion:GetEffectiveHeroTalents(group)
+    if not group then return nil, false end
+    local folderId = group.folderId
+    if folderId then
+        local folders = self.db and self.db.profile and self.db.profile.folders
+        local folder = folders and folders[folderId]
+        if folder and folder.specs and next(folder.specs) then
+            return folder.heroTalents, true
+        end
+    end
+    return group.heroTalents, false
+end
+
+-- Folder filters are authoritative. When a folder filter is active, all child
+-- groups are normalized to match it.
+function CooldownCompanion:ApplyFolderSpecFilterToChildren(folderId)
+    local db = self.db and self.db.profile
+    local folder = db and db.folders and db.folders[folderId]
+    if not (db and folder) then return end
+
+    local folderSpecs = folder.specs
+    local hasFolderSpecs = folderSpecs and next(folderSpecs)
+    local folderHeroTalents = hasFolderSpecs and folder.heroTalents
+    local hasFolderHeroTalents = folderHeroTalents and next(folderHeroTalents)
+
+    for _, group in pairs(db.groups) do
+        if group.folderId == folderId then
+            if hasFolderSpecs then
+                group.specs = CopyTable(folderSpecs)
+            else
+                group.specs = nil
+            end
+            if hasFolderHeroTalents then
+                group.heroTalents = CopyTable(folderHeroTalents)
+            else
+                group.heroTalents = nil
+            end
+        end
+    end
+end
+
+function CooldownCompanion:SetFolderSpecs(folderId, specs)
+    local db = self.db and self.db.profile
+    local folder = db and db.folders and db.folders[folderId]
+    if not folder then return false end
+    local oldSpecs = folder.specs and CopyTable(folder.specs) or nil
+
+    if specs and next(specs) then
+        local normalizedSpecs = {}
+        for specId, enabled in pairs(specs) do
+            local numSpecId = tonumber(specId)
+            if enabled and numSpecId then
+                normalizedSpecs[numSpecId] = true
+            end
+        end
+        folder.specs = next(normalizedSpecs) and normalizedSpecs or nil
+    else
+        folder.specs = nil
+    end
+
+    -- Hero filters must remain scoped to selected specs.
+    if folder.heroTalents and next(folder.heroTalents) then
+        if not (folder.specs and next(folder.specs)) then
+            folder.heroTalents = nil
+        elseif oldSpecs then
+            for specId in pairs(oldSpecs) do
+                if not folder.specs[specId] then
+                    -- Works for folders too; CleanHeroTalentsForSpec only mutates .heroTalents
+                    self:CleanHeroTalentsForSpec(folder, specId)
+                end
+            end
+        end
+    end
+
+    self:ApplyFolderSpecFilterToChildren(folderId)
+    self:RefreshAllGroups()
+    self:RefreshConfigPanel()
+    return true
+end
+
+function CooldownCompanion:SetFolderHeroTalent(folderId, subTreeID, enabled)
+    local db = self.db and self.db.profile
+    local folder = db and db.folders and db.folders[folderId]
+    if not folder then return false end
+    if not (folder.specs and next(folder.specs)) then return false end
+
+    if enabled then
+        if not folder.heroTalents then folder.heroTalents = {} end
+        folder.heroTalents[subTreeID] = true
+    else
+        if folder.heroTalents then
+            folder.heroTalents[subTreeID] = nil
+            if not next(folder.heroTalents) then
+                folder.heroTalents = nil
+            end
+        end
+    end
+
+    self:ApplyFolderSpecFilterToChildren(folderId)
+    self:RefreshAllGroups()
+    self:RefreshConfigPanel()
+    return true
+end
+
 function CooldownCompanion:IsHeroTalentAllowed(group)
-    if not group.heroTalents or not next(group.heroTalents) then return true end
+    local effectiveHeroTalents = self:GetEffectiveHeroTalents(group)
+    if not (effectiveHeroTalents and next(effectiveHeroTalents)) then return true end
     local heroSpecId = self._currentHeroSpecId
     if not heroSpecId then return true end  -- low level, no hero talent selected
-    return group.heroTalents[heroSpecId] == true
+    return effectiveHeroTalents[heroSpecId] == true
+end
+
+function CooldownCompanion:IsGroupActive(groupId, opts)
+    opts = opts or {}
+    local group = opts.group or self.db.profile.groups[groupId]
+    if not group then return false end
+
+    if group.enabled == false then return false end
+
+    if opts.requireButtons and (not group.buttons or #group.buttons == 0) then
+        return false
+    end
+
+    local effectiveSpecs = self:GetEffectiveSpecs(group)
+    if effectiveSpecs and next(effectiveSpecs) then
+        if not (self._currentSpecId and effectiveSpecs[self._currentSpecId]) then
+            return false
+        end
+    end
+
+    if not self:IsHeroTalentAllowed(group) then return false end
+
+    local checkCharVisibility = opts.checkCharVisibility
+    if checkCharVisibility == nil then checkCharVisibility = true end
+    if checkCharVisibility and groupId and not self:IsGroupVisibleToCurrentChar(groupId) then
+        return false
+    end
+
+    local checkLoadConditions = opts.checkLoadConditions
+    if checkLoadConditions == nil then checkLoadConditions = true end
+    if checkLoadConditions and not self:CheckLoadConditions(group) then
+        return false
+    end
+
+    return true
 end
 
 function CooldownCompanion:CleanHeroTalentsForSpec(group, specId)
@@ -65,19 +214,13 @@ function CooldownCompanion:IsGroupAvailableForAnchoring(groupId)
     if not group then return false end
     if group.displayMode ~= "icons" then return false end
     if group.isGlobal then return false end
-    if group.enabled == false then return false end
-    if not self:IsGroupVisibleToCurrentChar(groupId) then return false end
-
-    local effectiveSpecs = self:GetEffectiveSpecs(group)
-    if effectiveSpecs and next(effectiveSpecs) then
-        if not (self._currentSpecId and effectiveSpecs[self._currentSpecId]) then
-            return false
-        end
+    if not self:IsGroupActive(groupId, {
+        group = group,
+        checkCharVisibility = true,
+        checkLoadConditions = true,
+    }) then
+        return false
     end
-
-    if not self:IsHeroTalentAllowed(group) then return false end
-
-    if not self:CheckLoadConditions(group) then return false end
 
     return true
 end

@@ -290,8 +290,7 @@ local function RefreshColumn2()
                 info.func = function()
                     CloseDropDownMenus()
                     for _, gid in ipairs(multiGroupIds) do
-                        local g = db.groups[gid]
-                        if g then g.folderId = nil end
+                        CooldownCompanion:MoveGroupToFolder(gid, nil)
                     end
                     CooldownCompanion:RefreshConfigPanel()
                 end
@@ -337,7 +336,7 @@ local function RefreshColumn2()
                             for _, gid in ipairs(multiGroupIds) do
                                 local g = db.groups[gid]
                                 if g then
-                                    g.folderId = f.id
+                                    CooldownCompanion:MoveGroupToFolder(gid, f.id)
                                     -- Cross-section: toggle global/char
                                     local groupSection = g.isGlobal and "global" or "char"
                                     if groupSection ~= targetSection then
@@ -414,7 +413,7 @@ local function RefreshColumn2()
                             for _, gid in ipairs(multiGroupIds) do
                                 local g = db.groups[gid]
                                 if g then
-                                    g.folderId = folderId
+                                    CooldownCompanion:MoveGroupToFolder(gid, folderId)
                                     local groupSection = g.isGlobal and "global" or "char"
                                     if groupSection ~= targetSection then
                                         if targetSection == "global" then
@@ -474,7 +473,7 @@ local function RefreshColumn2()
                     local g = db.groups[gid]
                     if g and not g.isGlobal then
                         g.isGlobal = true
-                        g.folderId = nil
+                        CooldownCompanion:MoveGroupToFolder(gid, nil)
                     end
                 end
                 CooldownCompanion:RefreshAllGroups()
@@ -493,7 +492,7 @@ local function RefreshColumn2()
                         if g and g.isGlobal then
                             g.isGlobal = false
                             g.createdBy = CooldownCompanion.db.keys.char
-                            g.folderId = nil
+                            CooldownCompanion:MoveGroupToFolder(gid, nil)
                         end
                     end
                     CooldownCompanion:RefreshAllGroups()

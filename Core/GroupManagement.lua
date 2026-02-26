@@ -150,6 +150,19 @@ function CooldownCompanion:MoveGroupToFolder(groupId, folderId)
     local group = self.db.profile.groups[groupId]
     if not group then return end
     group.folderId = folderId  -- nil = loose (no folder)
+    if folderId then
+        local folder = self.db.profile.folders and self.db.profile.folders[folderId]
+        if folder and folder.specs and next(folder.specs) then
+            group.specs = CopyTable(folder.specs)
+            if folder.heroTalents and next(folder.heroTalents) then
+                group.heroTalents = CopyTable(folder.heroTalents)
+            else
+                group.heroTalents = nil
+            end
+        end
+    end
+    -- Folder moves can change effective spec/hero filters; refresh visibility now.
+    self:RefreshGroupFrame(groupId)
 end
 
 function CooldownCompanion:ToggleFolderGlobal(folderId)

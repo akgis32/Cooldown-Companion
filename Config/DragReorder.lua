@@ -200,24 +200,24 @@ local function ApplyCol1Drop(state)
 
         if dropTarget.action == "into-folder" then
             -- Move group into the target folder
-            group.folderId = dropTarget.targetFolderId
+            CooldownCompanion:MoveGroupToFolder(sourceGroupId, dropTarget.targetFolderId)
         elseif dropTarget.action == "reorder-before" or dropTarget.action == "reorder-after" then
             local targetRow = dropTarget.targetRow
             if dropTarget.isBelowAll then
                 -- Dropped below all rows: always become top-level
-                group.folderId = nil
+                CooldownCompanion:MoveGroupToFolder(sourceGroupId, nil)
             elseif targetRow.kind == "group" and targetRow.inFolder then
                 -- If dropping on a row that's in a folder, join that folder
-                group.folderId = targetRow.inFolder
+                CooldownCompanion:MoveGroupToFolder(sourceGroupId, targetRow.inFolder)
             elseif targetRow.kind == "folder" then
                 -- Dropping before/after a folder header = top-level
-                group.folderId = nil
+                CooldownCompanion:MoveGroupToFolder(sourceGroupId, nil)
             elseif targetRow.kind == "phantom" then
                 -- Dropping on phantom section placeholder = top-level in that section
-                group.folderId = nil
+                CooldownCompanion:MoveGroupToFolder(sourceGroupId, nil)
             else
                 -- Dropping on a loose group = stay/become loose
-                group.folderId = nil
+                CooldownCompanion:MoveGroupToFolder(sourceGroupId, nil)
             end
 
             -- Cross-section move: toggle global/character status
@@ -318,7 +318,7 @@ local function ApplyCol1Drop(state)
         for gid in pairs(sourceGroupIds) do
             local g = db.groups[gid]
             if g then
-                g.folderId = targetFolderId
+                CooldownCompanion:MoveGroupToFolder(gid, targetFolderId)
                 local groupSection = g.isGlobal and "global" or "char"
                 if groupSection ~= targetSection then
                     if targetSection == "global" then

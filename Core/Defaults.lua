@@ -156,7 +156,7 @@ local defaults = {
             ]]
         },
         nextGroupId = 1,
-        folders = {},       -- [folderId] = { name, order, section, manualIcon? }
+        folders = {},       -- [folderId] = { name, order, section, manualIcon?, specs?, heroTalents? }
         nextFolderId = 1,
         globalStyle = {
             buttonSize = 36,

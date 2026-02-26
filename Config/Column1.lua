@@ -13,6 +13,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 local BuildHeroTalentSubTreeCheckboxes = ST._BuildHeroTalentSubTreeCheckboxes
 local CleanRecycledEntry = ST._CleanRecycledEntry
 local SetupGroupRowIndicators = ST._SetupGroupRowIndicators
+local SetupFolderRowIndicators = ST._SetupFolderRowIndicators
 local GetGroupIcon = ST._GetGroupIcon
 local GetFolderIcon = ST._GetFolderIcon
 local OpenFolderIconPicker = ST._OpenFolderIconPicker
@@ -183,6 +184,16 @@ local function RefreshColumn1(preserveDrag)
         end
     end
 
+    local function IsGroupInactive(group)
+        if not group then return true end
+        return not CooldownCompanion:IsGroupActive(nil, {
+            group = group,
+            requireButtons = true,
+            checkCharVisibility = false,
+            checkLoadConditions = true,
+        })
+    end
+
     -- Helper: render a single group row (reused by both sections)
     local function RenderGroupRow(groupId, inFolder, sectionTag)
         local group = db.groups[groupId]
@@ -191,6 +202,8 @@ local function RefreshColumn1(preserveDrag)
         local entry = AceGUI:Create("InteractiveLabel")
         -- Clean recycled widget sub-elements before setup
         CleanRecycledEntry(entry)
+        local isInactive = IsGroupInactive(group)
+
         entry:SetText(group.name)
         entry:SetImage("Interface\\BUTTONS\\WHITE8X8")
         entry:SetImageSize(inFolder and 13 or 1, 30)  -- extra width indents folder children
@@ -199,12 +212,12 @@ local function RefreshColumn1(preserveDrag)
         entry:SetFontObject(GameFontHighlight)
         entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 
-        -- Color: blue for multi-selected, green for selected, gray for disabled, default otherwise
+        -- Color: blue for multi-selected, green for selected, gray for inactive, default otherwise
         if CS.selectedGroups[groupId] then
             entry:SetColor(0.4, 0.7, 1.0)
         elseif CS.selectedGroup == groupId then
             entry:SetColor(0, 1, 0)
-        elseif group.enabled == false then
+        elseif isInactive then
             entry:SetColor(0.5, 0.5, 0.5)
         end
 
@@ -253,6 +266,7 @@ local function RefreshColumn1(preserveDrag)
                         CS.specExpandedGroupId = nil
                     else
                         CS.specExpandedGroupId = groupId
+                        CS.specExpandedFolderId = nil
                     end
                     CooldownCompanion:RefreshConfigPanel()
                     return
@@ -412,6 +426,7 @@ local function RefreshColumn1(preserveDrag)
                                 CS.specExpandedGroupId = nil
                             else
                                 CS.specExpandedGroupId = groupId
+                                CS.specExpandedFolderId = nil
                             end
                             CooldownCompanion:RefreshConfigPanel()
                         end
@@ -509,95 +524,103 @@ local function RefreshColumn1(preserveDrag)
 
         -- Inline spec filter panel (expanded via Shift+Left-click)
         if CS.specExpandedGroupId == groupId then
-            local numSpecs = GetNumSpecializations()
-            local configID = C_ClassTalents.GetActiveConfigID()
-            local htIndent = inFolder and 32 or 20
-            for i = 1, numSpecs do
-                local specId, name, _, icon = C_SpecializationInfo.GetSpecializationInfo(i)
-                local cb = AceGUI:Create("CheckBox")
-                cb:SetLabel(name)
-                cb:SetImage(icon, 0.08, 0.92, 0.08, 0.92)
-                cb:SetFullWidth(true)
-                cb:SetValue(group.specs and group.specs[specId] or false)
-                cb:SetCallback("OnValueChanged", function(widget, event, value)
-                    if value then
-                        if not group.specs then group.specs = {} end
-                        group.specs[specId] = true
-                    else
-                        if group.specs then
-                            group.specs[specId] = nil
-                            if not next(group.specs) then
-                                group.specs = nil
+            local _, inheritedFromFolder = CooldownCompanion:GetEffectiveSpecs(group)
+            if inheritedFromFolder then
+                local inheritedLabel = AceGUI:Create("Label")
+                inheritedLabel:SetText("|cff888888Inherited from folder filter. Edit the folder instead.|r")
+                inheritedLabel:SetFullWidth(true)
+                CS.col1Scroll:AddChild(inheritedLabel)
+            else
+                local numSpecs = GetNumSpecializations()
+                local configID = C_ClassTalents.GetActiveConfigID()
+                local htIndent = inFolder and 32 or 20
+                for i = 1, numSpecs do
+                    local specId, name, _, icon = C_SpecializationInfo.GetSpecializationInfo(i)
+                    local cb = AceGUI:Create("CheckBox")
+                    cb:SetLabel(name)
+                    cb:SetImage(icon, 0.08, 0.92, 0.08, 0.92)
+                    cb:SetFullWidth(true)
+                    cb:SetValue(group.specs and group.specs[specId] or false)
+                    cb:SetCallback("OnValueChanged", function(widget, event, value)
+                        if value then
+                            if not group.specs then group.specs = {} end
+                            group.specs[specId] = true
+                        else
+                            if group.specs then
+                                group.specs[specId] = nil
+                                if not next(group.specs) then
+                                    group.specs = nil
+                                end
                             end
+                            CooldownCompanion:CleanHeroTalentsForSpec(group, specId)
                         end
-                        CooldownCompanion:CleanHeroTalentsForSpec(group, specId)
+                        CooldownCompanion:RefreshGroupFrame(groupId)
+                        CooldownCompanion:RefreshConfigPanel()
+                    end)
+                    CS.col1Scroll:AddChild(cb)
+                    ApplyCheckboxIndent(cb, inFolder and 12 or 0)
+
+                    -- Hero talent sub-tree checkboxes (indented, only when spec is checked)
+                    BuildHeroTalentSubTreeCheckboxes(CS.col1Scroll, group, configID, specId, htIndent, groupId)
+                end
+
+                local playerSpecIds = {}
+                for i = 1, numSpecs do
+                    local specId = C_SpecializationInfo.GetSpecializationInfo(i)
+                    if specId then playerSpecIds[specId] = true end
+                end
+
+                local foreignSpecs = {}
+                if group.specs then
+                    for specId in pairs(group.specs) do
+                        if not playerSpecIds[specId] then
+                            table.insert(foreignSpecs, specId)
+                        end
                     end
+                end
+
+                if #foreignSpecs > 0 then
+                    table.sort(foreignSpecs)
+                    for _, specId in ipairs(foreignSpecs) do
+                        local _, name, _, icon = GetSpecializationInfoForSpecID(specId)
+                        if name then
+                            local fcb = AceGUI:Create("CheckBox")
+                            fcb:SetLabel(name)
+                            if icon then fcb:SetImage(icon, 0.08, 0.92, 0.08, 0.92) end
+                            fcb:SetFullWidth(true)
+                            fcb:SetValue(true)
+                            fcb:SetCallback("OnValueChanged", function(widget, event, value)
+                                if not value then
+                                    if group.specs then
+                                        group.specs[specId] = nil
+                                        if not next(group.specs) then
+                                            group.specs = nil
+                                        end
+                                    end
+                                else
+                                    if not group.specs then group.specs = {} end
+                                    group.specs[specId] = true
+                                end
+                                CooldownCompanion:RefreshGroupFrame(groupId)
+                                CooldownCompanion:RefreshConfigPanel()
+                            end)
+                            CS.col1Scroll:AddChild(fcb)
+                            ApplyCheckboxIndent(fcb, inFolder and 12 or 0)
+                        end
+                    end
+                end
+
+                local clearBtn = AceGUI:Create("Button")
+                clearBtn:SetText("Clear All")
+                clearBtn:SetFullWidth(true)
+                clearBtn:SetCallback("OnClick", function()
+                    group.specs = nil
+                    group.heroTalents = nil
                     CooldownCompanion:RefreshGroupFrame(groupId)
                     CooldownCompanion:RefreshConfigPanel()
                 end)
-                CS.col1Scroll:AddChild(cb)
-                ApplyCheckboxIndent(cb, inFolder and 12 or 0)
-
-                -- Hero talent sub-tree checkboxes (indented, only when spec is checked)
-                BuildHeroTalentSubTreeCheckboxes(CS.col1Scroll, group, configID, specId, htIndent, groupId)
+                CS.col1Scroll:AddChild(clearBtn)
             end
-
-            local playerSpecIds = {}
-            for i = 1, numSpecs do
-                local specId = C_SpecializationInfo.GetSpecializationInfo(i)
-                if specId then playerSpecIds[specId] = true end
-            end
-
-            local foreignSpecs = {}
-            if group.specs then
-                for specId in pairs(group.specs) do
-                    if not playerSpecIds[specId] then
-                        table.insert(foreignSpecs, specId)
-                    end
-                end
-            end
-
-            if #foreignSpecs > 0 then
-                table.sort(foreignSpecs)
-                for _, specId in ipairs(foreignSpecs) do
-                    local _, name, _, icon = GetSpecializationInfoForSpecID(specId)
-                    if name then
-                        local fcb = AceGUI:Create("CheckBox")
-                        fcb:SetLabel(name)
-                        if icon then fcb:SetImage(icon, 0.08, 0.92, 0.08, 0.92) end
-                        fcb:SetFullWidth(true)
-                        fcb:SetValue(true)
-                        fcb:SetCallback("OnValueChanged", function(widget, event, value)
-                            if not value then
-                                if group.specs then
-                                    group.specs[specId] = nil
-                                    if not next(group.specs) then
-                                        group.specs = nil
-                                    end
-                                end
-                            else
-                                if not group.specs then group.specs = {} end
-                                group.specs[specId] = true
-                            end
-                            CooldownCompanion:RefreshGroupFrame(groupId)
-                            CooldownCompanion:RefreshConfigPanel()
-                        end)
-                        CS.col1Scroll:AddChild(fcb)
-                        ApplyCheckboxIndent(fcb, inFolder and 12 or 0)
-                    end
-                end
-            end
-
-            local clearBtn = AceGUI:Create("Button")
-            clearBtn:SetText("Clear All")
-            clearBtn:SetFullWidth(true)
-            clearBtn:SetCallback("OnClick", function()
-                group.specs = nil
-                group.heroTalents = nil
-                CooldownCompanion:RefreshGroupFrame(groupId)
-                CooldownCompanion:RefreshConfigPanel()
-            end)
-            CS.col1Scroll:AddChild(clearBtn)
         end
 
         -- Hold-click drag reorder via handler-table HookScript pattern
@@ -632,7 +655,7 @@ local function RefreshColumn1(preserveDrag)
     end
 
     -- Helper: render a folder header row
-    local function RenderFolderRow(folderId, sectionTag)
+    local function RenderFolderRow(folderId, sectionTag, childGroupIds)
         local folder = db.folders[folderId]
         if not folder then return end
 
@@ -650,9 +673,25 @@ local function RefreshColumn1(preserveDrag)
         entry:SetImageSize(32, 32)
         entry:SetFullWidth(true)
         entry:SetFontObject(GameFontHighlight)
-        entry:SetColor(1.0, 0.82, 0.0)
+        local allChildrenInactive = false
+        if childGroupIds and #childGroupIds > 0 then
+            allChildrenInactive = true
+            for _, gid in ipairs(childGroupIds) do
+                local childGroup = db.groups[gid]
+                if childGroup and not IsGroupInactive(childGroup) then
+                    allChildrenInactive = false
+                    break
+                end
+            end
+        end
+        if allChildrenInactive then
+            entry:SetColor(0.5, 0.5, 0.5)
+        else
+            entry:SetColor(1.0, 0.82, 0.0)
+        end
         entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
         CS.col1Scroll:AddChild(entry)
+        SetupFolderRowIndicators(entry, folder)
 
         -- Tag entry frame with metadata for drag system
         entry.frame._cdcItemKind = "folder"
@@ -675,6 +714,16 @@ local function RefreshColumn1(preserveDrag)
         entry.frame:SetScript("OnMouseUp", function(self, button)
             if CS.dragState and CS.dragState.phase == "active" then return end
             if button == "LeftButton" then
+                if IsShiftKeyDown() then
+                    if CS.specExpandedFolderId == folderId then
+                        CS.specExpandedFolderId = nil
+                    else
+                        CS.specExpandedFolderId = folderId
+                        CS.specExpandedGroupId = nil
+                    end
+                    CooldownCompanion:RefreshConfigPanel()
+                    return
+                end
                 CS.collapsedFolders[folderId] = not CS.collapsedFolders[folderId]
                 CooldownCompanion:RefreshConfigPanel()
             elseif button == "MiddleButton" then
@@ -769,6 +818,22 @@ local function RefreshColumn1(preserveDrag)
                     end
                     UIDropDownMenu_AddButton(info, level)
 
+                    -- Spec Filter
+                    info = UIDropDownMenu_CreateInfo()
+                    info.text = "Spec / Hero Filter"
+                    info.notCheckable = true
+                    info.func = function()
+                        CloseDropDownMenus()
+                        if CS.specExpandedFolderId == folderId then
+                            CS.specExpandedFolderId = nil
+                        else
+                            CS.specExpandedFolderId = folderId
+                            CS.specExpandedGroupId = nil
+                        end
+                        CooldownCompanion:RefreshConfigPanel()
+                    end
+                    UIDropDownMenu_AddButton(info, level)
+
                     -- Export Folder
                     info = UIDropDownMenu_CreateInfo()
                     info.text = "Export Folder"
@@ -778,6 +843,12 @@ local function RefreshColumn1(preserveDrag)
                         local folderData = { name = folder.name }
                         if type(folder.manualIcon) == "number" or type(folder.manualIcon) == "string" then
                             folderData.manualIcon = folder.manualIcon
+                        end
+                        if folder.specs and next(folder.specs) then
+                            folderData.specs = CopyTable(folder.specs)
+                        end
+                        if folder.heroTalents and next(folder.heroTalents) then
+                            folderData.heroTalents = CopyTable(folder.heroTalents)
                         end
                         local childGroups = {}
                         for gid, g in pairs(db.groups) do
@@ -832,6 +903,108 @@ local function RefreshColumn1(preserveDrag)
         end
     end
 
+    local function RenderFolderSpecPanel(folderId)
+        local folder = db.folders[folderId]
+        if not folder then return end
+
+        local function BuildFolderSpecs(nextSpecId, enabled)
+            local nextSpecs = folder.specs and CopyTable(folder.specs) or {}
+            if enabled then
+                nextSpecs[nextSpecId] = true
+            else
+                nextSpecs[nextSpecId] = nil
+            end
+            if not next(nextSpecs) then
+                nextSpecs = nil
+            end
+            return nextSpecs
+        end
+
+        local numSpecs = GetNumSpecializations()
+        local configID = C_ClassTalents.GetActiveConfigID()
+        local htIndent = 32
+        for i = 1, numSpecs do
+            local specId, name, _, icon = C_SpecializationInfo.GetSpecializationInfo(i)
+            local cb = AceGUI:Create("CheckBox")
+            cb:SetLabel(name)
+            cb:SetImage(icon, 0.08, 0.92, 0.08, 0.92)
+            cb:SetFullWidth(true)
+            cb:SetValue(folder.specs and folder.specs[specId] or false)
+            cb:SetCallback("OnValueChanged", function(widget, event, value)
+                CooldownCompanion:SetFolderSpecs(folderId, BuildFolderSpecs(specId, value))
+            end)
+            CS.col1Scroll:AddChild(cb)
+            ApplyCheckboxIndent(cb, 12)
+
+            if configID and folder.specs and folder.specs[specId] then
+                local subTreeIDs = C_ClassTalents.GetHeroTalentSpecsForClassSpec(nil, specId)
+                if subTreeIDs then
+                    for _, subTreeID in ipairs(subTreeIDs) do
+                        local subTreeInfo = C_Traits.GetSubTreeInfo(configID, subTreeID)
+                        if subTreeInfo then
+                            local htCb = AceGUI:Create("CheckBox")
+                            htCb:SetLabel(subTreeInfo.name or ("Hero " .. subTreeID))
+                            htCb:SetFullWidth(true)
+                            htCb:SetValue(folder.heroTalents and folder.heroTalents[subTreeID] or false)
+                            htCb:SetCallback("OnValueChanged", function(widget, event, value)
+                                CooldownCompanion:SetFolderHeroTalent(folderId, subTreeID, value)
+                            end)
+                            CS.col1Scroll:AddChild(htCb)
+                            ApplyCheckboxIndent(htCb, htIndent)
+                            if subTreeInfo.iconElementID then
+                                htCb:SetImage(136235)
+                                htCb.image:SetAtlas(subTreeInfo.iconElementID, false)
+                                htCb.image:SetTexCoord(0, 1, 0, 1)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        local playerSpecIds = {}
+        for i = 1, numSpecs do
+            local specId = C_SpecializationInfo.GetSpecializationInfo(i)
+            if specId then playerSpecIds[specId] = true end
+        end
+
+        local foreignSpecs = {}
+        if folder.specs then
+            for specId in pairs(folder.specs) do
+                if not playerSpecIds[specId] then
+                    table.insert(foreignSpecs, specId)
+                end
+            end
+        end
+
+        if #foreignSpecs > 0 then
+            table.sort(foreignSpecs)
+            for _, specId in ipairs(foreignSpecs) do
+                local _, name, _, icon = GetSpecializationInfoForSpecID(specId)
+                if name then
+                    local fcb = AceGUI:Create("CheckBox")
+                    fcb:SetLabel(name)
+                    if icon then fcb:SetImage(icon, 0.08, 0.92, 0.08, 0.92) end
+                    fcb:SetFullWidth(true)
+                    fcb:SetValue(true)
+                    fcb:SetCallback("OnValueChanged", function(widget, event, value)
+                        CooldownCompanion:SetFolderSpecs(folderId, BuildFolderSpecs(specId, value))
+                    end)
+                    CS.col1Scroll:AddChild(fcb)
+                    ApplyCheckboxIndent(fcb, 12)
+                end
+            end
+        end
+
+        local clearBtn = AceGUI:Create("Button")
+        clearBtn:SetText("Clear All")
+        clearBtn:SetFullWidth(true)
+        clearBtn:SetCallback("OnClick", function()
+            CooldownCompanion:SetFolderSpecs(folderId, nil)
+        end)
+        CS.col1Scroll:AddChild(clearBtn)
+    end
+
     -- Render a section (global or character)
     local function RenderSection(section, sectionGroupIds, headingText)
         local items, folderChildGroups = BuildSectionItems(section, sectionGroupIds)
@@ -867,7 +1040,10 @@ local function RefreshColumn1(preserveDrag)
 
         for _, item in ipairs(items) do
             if item.kind == "folder" then
-                RenderFolderRow(item.id, section)
+                RenderFolderRow(item.id, section, folderChildGroups[item.id])
+                if CS.specExpandedFolderId == item.id then
+                    RenderFolderSpecPanel(item.id)
+                end
                 -- If expanded, render children with accent bar
                 if not CS.collapsedFolders[item.id] then
                     local children = folderChildGroups[item.id]

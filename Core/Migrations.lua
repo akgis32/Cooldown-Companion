@@ -24,6 +24,7 @@ function CooldownCompanion:RunAllMigrations()
     self:MigrateRemoveBarChargeOldFields()
     self:MigrateVisibility()
     self:MigrateFolders()
+    self:MigrateFolderSpecFilters()
     self:ReverseMigrateMW()
     self:MigrateCustomAuraBarsToSpecKeyed()
     self:MigrateLSMNames()
@@ -176,6 +177,57 @@ function CooldownCompanion:MigrateFolders()
     end
     if self.db.profile.nextFolderId == nil then
         self.db.profile.nextFolderId = 1
+    end
+end
+
+function CooldownCompanion:MigrateFolderSpecFilters()
+    local db = self.db.profile
+    if not db.folders then return end
+
+    for folderId, folder in pairs(db.folders) do
+        if folder.specs ~= nil and type(folder.specs) ~= "table" then
+            folder.specs = nil
+        end
+
+        if folder.specs then
+            local normalizedSpecs = {}
+            for specId, enabled in pairs(folder.specs) do
+                local numSpecId = tonumber(specId)
+                if enabled and numSpecId then
+                    normalizedSpecs[numSpecId] = true
+                end
+            end
+            if next(normalizedSpecs) then
+                folder.specs = normalizedSpecs
+            else
+                folder.specs = nil
+            end
+        end
+
+        if folder.heroTalents ~= nil and type(folder.heroTalents) ~= "table" then
+            folder.heroTalents = nil
+        end
+        if folder.heroTalents then
+            local normalizedHero = {}
+            for subTreeID, enabled in pairs(folder.heroTalents) do
+                local numSubTreeID = tonumber(subTreeID)
+                if enabled and numSubTreeID then
+                    normalizedHero[numSubTreeID] = true
+                end
+            end
+            if next(normalizedHero) then
+                folder.heroTalents = normalizedHero
+            else
+                folder.heroTalents = nil
+            end
+        end
+        if not (folder.specs and next(folder.specs)) then
+            folder.heroTalents = nil
+        end
+
+        if folder.specs and next(folder.specs) then
+            self:ApplyFolderSpecFilterToChildren(folderId)
+        end
     end
 end
 

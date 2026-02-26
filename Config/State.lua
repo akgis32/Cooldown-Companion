@@ -157,6 +157,7 @@ ST._configState = {
 
     -- Spec filter inline expansion
     specExpandedGroupId = nil,
+    specExpandedFolderId = nil,
 
     -- Auto Add flow state (Column 3 wizard mode)
     autoAddFlowActive = false,
@@ -514,10 +515,11 @@ local function SetupGroupRowIndicators(entry, group)
     if group.locked == false then
         AddAtlasBadge("ShipMissionIcon-Training-Map")
     end
-    -- Spec filter badges
+    -- Spec filter badges (hide on child groups inheriting an active folder filter)
     local SPEC_BADGE_SIZE = 16
-    if group.specs and next(group.specs) then
-        for specId in pairs(group.specs) do
+    local effectiveSpecs, inheritedFromFolder = CooldownCompanion:GetEffectiveSpecs(group)
+    if not inheritedFromFolder and effectiveSpecs and next(effectiveSpecs) then
+        for specId in pairs(effectiveSpecs) do
             local _, _, _, specIcon = GetSpecializationInfoForSpecID(specId)
             if specIcon then
                 badgeIndex = badgeIndex + 1
@@ -539,10 +541,11 @@ local function SetupGroupRowIndicators(entry, group)
 
     -- Hero talent filter badges
     local HERO_BADGE_SIZE = SPEC_BADGE_SIZE
-    if group.heroTalents and next(group.heroTalents) then
+    local effectiveHeroTalents, inheritedHeroTalents = CooldownCompanion:GetEffectiveHeroTalents(group)
+    if not inheritedHeroTalents and effectiveHeroTalents and next(effectiveHeroTalents) then
         local configID = C_ClassTalents.GetActiveConfigID()
         if configID then
-            for subTreeID in pairs(group.heroTalents) do
+            for subTreeID in pairs(effectiveHeroTalents) do
                 local subTreeInfo = C_Traits.GetSubTreeInfo(configID, subTreeID)
                 if subTreeInfo and subTreeInfo.iconElementID then
                     badgeIndex = badgeIndex + 1
@@ -556,6 +559,66 @@ local function SetupGroupRowIndicators(entry, group)
     end
 
     -- Position badges right-to-left
+    local offsetX = -BADGE_RIGHT_PAD
+    if frame._cdcBadges then
+        for i = 1, badgeIndex do
+            local badge = frame._cdcBadges[i]
+            if badge:IsShown() then
+                badge:ClearAllPoints()
+                badge:SetPoint("RIGHT", frame, "RIGHT", offsetX, 0)
+                offsetX = offsetX - badge:GetWidth() - BADGE_SPACING
+            end
+        end
+    end
+end
+
+local function SetupFolderRowIndicators(entry, folder)
+    local frame = entry.frame
+    if frame._cdcBadges then
+        for _, b in ipairs(frame._cdcBadges) do b:Hide() end
+    end
+
+    local badgeIndex = 0
+    local SPEC_BADGE_SIZE = 16
+    local specs = folder and folder.specs
+    if specs and next(specs) then
+        for specId in pairs(specs) do
+            local _, _, _, specIcon = GetSpecializationInfoForSpecID(specId)
+            if specIcon then
+                badgeIndex = badgeIndex + 1
+                local badge = AcquireBadge(frame, badgeIndex)
+                badge:SetSize(SPEC_BADGE_SIZE, SPEC_BADGE_SIZE)
+                badge.icon:SetTexture(specIcon)
+                badge.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                if not badge._cdcCircleMask then
+                    local mask = badge:CreateMaskTexture()
+                    mask:SetAllPoints(badge.icon)
+                    mask:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+                    badge._cdcCircleMask = mask
+                end
+                badge.icon:AddMaskTexture(badge._cdcCircleMask)
+                badge:Show()
+            end
+        end
+    end
+
+    local HERO_BADGE_SIZE = SPEC_BADGE_SIZE
+    if folder and folder.heroTalents and next(folder.heroTalents) then
+        local configID = C_ClassTalents.GetActiveConfigID()
+        if configID then
+            for subTreeID in pairs(folder.heroTalents) do
+                local subTreeInfo = C_Traits.GetSubTreeInfo(configID, subTreeID)
+                if subTreeInfo and subTreeInfo.iconElementID then
+                    badgeIndex = badgeIndex + 1
+                    local badge = AcquireBadge(frame, badgeIndex)
+                    badge:SetSize(HERO_BADGE_SIZE, HERO_BADGE_SIZE)
+                    badge.icon:SetAtlas(subTreeInfo.iconElementID, false)
+                    badge:Show()
+                end
+            end
+        end
+    end
+
     local offsetX = -BADGE_RIGHT_PAD
     if frame._cdcBadges then
         for i = 1, badgeIndex do
@@ -734,6 +797,7 @@ ST._CDM_VIEWER_NAMES = CDM_VIEWER_NAMES
 ST._CleanRecycledEntry = CleanRecycledEntry
 ST._AcquireBadge = AcquireBadge
 ST._SetupGroupRowIndicators = SetupGroupRowIndicators
+ST._SetupFolderRowIndicators = SetupFolderRowIndicators
 ST._CreateScrollFrame = CreateScrollFrame
 ST._CreateTextButton = CreateTextButton
 ST._EmbedWidget = EmbedWidget
