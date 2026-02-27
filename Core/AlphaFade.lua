@@ -15,6 +15,8 @@ local pairs = pairs
 local ipairs = ipairs
 local type = type
 
+local SOAR_SPELL_ID = 430747
+
 -- Alpha fade system: per-group runtime state
 -- self.alphaState[groupId] = {
 --     currentAlpha   - current interpolated alpha
@@ -76,39 +78,62 @@ local function UpdateFadedAlpha(state, desired, now, fadeInDur, fadeOutDur)
 end
 
 function CooldownCompanion:ResolveMountedAlphaStates(mounted)
-    if not mounted then
+    local unitAuras = C_UnitAuras
+    local soarAura
+    if unitAuras then
+        -- GetPlayerAuraBySpellID can miss Soar in some runtime states; unit query is reliable.
+        if unitAuras.GetUnitAuraBySpellID then
+            soarAura = unitAuras.GetUnitAuraBySpellID("player", SOAR_SPELL_ID)
+        elseif unitAuras.GetPlayerAuraBySpellID then
+            soarAura = unitAuras.GetPlayerAuraBySpellID(SOAR_SPELL_ID)
+        end
+    end
+    local soarActive = soarAura ~= nil
+    if not mounted and not soarActive then
         self._mountAlphaDirty = false
         self._mountAlphaCacheMounted = false
+        self._mountAlphaCacheSoar = false
         self._isRegularMounted = false
         self._isDragonridingMounted = false
         return false, false
     end
 
-    if not self._mountAlphaDirty and self._mountAlphaCacheMounted == true then
+    if not self._mountAlphaDirty
+       and self._mountAlphaCacheMounted == (mounted == true)
+       and self._mountAlphaCacheSoar == (soarActive == true) then
         return self._isRegularMounted == true, self._isDragonridingMounted == true
     end
 
-    local isRegularMounted = true -- Fallback while mounted if active mount cannot be resolved.
+    local isRegularMounted = mounted == true -- Fallback while mounted if active mount cannot be resolved.
     local isDragonridingMounted = false
-    local mountJournal = C_MountJournal
-    if mountJournal and mountJournal.GetCollectedDragonridingMounts and mountJournal.GetMountInfoByID then
-        local dragonridingMountIDs = mountJournal.GetCollectedDragonridingMounts()
-        if type(dragonridingMountIDs) == "table" then
-            for _, mountID in ipairs(dragonridingMountIDs) do
-                local _, _, _, isActive, _, _, _, _, _, _, _, _, isSteadyFlight = mountJournal.GetMountInfoByID(mountID)
-                if isActive then
-                    if not isSteadyFlight then
-                        isRegularMounted = false
-                        isDragonridingMounted = true
+    if mounted then
+        local mountJournal = C_MountJournal
+        if mountJournal and mountJournal.GetCollectedDragonridingMounts and mountJournal.GetMountInfoByID then
+            local dragonridingMountIDs = mountJournal.GetCollectedDragonridingMounts()
+            if type(dragonridingMountIDs) == "table" then
+                for _, mountID in ipairs(dragonridingMountIDs) do
+                    local _, _, _, isActive, _, _, _, _, _, _, _, _, isSteadyFlight = mountJournal.GetMountInfoByID(mountID)
+                    if isActive then
+                        if not isSteadyFlight then
+                            isRegularMounted = false
+                            isDragonridingMounted = true
+                        end
+                        break
                     end
-                    break
                 end
             end
         end
     end
 
+    -- Treat Dracthyr Soar as Skyriding for alpha conditions.
+    if soarActive then
+        isRegularMounted = false
+        isDragonridingMounted = true
+    end
+
     self._mountAlphaDirty = false
-    self._mountAlphaCacheMounted = true
+    self._mountAlphaCacheMounted = mounted == true
+    self._mountAlphaCacheSoar = soarActive == true
     self._isRegularMounted = isRegularMounted
     self._isDragonridingMounted = isDragonridingMounted
     return isRegularMounted, isDragonridingMounted
