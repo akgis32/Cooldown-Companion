@@ -32,12 +32,14 @@ local GROUP_SETTING_PRESET_GROUP_KEYS = {
     "baselineAlpha",
     "forceAlphaInCombat",
     "forceAlphaOutOfCombat",
-    "forceAlphaMounted",
+    "forceAlphaRegularMounted",
+    "forceAlphaDragonriding",
     "forceAlphaTargetExists",
     "forceAlphaMouseover",
     "forceHideInCombat",
     "forceHideOutOfCombat",
-    "forceHideMounted",
+    "forceHideRegularMounted",
+    "forceHideDragonriding",
     "treatTravelFormAsMounted",
     "customFade",
     "fadeDelay",
@@ -79,12 +81,14 @@ local function BuildGroupSettingPresetBaseline(profile, mode)
         baselineAlpha = 1,
         forceAlphaInCombat = false,
         forceAlphaOutOfCombat = false,
-        forceAlphaMounted = false,
+        forceAlphaRegularMounted = false,
+        forceAlphaDragonriding = false,
         forceAlphaTargetExists = false,
         forceAlphaMouseover = false,
         forceHideInCombat = false,
         forceHideOutOfCombat = false,
-        forceHideMounted = false,
+        forceHideRegularMounted = false,
+        forceHideDragonriding = false,
         treatTravelFormAsMounted = false,
         fadeDelay = 1,
         fadeInDuration = 0.2,
@@ -168,6 +172,25 @@ local function ApplyGroupSettingPresetData(profile, group, mode, presetData)
             local value = groupData[key]
             if value ~= nil then
                 group[key] = CopyPresetValue(value)
+            end
+        end
+
+        -- Backward-compat: legacy mounted tri-state in older preset payloads.
+        local hasLegacyMounted = groupData.forceAlphaMounted ~= nil or groupData.forceHideMounted ~= nil
+        if hasLegacyMounted then
+            local legacyVisible = groupData.forceAlphaMounted == true
+            local legacyHidden = groupData.forceHideMounted == true
+            if groupData.forceAlphaRegularMounted == nil then
+                group.forceAlphaRegularMounted = legacyVisible
+            end
+            if groupData.forceHideRegularMounted == nil then
+                group.forceHideRegularMounted = legacyHidden
+            end
+            if groupData.forceAlphaDragonriding == nil then
+                group.forceAlphaDragonriding = legacyVisible
+            end
+            if groupData.forceHideDragonriding == nil then
+                group.forceHideDragonriding = legacyHidden
             end
         end
 
@@ -357,6 +380,11 @@ function CooldownCompanion:CreateGroup(name)
 
     -- Alpha fade defaults
     self.db.profile.groups[groupId].baselineAlpha = 1
+    self.db.profile.groups[groupId].forceAlphaRegularMounted = false
+    self.db.profile.groups[groupId].forceAlphaDragonriding = false
+    self.db.profile.groups[groupId].forceHideRegularMounted = false
+    self.db.profile.groups[groupId].forceHideDragonriding = false
+    self.db.profile.groups[groupId].treatTravelFormAsMounted = false
     self.db.profile.groups[groupId].fadeDelay = 1
     self.db.profile.groups[groupId].fadeInDuration = 0.2
     self.db.profile.groups[groupId].fadeOutDuration = 0.2
