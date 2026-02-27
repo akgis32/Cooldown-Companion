@@ -16,6 +16,7 @@ local ResetConfigSelection = ST._ResetConfigSelection
 local ShowPopupAboveConfig = ST._ShowPopupAboveConfig
 local COLUMN_PADDING = ST._COLUMN_PADDING
 local TryReceiveCursorDrop = ST._TryReceiveCursorDrop
+local TryAddCDMAuraSpell = ST._TryAddCDMAuraSpell
 local BuildAutocompleteCache = ST._BuildAutocompleteCache
 local RefreshColumn1 = ST._RefreshColumn1
 local RefreshColumn2 = ST._RefreshColumn2
@@ -37,6 +38,7 @@ end
 
 -- File-local aliases for buttonSettingsScroll (only needed within this file)
 local buttonSettingsScroll
+local cdmDragBridgeRegistered = false
 
 ------------------------------------------------------------------------
 -- Main Panel Creation
@@ -547,7 +549,7 @@ local function CreateConfigPanel()
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Hold left-click and move to reorder.", 1, 1, 1, true)
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("Drag a spell or item from your spellbook or inventory into this column to add it.", 1, 1, 1, true)
+        GameTooltip:AddLine("Drag spells/items from your spellbook or inventory, or drag a CDM aura from CDM Settings (Auras tab), into this column to add it.", 1, 1, 1, true)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Right-click the Add button to toggle the spellbook.", 1, 1, 1, true)
         GameTooltip:Show()
@@ -746,12 +748,6 @@ local function CreateConfigPanel()
     buttonSettingsScroll = bsScroll
     CS.buttonSettingsScroll = bsScroll
 
-    -- Accept spell/item drops anywhere on the column 2 scroll area
-    scroll2.frame:EnableMouse(true)
-    scroll2.frame:SetScript("OnReceiveDrag", TryReceiveCursorDrop)
-    scroll2.content:EnableMouse(true)
-    scroll2.content:SetScript("OnReceiveDrag", TryReceiveCursorDrop)
-
     -- Drop hint overlay for column 2
     local dropOverlay = CreateFrame("Frame", nil, col2.frame, "BackdropTemplate")
     dropOverlay:SetAllPoints(col2.frame)
@@ -759,12 +755,6 @@ local function CreateConfigPanel()
     dropOverlay:SetBackdrop({ bgFile = "Interface\\BUTTONS\\WHITE8X8" })
     dropOverlay:SetBackdropColor(0.15, 0.55, 0.85, 0.25)
     dropOverlay:EnableMouse(true)
-    dropOverlay:SetScript("OnReceiveDrag", TryReceiveCursorDrop)
-    dropOverlay:SetScript("OnMouseUp", function(self, button)
-        if button == "LeftButton" and GetCursorInfo() then
-            TryReceiveCursorDrop()
-        end
-    end)
     dropOverlay:Hide()
 
     local dropBorder = dropOverlay:CreateTexture(nil, "BORDER")
@@ -778,17 +768,128 @@ local function CreateConfigPanel()
 
     local dropText = dropOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     dropText:SetPoint("CENTER", 0, 0)
-    dropText:SetText("|cffAADDFFDrop here to track|r")
+    dropText:SetText("|cffAADDFFDrop spell, item, or CDM aura here to track|r")
 
-    dropOverlay:RegisterEvent("CURSOR_CHANGED")
-    dropOverlay:SetScript("OnEvent", function(self)
+    local function IsCursorDropPayload(cursorType)
+        return cursorType == "spell" or cursorType == "item" or cursorType == "petaction"
+    end
+
+    local function HasCDMDragPayload()
+        return CS.cdmDragActive
+            and CS.cdmDragPayload
+            and type(CS.cdmDragPayload.spellID) == "number"
+            and CS.cdmDragPayload.spellID > 0
+    end
+
+    local function ClearCDMDragPayload()
+        CS.cdmDragPayload = nil
+        CS.cdmDragActive = false
+    end
+
+    local function UpdateDropOverlayVisibility()
         local cursorType = GetCursorInfo()
-        if (cursorType == "spell" or cursorType == "item" or cursorType == "petaction") and CS.selectedGroup and col2.frame:IsShown() then
-            self:Show()
+        if (IsCursorDropPayload(cursorType) or HasCDMDragPayload())
+            and CS.selectedGroup
+            and col2.frame:IsShown() then
+            dropOverlay:Show()
         else
-            self:Hide()
+            dropOverlay:Hide()
+        end
+    end
+
+    local function TryReceiveCDMAuraDrop()
+        if not TryAddCDMAuraSpell or not HasCDMDragPayload() then
+            return false
+        end
+
+        local payload = CS.cdmDragPayload
+        ClearCDMDragPayload()
+
+        local added = TryAddCDMAuraSpell(payload.spellID, payload.cooldownID)
+        if CooldownViewerSettings
+            and CooldownViewerSettings.IsReordering
+            and CooldownViewerSettings.CancelOrderChange
+            and CooldownViewerSettings:IsReordering() then
+            CooldownViewerSettings:CancelOrderChange()
+        end
+
+        if added then
+            CooldownCompanion:RefreshConfigPanel()
+        end
+        return added and true or false
+    end
+
+    local function TryReceiveAnyDrop()
+        if TryReceiveCursorDrop() then
+            UpdateDropOverlayVisibility()
+            return true
+        end
+
+        local added = TryReceiveCDMAuraDrop()
+        UpdateDropOverlayVisibility()
+        return added
+    end
+
+    -- Accept spell/item/CDM-aura drops anywhere on the column 2 scroll area
+    scroll2.frame:EnableMouse(true)
+    scroll2.frame:SetScript("OnReceiveDrag", TryReceiveAnyDrop)
+    scroll2.content:EnableMouse(true)
+    scroll2.content:SetScript("OnReceiveDrag", TryReceiveAnyDrop)
+
+    dropOverlay:SetScript("OnReceiveDrag", TryReceiveAnyDrop)
+    dropOverlay:SetScript("OnMouseUp", function(self, button)
+        if button == "LeftButton" and (GetCursorInfo() or HasCDMDragPayload()) then
+            TryReceiveAnyDrop()
         end
     end)
+
+    dropOverlay:RegisterEvent("CURSOR_CHANGED")
+    dropOverlay:SetScript("OnEvent", function()
+        UpdateDropOverlayVisibility()
+    end)
+
+    if not CS.cdmDragWatcher then
+        local watcher = CreateFrame("Frame")
+        watcher:RegisterEvent("GLOBAL_MOUSE_UP")
+        CS.cdmDragWatcher = watcher
+    end
+    CS.cdmDragWatcher:SetScript("OnEvent", function(_, _, button)
+        if HasCDMDragPayload() then
+            local payload = CS.cdmDragPayload
+            local ignoredButton = payload and payload.ignoreNextMouseUpButton
+            if ignoredButton and ignoredButton == button then
+                payload.ignoreNextMouseUpButton = nil
+                return
+            end
+            ClearCDMDragPayload()
+            UpdateDropOverlayVisibility()
+        end
+    end)
+
+    if EventRegistry and EventRegistry.RegisterCallback and not cdmDragBridgeRegistered then
+        cdmDragBridgeRegistered = true
+        EventRegistry:RegisterCallback("CooldownViewerSettings.BeginOrderChange", function(_event, cooldownItem, eatNextGlobalMouseUp)
+            local cooldownInfo = cooldownItem and cooldownItem.GetCooldownInfo and cooldownItem:GetCooldownInfo()
+            local cooldownID = cooldownItem and cooldownItem.GetCooldownID and cooldownItem:GetCooldownID()
+            local spellID = cooldownInfo and cooldownInfo.spellID
+            local category = cooldownInfo and cooldownInfo.category
+            local isAuraCategory = category == Enum.CooldownViewerCategory.TrackedBuff
+                or category == Enum.CooldownViewerCategory.TrackedBar
+            if type(spellID) == "number" and spellID > 0 and isAuraCategory then
+                CS.cdmDragPayload = {
+                    spellID = spellID,
+                    cooldownID = cooldownID,
+                    ignoreNextMouseUpButton = eatNextGlobalMouseUp,
+                }
+                CS.cdmDragActive = true
+            else
+                ClearCDMDragPayload()
+            end
+            if CS.configFrame and CS.configFrame.frame and CS.configFrame.frame:IsShown() then
+                UpdateDropOverlayVisibility()
+            end
+        end, CooldownCompanion)
+    end
 
     -- Column 4 content area (use InlineGroup's content directly)
     CS.col4Container = col4.content

@@ -340,6 +340,65 @@ local function TryReceiveCursorDrop()
 end
 
 ------------------------------------------------------------------------
+-- Helper: Add a spell as a standalone aura entry from CDM drag payload
+------------------------------------------------------------------------
+local function TryAddCDMAuraSpell(spellID, cooldownID)
+    local numericSpellID = tonumber(spellID)
+    if not numericSpellID then
+        return false
+    end
+
+    if not CS.selectedGroup then
+        CooldownCompanion:Print("Select a group first before dropping CDM auras.")
+        return false
+    end
+
+    local spellInfo = C_Spell.GetSpellInfo(numericSpellID)
+    local spellName = spellInfo and spellInfo.name
+    if not spellName then
+        CooldownCompanion:Print("CDM aura not found: " .. tostring(spellID))
+        return false
+    end
+
+    if IsBlockedSpellForTracking(numericSpellID) then
+        PrintBlockedSpellMessage(spellName)
+        return false
+    end
+
+    if not IsSpellInCDMBuffBar(numericSpellID) then
+        CooldownCompanion:Print("That CDM entry is not in Tracked Buff/Tracked Bar.")
+        return false
+    end
+
+    local cdmChildSlot
+    local numericCooldownID = tonumber(cooldownID)
+    if numericCooldownID and numericCooldownID > 0 then
+        local allChildren = CooldownCompanion.viewerAuraAllChildren[numericSpellID]
+        if allChildren then
+            for slot, child in ipairs(allChildren) do
+                local childCooldownID
+                if child and child.GetCooldownID then
+                    childCooldownID = child:GetCooldownID()
+                elseif child and child.cooldownID then
+                    childCooldownID = child.cooldownID
+                elseif child and child.cooldownInfo then
+                    childCooldownID = child.cooldownInfo.cooldownID
+                end
+                if childCooldownID == numericCooldownID then
+                    cdmChildSlot = slot
+                    break
+                end
+            end
+        end
+    end
+
+    local isPassive = IsPassiveOrProc(numericSpellID) and true or nil
+    CooldownCompanion:AddButtonToGroup(CS.selectedGroup, "spell", numericSpellID, spellName, nil, isPassive, true, cdmChildSlot)
+    CooldownCompanion:Print("Added aura: " .. spellName)
+    return true
+end
+
+------------------------------------------------------------------------
 -- Autocomplete: Build cache of player spells + usable bag items
 ------------------------------------------------------------------------
 local function BuildAutocompleteCache()
@@ -810,6 +869,7 @@ CS.ConsumeAutocompleteEnter = ConsumeAutocompleteEnter
 ------------------------------------------------------------------------
 ST._TryAdd = TryAdd
 ST._TryReceiveCursorDrop = TryReceiveCursorDrop
+ST._TryAddCDMAuraSpell = TryAddCDMAuraSpell
 ST._BuildAutocompleteCache = BuildAutocompleteCache
 ST._OnAutocompleteSelect = OnAutocompleteSelect
 ST._SearchAutocomplete = SearchAutocomplete

@@ -163,6 +163,11 @@ ST._configState = {
     autoAddFlowActive = false,
     autoAddFlowState = nil,
 
+    -- CDM aura drag bridge state (runtime only)
+    cdmDragPayload = nil,
+    cdmDragActive = false,
+    cdmDragWatcher = nil,
+
     -- Tab UI state (populated by ConfigSettings, cleaned by both files)
     tabInfoButtons = {},
     appearanceTabElements = {},
