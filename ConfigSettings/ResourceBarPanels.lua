@@ -207,11 +207,52 @@ local function ResolveAuraColorSpellIDFromText(text)
     return nil, false
 end
 
+local function IsResourceAuraOverlayEnabledConfig(resource)
+    if type(resource) ~= "table" then
+        return false
+    end
+    if type(resource.auraOverlayEnabled) == "boolean" then
+        return resource.auraOverlayEnabled
+    end
+    local auraSpellID = tonumber(resource.auraColorSpellID)
+    return auraSpellID and auraSpellID > 0 or false
+end
+
+local function GetResourceAuraTrackingModeConfig(resource)
+    if type(resource) ~= "table" then
+        return "active"
+    end
+    if resource.auraColorTrackingMode == "stacks" or resource.auraColorTrackingMode == "active" then
+        return resource.auraColorTrackingMode
+    end
+    local configured = tonumber(resource.auraColorMaxStacks)
+    if configured and configured >= 2 then
+        return "stacks"
+    end
+    return "active"
+end
+
 local function AddResourceAuraOverrideControls(container, settings, powerType, resourceName)
     if not settings.resources[powerType] then
         settings.resources[powerType] = {}
     end
     local res = settings.resources[powerType]
+
+    local enableAuraOverlayCb = AceGUI:Create("CheckBox")
+    enableAuraOverlayCb:SetLabel("Enable " .. resourceName .. " Aura Overlay")
+    enableAuraOverlayCb:SetValue(IsResourceAuraOverlayEnabledConfig(res))
+    enableAuraOverlayCb:SetFullWidth(true)
+    enableAuraOverlayCb:SetCallback("OnValueChanged", function(widget, event, val)
+        if not settings.resources[powerType] then settings.resources[powerType] = {} end
+        settings.resources[powerType].auraOverlayEnabled = (val == true)
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(enableAuraOverlayCb)
+
+    if not IsResourceAuraOverlayEnabledConfig(res) then
+        return
+    end
 
     local spellEdit = AceGUI:Create("EditBox")
     if spellEdit.editbox.Instructions then spellEdit.editbox.Instructions:Hide() end
@@ -290,44 +331,69 @@ local function AddResourceAuraOverrideControls(container, settings, powerType, r
     container:AddChild(auraColorPicker)
 
     if SupportsResourceAuraStackModeConfig(powerType) then
-        local auraStackEdit = AceGUI:Create("EditBox")
-        if auraStackEdit.editbox.Instructions then auraStackEdit.editbox.Instructions:Hide() end
-        auraStackEdit:SetLabel(resourceName .. " Aura Max Stacks")
-        auraStackEdit:SetText(res.auraColorMaxStacks and tostring(res.auraColorMaxStacks) or "")
-        auraStackEdit:SetFullWidth(true)
-        auraStackEdit:DisableButton(true)
-        auraStackEdit:SetCallback("OnEnterPressed", function(widget, event, text)
+        local trackingMode = GetResourceAuraTrackingModeConfig(res)
+        local trackDrop = AceGUI:Create("Dropdown")
+        trackDrop:SetLabel("Tracking Mode")
+        trackDrop:SetList({
+            stacks = "Stack Count",
+            active = "Active (On/Off)",
+        }, { "stacks", "active" })
+        trackDrop:SetValue(trackingMode)
+        trackDrop:SetFullWidth(true)
+        trackDrop:SetCallback("OnValueChanged", function(widget, event, val)
             if not settings.resources[powerType] then settings.resources[powerType] = {} end
-
-            local cleaned = text and text:gsub("%s", "") or ""
-            local parsed = nil
-            if cleaned ~= "" then
-                local num = tonumber(cleaned)
-                if num then
-                    num = math.floor(num)
-                    if num >= 2 then
-                        if num > 99 then num = 99 end
-                        parsed = num
-                    end
-                end
-                if not parsed then
-                    local current = settings.resources[powerType].auraColorMaxStacks
-                    widget:SetText(current and tostring(current) or "")
-                    return
+            settings.resources[powerType].auraColorTrackingMode = val
+            if val == "stacks" then
+                local current = tonumber(settings.resources[powerType].auraColorMaxStacks)
+                if not current or current < 2 then
+                    settings.resources[powerType].auraColorMaxStacks = 2
                 end
             end
-
-            settings.resources[powerType].auraColorMaxStacks = parsed
-            widget:SetText(parsed and tostring(parsed) or "")
             CooldownCompanion:ApplyResourceBars()
             CooldownCompanion:RefreshConfigPanel()
         end)
-        container:AddChild(auraStackEdit)
+        container:AddChild(trackDrop)
 
-        local auraStackHint = AceGUI:Create("Label")
-        auraStackHint:SetText("|cff888888Stack mode maps aura stacks to a bar proportion (e.g. 1/2 = half bar). Applies only to segmented/overlay resources.|r")
-        auraStackHint:SetFullWidth(true)
-        container:AddChild(auraStackHint)
+        if trackingMode ~= "active" then
+            local auraStackEdit = AceGUI:Create("EditBox")
+            if auraStackEdit.editbox.Instructions then auraStackEdit.editbox.Instructions:Hide() end
+            auraStackEdit:SetLabel(resourceName .. " Aura Max Stacks")
+            auraStackEdit:SetText(res.auraColorMaxStacks and tostring(res.auraColorMaxStacks) or "")
+            auraStackEdit:SetFullWidth(true)
+            auraStackEdit:DisableButton(true)
+            auraStackEdit:SetCallback("OnEnterPressed", function(widget, event, text)
+                if not settings.resources[powerType] then settings.resources[powerType] = {} end
+
+                local cleaned = text and text:gsub("%s", "") or ""
+                local parsed = nil
+                if cleaned ~= "" then
+                    local num = tonumber(cleaned)
+                    if num then
+                        num = math.floor(num)
+                        if num >= 2 then
+                            if num > 99 then num = 99 end
+                            parsed = num
+                        end
+                    end
+                    if not parsed then
+                        local current = settings.resources[powerType].auraColorMaxStacks
+                        widget:SetText(current and tostring(current) or "")
+                        return
+                    end
+                end
+
+                settings.resources[powerType].auraColorMaxStacks = parsed
+                widget:SetText(parsed and tostring(parsed) or "")
+                CooldownCompanion:ApplyResourceBars()
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+            container:AddChild(auraStackEdit)
+
+            local auraStackHint = AceGUI:Create("Label")
+            auraStackHint:SetText("|cff888888Stack mode maps aura stacks to a bar proportion (e.g. 1/2 = half bar). Applies only to segmented/overlay resources.|r")
+            auraStackHint:SetFullWidth(true)
+            container:AddChild(auraStackHint)
+        end
     end
 
 end
@@ -1200,8 +1266,34 @@ local function BuildResourceBarStylingPanel(container)
                 end
             end
 
-            local resourceName = POWER_NAMES_CONFIG[pt] or ("Power " .. pt)
-            AddResourceAuraOverrideControls(container, settings, pt, resourceName)
+        end
+    end
+
+    -- ============ Per-Resource Aura Overlays Section ============
+    local auraHeading = AceGUI:Create("Heading")
+    auraHeading:SetText("Per-Resource Aura Overlays")
+    ColorHeading(auraHeading)
+    auraHeading:SetFullWidth(true)
+    container:AddChild(auraHeading)
+
+    local auraKey = "rb_resource_aura_overlays"
+    local auraCollapsed = resourceBarCollapsedSections[auraKey]
+
+    AttachCollapseButton(auraHeading, auraCollapsed, function()
+        resourceBarCollapsedSections[auraKey] = not resourceBarCollapsedSections[auraKey]
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+
+    if not auraCollapsed then
+        local resources = GetConfigActiveResources()
+        for _, pt in ipairs(resources) do
+            if not settings.resources[pt] then
+                settings.resources[pt] = {}
+            end
+            if settings.resources[pt].enabled ~= false then
+                local resourceName = POWER_NAMES_CONFIG[pt] or ("Power " .. pt)
+                AddResourceAuraOverrideControls(container, settings, pt, resourceName)
+            end
         end
     end
 

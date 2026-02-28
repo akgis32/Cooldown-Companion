@@ -356,10 +356,25 @@ local function SupportsResourceAuraStackMode(powerType)
     return powerType == RESOURCE_MAELSTROM_WEAPON or SEGMENTED_TYPES[powerType] == true
 end
 
+local function GetResourceAuraTrackingMode(resource)
+    if type(resource) ~= "table" then
+        return "active"
+    end
+    if resource.auraColorTrackingMode == "stacks" or resource.auraColorTrackingMode == "active" then
+        return resource.auraColorTrackingMode
+    end
+    local configured = tonumber(resource.auraColorMaxStacks)
+    if configured and configured >= 2 then
+        return "stacks"
+    end
+    return "active"
+end
+
 local function GetResourceAuraConfiguredMaxStacks(powerType, settings)
     if not settings or not settings.resources then return nil end
     local resource = settings.resources[powerType]
     if not resource then return nil end
+    if GetResourceAuraTrackingMode(resource) ~= "stacks" then return nil end
     local configured = tonumber(resource.auraColorMaxStacks)
     if not configured then return nil end
     configured = math_floor(configured)
@@ -368,10 +383,22 @@ local function GetResourceAuraConfiguredMaxStacks(powerType, settings)
     return configured
 end
 
+local function IsResourceAuraOverlayEnabled(resource)
+    if type(resource) ~= "table" then
+        return false
+    end
+    if type(resource.auraOverlayEnabled) == "boolean" then
+        return resource.auraOverlayEnabled
+    end
+    local auraSpellID = tonumber(resource.auraColorSpellID)
+    return auraSpellID and auraSpellID > 0 or false
+end
+
 local function GetResourceAuraState(powerType, settings, auraActiveCache)
     if not settings or not settings.resources then return nil, nil, false end
     local resource = settings.resources[powerType]
     if not resource then return nil, nil, false end
+    if not IsResourceAuraOverlayEnabled(resource) then return nil, nil, false end
 
     local auraSpellID = tonumber(resource.auraColorSpellID)
     if not auraSpellID or auraSpellID <= 0 then
@@ -2162,6 +2189,10 @@ local function ApplyPreviewData()
         if not powerType then return end
 
         local resource = settings and settings.resources and settings.resources[powerType]
+        if not IsResourceAuraOverlayEnabled(resource) then
+            HideResourceAuraStackSegments(barInfo.frame)
+            return
+        end
         local auraSpellID = resource and tonumber(resource.auraColorSpellID) or nil
         local auraMaxStacks = GetResourceAuraConfiguredMaxStacks(powerType, settings)
         if not auraSpellID or auraSpellID <= 0 or not auraMaxStacks then
