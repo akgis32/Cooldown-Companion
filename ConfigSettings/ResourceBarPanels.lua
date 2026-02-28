@@ -85,6 +85,10 @@ local SEGMENTED_TYPES_CONFIG = {
     [12] = true, [16] = true, [19] = true,
 }
 
+local function SupportsResourceAuraStackModeConfig(powerType)
+    return powerType == 100 or SEGMENTED_TYPES_CONFIG[powerType] == true
+end
+
 local DEFAULT_POWER_COLORS_CONFIG = {
     [0]  = { 0, 0, 1 },
     [1]  = { 1, 0, 0 },
@@ -129,6 +133,7 @@ local DEFAULT_ARCANE_MAX_COLOR_CONFIG = { 0.1, 0.1, 0.98 }
 local DEFAULT_ESSENCE_READY_COLOR_CONFIG = { 0.851, 0.482, 0.780 }
 local DEFAULT_ESSENCE_RECHARGING_COLOR_CONFIG = { 0.490, 0.490, 0.490 }
 local DEFAULT_ESSENCE_MAX_COLOR_CONFIG = { 0.851, 0.482, 0.780 }
+local DEFAULT_RESOURCE_AURA_ACTIVE_COLOR_CONFIG = { 1, 0.84, 0 }
 
 -- Class-to-resource mapping for config UI
 local CLASS_RESOURCES_CONFIG = {
@@ -177,6 +182,154 @@ local function GetConfigActiveResources()
     end
 
     return CLASS_RESOURCES_CONFIG[classID] or {}
+end
+
+local function ResolveAuraColorSpellIDFromText(text)
+    if not text then return nil, false end
+    local cleaned = text:gsub("^%s+", ""):gsub("%s+$", "")
+    if cleaned == "" then
+        return nil, true
+    end
+
+    local numeric = tonumber(cleaned)
+    if numeric and numeric > 0 then
+        return numeric, false
+    end
+
+    local cache = auraBarAutocompleteCache or BuildAuraBarAutocompleteCache()
+    local lookup = cleaned:lower()
+    for _, entry in ipairs(cache) do
+        if entry.nameLower == lookup then
+            return entry.id, false
+        end
+    end
+
+    return nil, false
+end
+
+local function AddResourceAuraOverrideControls(container, settings, powerType, resourceName)
+    if not settings.resources[powerType] then
+        settings.resources[powerType] = {}
+    end
+    local res = settings.resources[powerType]
+
+    local spellEdit = AceGUI:Create("EditBox")
+    if spellEdit.editbox.Instructions then spellEdit.editbox.Instructions:Hide() end
+    spellEdit:SetLabel(resourceName .. " Aura (Spell ID or Name)")
+    spellEdit:SetText(res.auraColorSpellID and tostring(res.auraColorSpellID) or "")
+    spellEdit:SetFullWidth(true)
+    spellEdit:DisableButton(true)
+
+    local function onAuraSelect(entry)
+        CS.HideAutocomplete()
+        if not settings.resources[powerType] then settings.resources[powerType] = {} end
+        settings.resources[powerType].auraColorSpellID = entry.id
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end
+
+    spellEdit:SetCallback("OnEnterPressed", function(widget, event, text)
+        if CS.ConsumeAutocompleteEnter() then return end
+        CS.HideAutocomplete()
+
+        local id, explicitClear = ResolveAuraColorSpellIDFromText(text)
+        if not id and not explicitClear then
+            return
+        end
+
+        if not settings.resources[powerType] then settings.resources[powerType] = {} end
+        settings.resources[powerType].auraColorSpellID = id
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    spellEdit:SetCallback("OnTextChanged", function(widget, event, text)
+        if text and #text >= 1 then
+            local cache = auraBarAutocompleteCache or BuildAuraBarAutocompleteCache()
+            local results = CS.SearchAutocompleteInCache(text, cache)
+            CS.ShowAutocompleteResults(results, widget, onAuraSelect)
+        else
+            CS.HideAutocomplete()
+        end
+    end)
+
+    local editboxFrame = spellEdit.editbox
+    if not editboxFrame._cdcAutocompHooked then
+        editboxFrame._cdcAutocompHooked = true
+        editboxFrame:HookScript("OnKeyDown", function(self, key)
+            CS.HandleAutocompleteKeyDown(key)
+        end)
+    end
+
+    container:AddChild(spellEdit)
+
+    if res.auraColorSpellID then
+        local auraName = C_Spell.GetSpellName(res.auraColorSpellID)
+        if auraName then
+            local auraLabel = AceGUI:Create("Label")
+            auraLabel:SetText("|cff888888" .. auraName .. "|r")
+            auraLabel:SetFullWidth(true)
+            container:AddChild(auraLabel)
+        end
+    end
+
+    local auraColorPicker = AceGUI:Create("ColorPicker")
+    auraColorPicker:SetLabel(resourceName .. " Aura Active Color")
+    local auraColor = res.auraActiveColor or DEFAULT_RESOURCE_AURA_ACTIVE_COLOR_CONFIG
+    auraColorPicker:SetColor(auraColor[1], auraColor[2], auraColor[3])
+    auraColorPicker:SetHasAlpha(false)
+    auraColorPicker:SetFullWidth(true)
+    auraColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b)
+        if not settings.resources[powerType] then settings.resources[powerType] = {} end
+        settings.resources[powerType].auraActiveColor = { r, g, b }
+    end)
+    auraColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b)
+        if not settings.resources[powerType] then settings.resources[powerType] = {} end
+        settings.resources[powerType].auraActiveColor = { r, g, b }
+        CooldownCompanion:ApplyResourceBars()
+    end)
+    container:AddChild(auraColorPicker)
+
+    if SupportsResourceAuraStackModeConfig(powerType) then
+        local auraStackEdit = AceGUI:Create("EditBox")
+        if auraStackEdit.editbox.Instructions then auraStackEdit.editbox.Instructions:Hide() end
+        auraStackEdit:SetLabel(resourceName .. " Aura Max Stacks")
+        auraStackEdit:SetText(res.auraColorMaxStacks and tostring(res.auraColorMaxStacks) or "")
+        auraStackEdit:SetFullWidth(true)
+        auraStackEdit:DisableButton(true)
+        auraStackEdit:SetCallback("OnEnterPressed", function(widget, event, text)
+            if not settings.resources[powerType] then settings.resources[powerType] = {} end
+
+            local cleaned = text and text:gsub("%s", "") or ""
+            local parsed = nil
+            if cleaned ~= "" then
+                local num = tonumber(cleaned)
+                if num then
+                    num = math.floor(num)
+                    if num >= 2 then
+                        if num > 99 then num = 99 end
+                        parsed = num
+                    end
+                end
+                if not parsed then
+                    local current = settings.resources[powerType].auraColorMaxStacks
+                    widget:SetText(current and tostring(current) or "")
+                    return
+                end
+            end
+
+            settings.resources[powerType].auraColorMaxStacks = parsed
+            widget:SetText(parsed and tostring(parsed) or "")
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(auraStackEdit)
+
+        local auraStackHint = AceGUI:Create("Label")
+        auraStackHint:SetText("|cff888888Stack mode maps aura stacks to a bar proportion (e.g. 1/2 = half bar). Applies only to segmented/overlay resources.|r")
+        auraStackHint:SetFullWidth(true)
+        container:AddChild(auraStackHint)
+    end
+
 end
 
 local function BuildResourceBarAnchoringPanel(container)
@@ -1046,6 +1199,9 @@ local function BuildResourceBarStylingPanel(container)
                     container:AddChild(cp)
                 end
             end
+
+            local resourceName = POWER_NAMES_CONFIG[pt] or ("Power " .. pt)
+            AddResourceAuraOverrideControls(container, settings, pt, resourceName)
         end
     end
 

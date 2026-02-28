@@ -41,6 +41,7 @@ local DEFAULT_MW_BASE_COLOR = { 0, 0.5, 1 }
 local DEFAULT_MW_OVERLAY_COLOR = { 1, 0.84, 0 }
 local DEFAULT_MW_MAX_COLOR = { 0.5, 0.8, 1 }
 local DEFAULT_CUSTOM_AURA_MAX_COLOR = { 1, 0.84, 0 }
+local DEFAULT_RESOURCE_AURA_ACTIVE_COLOR = { 1, 0.84, 0 }
 
 local DEFAULT_POWER_COLORS = {
     [0]  = { 0, 0, 1 },              -- Mana
@@ -351,6 +352,331 @@ local function GetResourceColors(powerType, settings)
     return defaults[1]
 end
 
+local function SupportsResourceAuraStackMode(powerType)
+    return powerType == RESOURCE_MAELSTROM_WEAPON or SEGMENTED_TYPES[powerType] == true
+end
+
+local function GetResourceAuraConfiguredMaxStacks(powerType, settings)
+    if not settings or not settings.resources then return nil end
+    local resource = settings.resources[powerType]
+    if not resource then return nil end
+    local configured = tonumber(resource.auraColorMaxStacks)
+    if not configured then return nil end
+    configured = math_floor(configured)
+    if configured <= 1 then return nil end
+    if configured > 99 then configured = 99 end
+    return configured
+end
+
+local function GetResourceAuraState(powerType, settings, auraActiveCache)
+    if not settings or not settings.resources then return nil, nil, false end
+    local resource = settings.resources[powerType]
+    if not resource then return nil, nil, false end
+
+    local auraSpellID = tonumber(resource.auraColorSpellID)
+    if not auraSpellID or auraSpellID <= 0 then
+        return nil, nil, false
+    end
+
+    local cached
+    if auraActiveCache then
+        cached = auraActiveCache[auraSpellID]
+    end
+
+    if not cached then
+        cached = { active = false, applications = nil, hasApplications = false }
+
+        if C_CVar.GetCVarBool("cooldownViewerEnabled") then
+            local viewerFrame = CooldownCompanion.viewerAuraFrames and CooldownCompanion.viewerAuraFrames[auraSpellID]
+            local instId = viewerFrame and viewerFrame.auraInstanceID
+            if instId then
+                local auraData = C_UnitAuras.GetAuraDataByAuraInstanceID("player", instId)
+                if auraData then
+                    cached.active = true
+                    if type(auraData.applications) == "number" then
+                        -- applications can be secret in combat for some auras.
+                        -- Keep as pass-through only (no Lua math/comparisons).
+                        cached.applications = auraData.applications
+                        cached.hasApplications = true
+                    end
+                end
+            end
+        end
+
+        if not cached.active then
+            -- Fallback for non-CDM spell IDs. In combat, secret aura restrictions can
+            -- cause this API to return nil for some active auras.
+            local auraData = C_UnitAuras.GetPlayerAuraBySpellID(auraSpellID)
+            if auraData then
+                cached.active = true
+                if type(auraData.applications) == "number" then
+                    -- applications can be secret in combat for some auras.
+                    -- Keep as pass-through only (no Lua math/comparisons).
+                    cached.applications = auraData.applications
+                    cached.hasApplications = true
+                end
+            end
+        end
+
+        if auraActiveCache then
+            auraActiveCache[auraSpellID] = cached
+        end
+    end
+
+    if not cached.active then
+        return nil, nil, false
+    end
+
+    local color = resource.auraActiveColor
+    if type(color) ~= "table" or not color[1] or not color[2] or not color[3] then
+        color = DEFAULT_RESOURCE_AURA_ACTIVE_COLOR
+    end
+    return color, cached.applications, cached.hasApplications
+end
+
+local function HideResourceAuraStackSegments(holder)
+    if not holder or not holder.auraStackSegments then return end
+    for _, seg in ipairs(holder.auraStackSegments) do
+        seg:SetValue(0)
+        seg:Hide()
+    end
+end
+
+local function LayoutResourceAuraStackSegments(holder, settings)
+    if not holder or not holder.auraStackSegments or not holder.segments then return end
+    local barTexture = CooldownCompanion:FetchStatusBar(settings and settings.barTexture or "Solid")
+    local borderStyle = settings and settings.borderStyle or "pixel"
+    local borderSize = settings and settings.borderSize or 1
+
+    for i, auraSeg in ipairs(holder.auraStackSegments) do
+        local baseSeg = holder.segments[i]
+        if baseSeg then
+            auraSeg:ClearAllPoints()
+            if borderStyle == "pixel" then
+                auraSeg:SetPoint("TOPLEFT", baseSeg, "TOPLEFT", borderSize, -borderSize)
+                auraSeg:SetPoint("BOTTOMRIGHT", baseSeg, "BOTTOMRIGHT", -borderSize, borderSize)
+            else
+                auraSeg:SetAllPoints(baseSeg)
+            end
+            auraSeg:SetStatusBarTexture(barTexture)
+            auraSeg:SetFrameLevel(baseSeg:GetFrameLevel() + 4)
+        else
+            auraSeg:Hide()
+        end
+    end
+end
+
+local function EnsureResourceAuraStackSegments(holder, settings)
+    if not holder or not holder.segments then return nil end
+    local count = #holder.segments
+    if count == 0 then return nil end
+
+    if not holder.auraStackSegments or #holder.auraStackSegments ~= count then
+        if holder.auraStackSegments then
+            for _, oldSeg in ipairs(holder.auraStackSegments) do
+                oldSeg:SetValue(0)
+                oldSeg:ClearAllPoints()
+                oldSeg:Hide()
+            end
+        end
+        holder.auraStackSegments = {}
+        for i = 1, count do
+            local seg = CreateFrame("StatusBar", nil, holder)
+            seg:SetMinMaxValues(0, 1)
+            seg:SetValue(0)
+            seg:Hide()
+            holder.auraStackSegments[i] = seg
+        end
+    end
+
+    LayoutResourceAuraStackSegments(holder, settings)
+    return holder.auraStackSegments
+end
+
+local function CreateResourceAuraStackIndicatorBorders(parent)
+    local borders = {}
+    local sides = { "TOP", "BOTTOM", "LEFT", "RIGHT" }
+    for _, side in ipairs(sides) do
+        local tex = parent:CreateTexture(nil, "OVERLAY", nil, 7)
+        tex:SetColorTexture(1, 1, 1, 1)
+        tex:Hide()
+        borders[side] = tex
+    end
+    return borders
+end
+
+local function HideResourceAuraStackIndicatorBorders(indicator)
+    if not indicator or not indicator.borders then return end
+    for _, tex in pairs(indicator.borders) do
+        tex:Hide()
+    end
+end
+
+local function ApplyResourceAuraStackIndicatorBorders(indicator, color, size)
+    if not indicator or not indicator.borders then return end
+
+    local borderSize = size or 1
+    if borderSize < 1 then borderSize = 1 end
+
+    local r, g, b = color[1], color[2], color[3]
+    local borders = indicator.borders
+    for _, tex in pairs(borders) do
+        tex:SetColorTexture(r, g, b, 1)
+        tex:Show()
+    end
+
+    borders.TOP:ClearAllPoints()
+    borders.TOP:SetPoint("TOPLEFT", indicator, "TOPLEFT", 0, 0)
+    borders.TOP:SetPoint("TOPRIGHT", indicator, "TOPRIGHT", 0, 0)
+    borders.TOP:SetHeight(borderSize)
+
+    borders.BOTTOM:ClearAllPoints()
+    borders.BOTTOM:SetPoint("BOTTOMLEFT", indicator, "BOTTOMLEFT", 0, 0)
+    borders.BOTTOM:SetPoint("BOTTOMRIGHT", indicator, "BOTTOMRIGHT", 0, 0)
+    borders.BOTTOM:SetHeight(borderSize)
+
+    borders.LEFT:ClearAllPoints()
+    borders.LEFT:SetPoint("TOPLEFT", indicator, "TOPLEFT", 0, -borderSize)
+    borders.LEFT:SetPoint("BOTTOMLEFT", indicator, "BOTTOMLEFT", 0, borderSize)
+    borders.LEFT:SetWidth(borderSize)
+
+    borders.RIGHT:ClearAllPoints()
+    borders.RIGHT:SetPoint("TOPRIGHT", indicator, "TOPRIGHT", 0, -borderSize)
+    borders.RIGHT:SetPoint("BOTTOMRIGHT", indicator, "BOTTOMRIGHT", 0, borderSize)
+    borders.RIGHT:SetWidth(borderSize)
+end
+
+local function EnsureResourceAuraStackIndicators(holder)
+    if not holder or not holder.segments then return nil end
+    local count = #holder.segments
+    if count == 0 then return nil end
+
+    if not holder.auraStackIndicators or #holder.auraStackIndicators ~= count then
+        if holder.auraStackIndicators then
+            for _, oldIndicator in ipairs(holder.auraStackIndicators) do
+                HideResourceAuraStackIndicatorBorders(oldIndicator)
+                oldIndicator:Hide()
+            end
+        end
+        holder.auraStackIndicators = {}
+        for i = 1, count do
+            local indicator = CreateFrame("Frame", nil, holder)
+            indicator:Hide()
+            indicator.borders = CreateResourceAuraStackIndicatorBorders(indicator)
+            holder.auraStackIndicators[i] = indicator
+        end
+    end
+
+    return holder.auraStackIndicators
+end
+
+local function HideResourceAuraStackIndicators(holder)
+    if not holder or not holder.auraStackIndicators then return end
+    for _, indicator in ipairs(holder.auraStackIndicators) do
+        HideResourceAuraStackIndicatorBorders(indicator)
+        indicator:Hide()
+    end
+end
+
+local function ApplyResourceAuraStackCoverage(holder, fullSegments)
+    if not holder or not holder.auraStackSegments then return end
+    for i, auraSeg in ipairs(holder.auraStackSegments) do
+        if fullSegments and fullSegments[i] then
+            auraSeg:SetAlpha(1)
+        else
+            auraSeg:SetAlpha(0)
+        end
+        auraSeg:Show()
+    end
+end
+
+local function ApplyResourceAuraStackIndicators(holder, settings, fullSegments, color)
+    if not holder or not holder.auraStackSegments then return end
+    local indicators = EnsureResourceAuraStackIndicators(holder)
+    if not indicators then return end
+
+    local borderSize = settings and settings.borderSize or 1
+    if borderSize < 1 then borderSize = 1 end
+
+    for i, indicator in ipairs(indicators) do
+        local auraSeg = holder.auraStackSegments[i]
+        local baseSeg = holder.segments and holder.segments[i]
+
+        if not auraSeg or not baseSeg or (fullSegments and fullSegments[i]) then
+            HideResourceAuraStackIndicatorBorders(indicator)
+            indicator:Hide()
+        else
+            local fillTexture = auraSeg:GetStatusBarTexture()
+            if not fillTexture or not fillTexture:IsShown() then
+                HideResourceAuraStackIndicatorBorders(indicator)
+                indicator:Hide()
+            else
+                indicator:SetFrameLevel(baseSeg:GetFrameLevel() + 6)
+                indicator:ClearAllPoints()
+                indicator:SetPoint("TOPLEFT", auraSeg, "TOPLEFT", 0, 0)
+                indicator:SetPoint("BOTTOMLEFT", auraSeg, "BOTTOMLEFT", 0, 0)
+                indicator:SetPoint("RIGHT", fillTexture, "RIGHT", 0, 0)
+                indicator:Show()
+                ApplyResourceAuraStackIndicatorBorders(indicator, color, borderSize)
+            end
+        end
+    end
+end
+
+local function ApplyResourceAuraStackSegments(holder, settings, stackValue, maxStacks, color)
+    local auraSegments = EnsureResourceAuraStackSegments(holder, settings)
+    if not auraSegments then return end
+
+    local count = #auraSegments
+    for i = 1, count do
+        local seg = auraSegments[i]
+        local segMin = ((i - 1) * maxStacks) / count
+        local segMax = (i * maxStacks) / count
+        seg:SetMinMaxValues(segMin, segMax)
+        seg:SetValue(stackValue)
+        seg:SetAlpha(1)
+        seg:SetStatusBarColor(color[1], color[2], color[3], 1)
+        seg:Show()
+    end
+end
+
+local function ClearResourceAuraVisuals(frame)
+    if not frame then return end
+    HideResourceAuraStackSegments(frame)
+    HideResourceAuraStackIndicators(frame)
+end
+
+local function ApplyContinuousFillColor(bar, powerType, settings, overrideColor)
+    if not bar or not settings then return end
+
+    local texName = settings.barTexture or "Solid"
+    local atlasInfo = (texName == "blizzard_class") and POWER_ATLAS_INFO[powerType] or nil
+    if atlasInfo then
+        if overrideColor then
+            bar:SetStatusBarColor(overrideColor[1], overrideColor[2], overrideColor[3], 1)
+            bar.brightnessOverlay:Hide()
+            return
+        end
+
+        local brightness = settings.classBarBrightness or 1.3
+        bar:SetStatusBarColor(1, 1, 1, 1)
+        if brightness > 1.0 then
+            bar.brightnessOverlay:SetAlpha(brightness - 1.0)
+            bar.brightnessOverlay:Show()
+        elseif brightness < 1.0 then
+            bar:SetStatusBarColor(brightness, brightness, brightness, 1)
+            bar.brightnessOverlay:Hide()
+        else
+            bar.brightnessOverlay:Hide()
+        end
+        return
+    end
+
+    local color = overrideColor or GetResourceColors(powerType, settings)
+    bar:SetStatusBarColor(color[1], color[2], color[3], 1)
+    bar.brightnessOverlay:Hide()
+end
+
 --- Update cached MW max stacks based on Raging Maelstrom talent (OOC only — talents can't change in combat).
 --- Returns true if the max changed (and bars were rebuilt), false otherwise.
 local function UpdateMWMaxStacks()
@@ -617,6 +943,10 @@ local function LayoutSegments(holder, totalWidth, totalHeight, gap, settings)
             thresholdSeg:SetStatusBarTexture(barTexture)
         end
     end
+
+    if holder.auraStackSegments then
+        LayoutResourceAuraStackSegments(holder, settings)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -711,24 +1041,37 @@ local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, setti
             thresholdSeg:SetStatusBarTexture(barTexture)
         end
     end
+
+    if holder.auraStackSegments then
+        LayoutResourceAuraStackSegments(holder, settings)
+    end
 end
 
 ------------------------------------------------------------------------
 -- Update logic: Continuous resources (SECRET in combat — NO Lua arithmetic)
 ------------------------------------------------------------------------
 
-local function UpdateContinuousBar(bar, powerType)
+local function UpdateContinuousBar(bar, powerType, settings, auraActiveCache)
+    if not settings then
+        settings = GetResourceBarSettings()
+    end
+
+    local maxPower = UnitPowerMax("player", powerType)
+
     -- SetMinMaxValues: max is NOT secret
-    bar:SetMinMaxValues(0, UnitPowerMax("player", powerType))
+    bar:SetMinMaxValues(0, maxPower)
     -- SetValue: pass UnitPower directly to C-level — accepts secrets
     bar:SetValue(UnitPower("player", powerType))
+
+    local auraOverrideColor = GetResourceAuraState(powerType, settings, auraActiveCache)
+    ApplyContinuousFillColor(bar, powerType, settings, auraOverrideColor)
 
     -- Text: pass directly to C-level SetFormattedText — accepts secrets
     if bar.text and bar.text:IsShown() then
         if bar._textFormat == "current" then
             bar.text:SetFormattedText("%d", UnitPower("player", powerType))
         else
-            bar.text:SetFormattedText("%d / %d", UnitPower("player", powerType), UnitPowerMax("player", powerType))
+            bar.text:SetFormattedText("%d / %d", UnitPower("player", powerType), maxPower)
         end
     end
 
@@ -738,8 +1081,38 @@ end
 -- Update logic: Segmented resources (NOT secret — full Lua logic)
 ------------------------------------------------------------------------
 
-local function UpdateSegmentedBar(holder, powerType)
+local function UpdateSegmentedBar(holder, powerType, settings, auraActiveCache)
     if not holder or not holder.segments then return end
+    if not settings then
+        settings = GetResourceBarSettings()
+    end
+
+    local auraOverrideColor, auraApplications, auraHasApplications = GetResourceAuraState(powerType, settings, auraActiveCache)
+    local auraMaxStacks = GetResourceAuraConfiguredMaxStacks(powerType, settings)
+    local useAuraStackMode = auraOverrideColor
+        and auraMaxStacks
+        and auraHasApplications
+        and SupportsResourceAuraStackMode(powerType)
+    local fullSegments = {}
+
+    local function FinalizeAuraVisuals()
+        if auraOverrideColor and not useAuraStackMode then
+            for i, seg in ipairs(holder.segments) do
+                if fullSegments[i] then
+                    seg:SetStatusBarColor(auraOverrideColor[1], auraOverrideColor[2], auraOverrideColor[3], 1)
+                end
+            end
+        end
+
+        if useAuraStackMode then
+            ApplyResourceAuraStackSegments(holder, settings, auraApplications, auraMaxStacks, auraOverrideColor)
+            ApplyResourceAuraStackCoverage(holder, fullSegments)
+            ApplyResourceAuraStackIndicators(holder, settings, fullSegments, auraOverrideColor)
+        else
+            HideResourceAuraStackSegments(holder)
+            HideResourceAuraStackIndicators(holder)
+        end
+    end
 
     if powerType == 5 then
         -- DK Runes: sorted by readiness (ready left, longest CD right)
@@ -759,7 +1132,7 @@ local function UpdateSegmentedBar(holder, powerType)
             if a.ready ~= b.ready then return a.ready end
             return a.remaining < b.remaining
         end)
-        local readyColor, rechargingColor, maxColor = GetResourceColors(5, GetResourceBarSettings())
+        local readyColor, rechargingColor, maxColor = GetResourceColors(5, settings)
         local allReady = true
         for i = 1, numSegs do
             if not runeData[i].ready then allReady = false; break end
@@ -771,6 +1144,7 @@ local function UpdateSegmentedBar(holder, powerType)
             if r.ready then
                 seg:SetValue(1)
                 seg:SetStatusBarColor(activeReadyColor[1], activeReadyColor[2], activeReadyColor[3], 1)
+                fullSegments[i] = true
             elseif r.duration and r.duration > 0 then
                 seg:SetValue(math_min((now - r.start) / r.duration, 1))
                 seg:SetStatusBarColor(rechargingColor[1], rechargingColor[2], rechargingColor[3], 1)
@@ -779,6 +1153,7 @@ local function UpdateSegmentedBar(holder, powerType)
                 seg:SetStatusBarColor(rechargingColor[1], rechargingColor[2], rechargingColor[3], 1)
             end
         end
+        FinalizeAuraVisuals()
         return
     end
 
@@ -791,7 +1166,7 @@ local function UpdateSegmentedBar(holder, powerType)
             local perShard = rawMax / max
             local filled = math_floor(raw / perShard)
             local partial = (raw % perShard) / perShard
-            local readyColor, rechargingColor, maxColor = GetResourceColors(7, GetResourceBarSettings())
+            local readyColor, rechargingColor, maxColor = GetResourceColors(7, settings)
             local isMax = (filled == max)
             local activeReadyColor = isMax and maxColor or readyColor
             for i = 1, math_min(#holder.segments, max) do
@@ -799,6 +1174,7 @@ local function UpdateSegmentedBar(holder, powerType)
                 if i <= filled then
                     seg:SetValue(1)
                     seg:SetStatusBarColor(activeReadyColor[1], activeReadyColor[2], activeReadyColor[3], 1)
+                    fullSegments[i] = true
                 elseif i == filled + 1 and partial > 0 then
                     seg:SetValue(partial)
                     seg:SetStatusBarColor(rechargingColor[1], rechargingColor[2], rechargingColor[3], 1)
@@ -808,6 +1184,7 @@ local function UpdateSegmentedBar(holder, powerType)
                 end
             end
         end
+        FinalizeAuraVisuals()
         return
     end
 
@@ -816,7 +1193,7 @@ local function UpdateSegmentedBar(holder, powerType)
         local filled = UnitPower("player", 19)
         local max = UnitPowerMax("player", 19)
         local partial = UnitPartialPower("player", 19) / 1000
-        local readyColor, rechargingColor, maxColor = GetResourceColors(19, GetResourceBarSettings())
+        local readyColor, rechargingColor, maxColor = GetResourceColors(19, settings)
         local isMax = (filled == max)
         local activeReadyColor = isMax and maxColor or readyColor
         for i = 1, math_min(#holder.segments, max) do
@@ -824,6 +1201,7 @@ local function UpdateSegmentedBar(holder, powerType)
             if i <= filled then
                 seg:SetValue(1)
                 seg:SetStatusBarColor(activeReadyColor[1], activeReadyColor[2], activeReadyColor[3], 1)
+                fullSegments[i] = true
             elseif i == filled + 1 and partial > 0 then
                 seg:SetValue(partial)
                 seg:SetStatusBarColor(rechargingColor[1], rechargingColor[2], rechargingColor[3], 1)
@@ -832,6 +1210,7 @@ local function UpdateSegmentedBar(holder, powerType)
                 seg:SetStatusBarColor(rechargingColor[1], rechargingColor[2], rechargingColor[3], 1)
             end
         end
+        FinalizeAuraVisuals()
         return
     end
 
@@ -839,7 +1218,7 @@ local function UpdateSegmentedBar(holder, powerType)
     if powerType == 4 then
         local current = UnitPower("player", 4)
         local max = UnitPowerMax("player", 4)
-        local normalColor, maxColor, chargedColor = GetResourceColors(4, GetResourceBarSettings())
+        local normalColor, maxColor, chargedColor = GetResourceColors(4, settings)
         local isMax = (current == max and max > 0)
         local baseColor = isMax and maxColor or normalColor
 
@@ -853,6 +1232,7 @@ local function UpdateSegmentedBar(holder, powerType)
             local seg = holder.segments[i]
             if i <= current then
                 seg:SetValue(1)
+                fullSegments[i] = true
                 if chargedPoints and tContains(chargedPoints, i) then
                     seg:SetStatusBarColor(chargedColor[1], chargedColor[2], chargedColor[3], 1)
                 else
@@ -862,6 +1242,7 @@ local function UpdateSegmentedBar(holder, powerType)
                 seg:SetValue(0)
             end
         end
+        FinalizeAuraVisuals()
         return
     end
 
@@ -870,9 +1251,9 @@ local function UpdateSegmentedBar(holder, powerType)
     local max = UnitPowerMax("player", powerType)
     local normalColor, maxColor
     if RESOURCE_COLOR_DEFS[powerType] then
-        normalColor, maxColor = GetResourceColors(powerType, GetResourceBarSettings())
+        normalColor, maxColor = GetResourceColors(powerType, settings)
     else
-        local color = GetResourceColors(powerType, GetResourceBarSettings())
+        local color = GetResourceColors(powerType, settings)
         normalColor, maxColor = color, color
     end
     local isMax = (current == max and max > 0)
@@ -882,18 +1263,23 @@ local function UpdateSegmentedBar(holder, powerType)
         if i <= current then
             seg:SetValue(1)
             seg:SetStatusBarColor(activeColor[1], activeColor[2], activeColor[3], 1)
+            fullSegments[i] = true
         else
             seg:SetValue(0)
         end
     end
+    FinalizeAuraVisuals()
 end
 
 ------------------------------------------------------------------------
 -- Update logic: Maelstrom Weapon (overlay bar, plain applications)
 ------------------------------------------------------------------------
 
-local function UpdateMaelstromWeaponBar(holder)
+local function UpdateMaelstromWeaponBar(holder, settings, auraActiveCache)
     if not holder or not holder.segments then return end
+    if not settings then
+        settings = GetResourceBarSettings()
+    end
 
     -- Read stacks from viewer frame (applications is plain for MW)
     local stacks = 0
@@ -906,26 +1292,53 @@ local function UpdateMaelstromWeaponBar(holder)
         end
     end
 
-    -- Pass stacks to all segments (StatusBar C-level clamping handles fill)
     local half = #holder.segments
+    local baseColor, overlayColor, maxColor = GetResourceColors(100, settings)
+    local isMax = stacks > 0 and stacks == mwMaxStacks
+    local fullSegments = {}
+
     for i = 1, half do
-        holder.segments[i]:SetValue(stacks)
-        holder.overlaySegments[i]:SetValue(stacks)
+        local baseSeg = holder.segments[i]
+        local overlaySeg = holder.overlaySegments[i]
+
+        baseSeg:SetValue(stacks)
+        overlaySeg:SetValue(stacks)
+
+        if isMax then
+            baseSeg:SetStatusBarColor(maxColor[1], maxColor[2], maxColor[3], 1)
+            overlaySeg:SetStatusBarColor(maxColor[1], maxColor[2], maxColor[3], 1)
+        else
+            baseSeg:SetStatusBarColor(baseColor[1], baseColor[2], baseColor[3], 1)
+            overlaySeg:SetStatusBarColor(overlayColor[1], overlayColor[2], overlayColor[3], 1)
+        end
+
+        if stacks >= i then
+            fullSegments[i] = true
+        end
     end
 
-    -- Color: direct comparison is safe since MW applications are plain
-    local baseColor, overlayColor, maxColor = GetResourceColors(100, GetResourceBarSettings())
-    local isMax = stacks > 0 and stacks == mwMaxStacks
-    if isMax then
+    local auraOverrideColor, auraApplications, auraHasApplications = GetResourceAuraState(100, settings, auraActiveCache)
+    local auraMaxStacks = GetResourceAuraConfiguredMaxStacks(100, settings)
+    local useAuraStackMode = auraOverrideColor and auraMaxStacks and auraHasApplications and SupportsResourceAuraStackMode(100)
+
+    if auraOverrideColor and not useAuraStackMode then
         for i = 1, half do
-            holder.segments[i]:SetStatusBarColor(maxColor[1], maxColor[2], maxColor[3], 1)
-            holder.overlaySegments[i]:SetStatusBarColor(maxColor[1], maxColor[2], maxColor[3], 1)
+            if stacks >= i then
+                holder.segments[i]:SetStatusBarColor(auraOverrideColor[1], auraOverrideColor[2], auraOverrideColor[3], 1)
+            end
+            if stacks >= (half + i) then
+                holder.overlaySegments[i]:SetStatusBarColor(auraOverrideColor[1], auraOverrideColor[2], auraOverrideColor[3], 1)
+            end
         end
+    end
+
+    if useAuraStackMode then
+        ApplyResourceAuraStackSegments(holder, settings, auraApplications, auraMaxStacks, auraOverrideColor)
+        ApplyResourceAuraStackCoverage(holder, fullSegments)
+        ApplyResourceAuraStackIndicators(holder, settings, fullSegments, auraOverrideColor)
     else
-        for i = 1, half do
-            holder.segments[i]:SetStatusBarColor(baseColor[1], baseColor[2], baseColor[3], 1)
-            holder.overlaySegments[i]:SetStatusBarColor(overlayColor[1], overlayColor[2], overlayColor[3], 1)
-        end
+        HideResourceAuraStackSegments(holder)
+        HideResourceAuraStackIndicators(holder)
     end
 end
 
@@ -962,7 +1375,6 @@ local function UpdateCustomAuraBar(barInfo)
             end
         end
     end
-
 
     -- Hide When Inactive: hide the bar frame when aura is absent
     if cabConfig.hideWhenInactive then
@@ -1256,14 +1668,17 @@ local function OnUpdate(self, elapsed)
 
     if isPreviewActive then return end
 
+    local settings = GetResourceBarSettings()
+    local auraActiveCache = {}
+
     for _, barInfo in ipairs(resourceBarFrames) do
         if barInfo.frame and barInfo.frame:IsShown() then
             if barInfo.barType == "continuous" then
-                UpdateContinuousBar(barInfo.frame, barInfo.powerType)
+                UpdateContinuousBar(barInfo.frame, barInfo.powerType, settings, auraActiveCache)
             elseif barInfo.barType == "segmented" then
-                UpdateSegmentedBar(barInfo.frame, barInfo.powerType)
+                UpdateSegmentedBar(barInfo.frame, barInfo.powerType, settings, auraActiveCache)
             elseif barInfo.barType == "mw_segmented" then
-                UpdateMaelstromWeaponBar(barInfo.frame)
+                UpdateMaelstromWeaponBar(barInfo.frame, settings, auraActiveCache)
             elseif barInfo.barType == "custom_continuous"
                 or barInfo.barType == "custom_segmented"
                 or barInfo.barType == "custom_overlay" then
@@ -1357,44 +1772,23 @@ end
 
 local function StyleContinuousBar(bar, powerType, settings)
     local texName = settings.barTexture or "Solid"
-    local atlasInfo = nil
-    local useAtlas = false
 
     if texName == "blizzard_class" then
-        atlasInfo = POWER_ATLAS_INFO[powerType]
+        local atlasInfo = POWER_ATLAS_INFO[powerType]
         if atlasInfo then
-            useAtlas = true
             bar:SetStatusBarTexture(atlasInfo.atlas)
-            bar:SetStatusBarColor(1, 1, 1)  -- white so atlas colors show through
-
-            -- Brightness overlay: additive layer over the fill for brightness > 1.0
-            local brightness = settings.classBarBrightness or 1.3
             local fillTexture = bar:GetStatusBarTexture()
             bar.brightnessOverlay:SetAllPoints(fillTexture)
             bar.brightnessOverlay:SetAtlas(atlasInfo.atlas)
-            if brightness > 1.0 then
-                bar.brightnessOverlay:SetAlpha(brightness - 1.0)
-                bar.brightnessOverlay:Show()
-            elseif brightness < 1.0 then
-                bar:SetStatusBarColor(brightness, brightness, brightness)
-                bar.brightnessOverlay:Hide()
-            else
-                bar.brightnessOverlay:Hide()
-            end
         else
             -- Fallback for power types without class-specific atlas
             bar:SetStatusBarTexture(CooldownCompanion:FetchStatusBar("Blizzard"))
-            local color = GetResourceColors(powerType, settings)
-            bar:SetStatusBarColor(color[1], color[2], color[3], 1)
-            bar.brightnessOverlay:Hide()
         end
     else
         bar:SetStatusBarTexture(CooldownCompanion:FetchStatusBar(texName))
-        local color = GetResourceColors(powerType, settings)
-        bar:SetStatusBarColor(color[1], color[2], color[3], 1)
-        bar.brightnessOverlay:Hide()
     end
 
+    ApplyContinuousFillColor(bar, powerType, settings, nil)
 
     local bgc = settings.backgroundColor or { 0, 0, 0, 0.5 }
     bar.bg:SetColorTexture(bgc[1], bgc[2], bgc[3], bgc[4])
@@ -1527,6 +1921,7 @@ function CooldownCompanion:ApplyResourceBars()
     -- Hide existing bars that we don't need
     for i = #filtered + 1, #resourceBarFrames do
         if resourceBarFrames[i] and resourceBarFrames[i].frame then
+            ClearResourceAuraVisuals(resourceBarFrames[i].frame)
             resourceBarFrames[i].frame:Hide()
             if resourceBarFrames[i].frame.brightnessOverlay then
                 resourceBarFrames[i].frame.brightnessOverlay:Hide()
@@ -1558,7 +1953,10 @@ function CooldownCompanion:ApplyResourceBars()
 
             if not barInfo or barInfo.barType ~= "mw_segmented"
                 or #barInfo.frame.segments ~= halfSegments then
-                if barInfo and barInfo.frame then barInfo.frame:Hide() end
+                if barInfo and barInfo.frame then
+                    ClearResourceAuraVisuals(barInfo.frame)
+                    barInfo.frame:Hide()
+                end
                 local holder = CreateOverlayBar(targetContainer, halfSegments)
                 barInfo = { frame = holder, barType = "mw_segmented", powerType = powerType }
                 resourceBarFrames[idx] = barInfo
@@ -1596,7 +1994,10 @@ function CooldownCompanion:ApplyResourceBars()
             end
 
             if needsRecreate then
-                if barInfo and barInfo.frame then barInfo.frame:Hide() end
+                if barInfo and barInfo.frame then
+                    ClearResourceAuraVisuals(barInfo.frame)
+                    barInfo.frame:Hide()
+                end
                 if mode == "continuous" then
                     local bar = CreateContinuousBar(targetContainer)
                     bar:SetMinMaxValues(0, maxStacks)
@@ -1674,6 +2075,7 @@ function CooldownCompanion:ApplyResourceBars()
             if not barInfo or barInfo.barType ~= "segmented"
                 or barInfo.frame._numSegments ~= max then
                 if barInfo and barInfo.frame then
+                    ClearResourceAuraVisuals(barInfo.frame)
                     barInfo.frame:Hide()
                 end
                 local holder = CreateSegmentedBar(targetContainer, max)
@@ -1690,6 +2092,7 @@ function CooldownCompanion:ApplyResourceBars()
             -- Continuous bar
             if not barInfo or barInfo.barType ~= "continuous" then
                 if barInfo and barInfo.frame then
+                    ClearResourceAuraVisuals(barInfo.frame)
                     barInfo.frame:Hide()
                 end
                 local bar = CreateContinuousBar(targetContainer)
@@ -1817,6 +2220,7 @@ function CooldownCompanion:RevertResourceBars()
     -- Hide all bars
     for _, barInfo in ipairs(resourceBarFrames) do
         if barInfo.frame then
+            ClearResourceAuraVisuals(barInfo.frame)
             barInfo.frame:Hide()
             if barInfo.frame.brightnessOverlay then
                 barInfo.frame.brightnessOverlay:Hide()
@@ -1884,6 +2288,7 @@ end
 local function ApplyPreviewData()
     for _, barInfo in ipairs(resourceBarFrames) do
         if barInfo.frame and barInfo.frame:IsShown() then
+            ClearResourceAuraVisuals(barInfo.frame)
             if barInfo.barType == "continuous" then
                 barInfo.frame:SetMinMaxValues(0, 100)
                 barInfo.frame:SetValue(65)
