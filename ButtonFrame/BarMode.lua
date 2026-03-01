@@ -705,6 +705,7 @@ function CooldownCompanion:CreateBarFrame(parent, index, buttonData, style)
 
     button._auraInstanceID = nil
     button._viewerBar = nil
+    button._viewerAuraVisualsActive = nil
 
     -- Per-button visibility runtime state
     button._visibilityHidden = false
@@ -846,6 +847,7 @@ function CooldownCompanion:UpdateBarStyle(button, newStyle)
     button._auraInstanceID = nil
     button._viewerBar = nil
     button._inPandemic = nil
+    button._viewerAuraVisualsActive = nil
     button._auraSpellID = CooldownCompanion:ResolveAuraSpellID(button.buttonData)
     button._auraUnit = button.buttonData.auraUnit or "player"
     button._auraStackText = nil

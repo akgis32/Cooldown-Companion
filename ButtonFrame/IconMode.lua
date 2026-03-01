@@ -229,6 +229,7 @@ function CooldownCompanion:CreateButtonFrame(parent, index, buttonData, style)
     button._auraActive = false
 
     button._auraInstanceID = nil
+    button._viewerAuraVisualsActive = nil
 
     -- Per-button visibility runtime state
     button._visibilityHidden = false
@@ -624,6 +625,7 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
 
     button._auraInstanceID = nil
     button._inPandemic = nil
+    button._viewerAuraVisualsActive = nil
     button._auraSpellID = CooldownCompanion:ResolveAuraSpellID(button.buttonData)
     button._auraUnit = button.buttonData.auraUnit or "player"
     button._auraStackText = nil
@@ -844,18 +846,7 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
 
     -- Set tooltip scripts when tooltips are enabled (regardless of click-through)
     if showTooltips then
-        button:SetScript("OnEnter", function(self)
-            GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)
-            if self.buttonData.type == "spell" then
-                GameTooltip:SetSpellByID(self._displaySpellId or self.buttonData.id)
-            elseif self.buttonData.type == "item" then
-                GameTooltip:SetItemByID(self.buttonData.id)
-            end
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function(self)
-            GameTooltip:Hide()
-        end)
+        SetupTooltipScripts(button)
     end
 end
 

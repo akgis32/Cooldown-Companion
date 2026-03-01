@@ -112,17 +112,26 @@ CooldownCompanion.ABILITY_BUFF_OVERRIDES = {
 -------------------------------------------------------------------------------
 
 -- Shared helper: scan a list of viewer frames for a child matching spellID.
--- Checks cooldownInfo.spellID, overrideSpellID, and overrideTooltipSpellID.
+-- Checks cooldownInfo spell associations used by CDM (base, overrides, linked).
 local function FindChildInViewers(viewerNames, spellID)
     for _, name in ipairs(viewerNames) do
         local viewer = _G[name]
         if viewer then
             for _, child in pairs({viewer:GetChildren()}) do
-                if child.cooldownInfo then
-                    if child.cooldownInfo.spellID == spellID
-                       or child.cooldownInfo.overrideSpellID == spellID
-                       or child.cooldownInfo.overrideTooltipSpellID == spellID then
+                local info = child.cooldownInfo
+                if info then
+                    if info.spellID == spellID
+                       or info.overrideSpellID == spellID
+                       or info.overrideTooltipSpellID == spellID
+                       or info.linkedSpellID == spellID then
                         return child
+                    end
+                    if info.linkedSpellIDs then
+                        for _, linkedSpellID in ipairs(info.linkedSpellIDs) do
+                            if linkedSpellID == spellID then
+                                return child
+                            end
+                        end
                     end
                 end
             end
@@ -166,8 +175,9 @@ function CooldownCompanion:BuildViewerAuraMap()
         local viewer = _G[name]
         if viewer then
             for _, child in pairs({viewer:GetChildren()}) do
-                if child.cooldownInfo then
-                    local spellID = child.cooldownInfo.spellID
+                local info = child.cooldownInfo
+                if info then
+                    local spellID = info.spellID
                     if spellID then
                         self.viewerAuraFrames[spellID] = child
                         -- Track all children per base spellID for buff viewers only.
@@ -181,13 +191,22 @@ function CooldownCompanion:BuildViewerAuraMap()
                             table.insert(self.viewerAuraAllChildren[spellID], child)
                         end
                     end
-                    local override = child.cooldownInfo.overrideSpellID
+                    local override = info.overrideSpellID
                     if override then
                         self.viewerAuraFrames[override] = child
                     end
-                    local tooltipOverride = child.cooldownInfo.overrideTooltipSpellID
+                    local tooltipOverride = info.overrideTooltipSpellID
                     if tooltipOverride then
                         self.viewerAuraFrames[tooltipOverride] = child
+                    end
+                    local linkedSpellID = info.linkedSpellID
+                    if linkedSpellID then
+                        self.viewerAuraFrames[linkedSpellID] = child
+                    end
+                    if info.linkedSpellIDs then
+                        for _, linked in ipairs(info.linkedSpellIDs) do
+                            self.viewerAuraFrames[linked] = child
+                        end
                     end
                 end
             end

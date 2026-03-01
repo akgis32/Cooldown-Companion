@@ -604,8 +604,6 @@ local function CreateGlowContainer(parent, overhang)
     return container
 end
 
--- Setup tooltip OnEnter/OnLeave scripts on a button frame.
--- Shared between icon-mode (CreateButtonFrame) and bar-mode (CreateBarFrame).
 -- Returns the raw Applications FontString text from a viewer frame.
 -- The text is a secret value in combat, so return it as-is for pass-through
 -- to SetText(). Blizzard sets it to "" when stacks <= 1 and to the count
@@ -622,6 +620,8 @@ local function GetViewerAuraStackText(viewerFrame)
     return ""
 end
 
+-- Setup tooltip OnEnter/OnLeave scripts on a button frame.
+-- Shared between icon-mode (CreateButtonFrame) and style refreshes.
 local function SetupTooltipScripts(button)
     button:SetScript("OnEnter", function(self)
         GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)

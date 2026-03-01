@@ -38,6 +38,21 @@ local IsConfigButtonForceVisible = ST.IsConfigButtonForceVisible
 -- IsItemEquippable from Helpers (exported on CooldownCompanion)
 local IsItemEquippable = CooldownCompanion.IsItemEquippable
 
+local function GetViewerIconTexture(viewerFrame)
+    local iconTexture = viewerFrame and viewerFrame.Icon
+    -- BuffBar uses an icon frame with a nested texture widget.
+    if iconTexture and not iconTexture.GetTextureFileID then
+        iconTexture = iconTexture.Icon
+    end
+    return iconTexture
+end
+
+local function GetViewerNameFontString(viewerFrame)
+    -- BuffBar viewer items render name text on Bar.Name. BuffIcon entries have no name text.
+    local bar = viewerFrame and viewerFrame.Bar
+    return bar and bar.Name or nil
+end
+
 function CooldownCompanion:UpdateButtonCooldown(button)
     local buttonData = button.buttonData
     local style = button.style
@@ -131,6 +146,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                     button._viewerBar = nil  -- primary path: DurationObject available
                     button.cooldown:SetCooldownFromDurationObject(durationObj)
                     button._auraInstanceID = viewerInstId
+                    button._auraUnit = unit
                     auraOverrideActive = true
                     fetchOk = true
                 end
@@ -147,12 +163,14 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                             button.cooldown:SetCooldown(startMs / 1000, durMs / 1000)
                             auraOverrideActive = true
                             fetchOk = true
+                            button._auraUnit = viewerFrame.auraDataUnit or auraUnit
                         end
                     else
                         -- Secret values: can't convert ms->s. Mark aura active;
                         -- grace period covers continuity from previous tick's display.
                         auraOverrideActive = true
                         fetchOk = true
+                        button._auraUnit = viewerFrame.auraDataUnit or auraUnit
                     end
                     if button._auraInstanceID then
                         button._auraInstanceID = nil
@@ -226,6 +244,9 @@ function CooldownCompanion:UpdateButtonCooldown(button)
             button._auraGraceTicks = nil
         end
         button._auraActive = auraOverrideActive
+        if not auraOverrideActive then
+            button._auraInstanceID = nil
+        end
 
         -- Read aura stack text from viewer frame (combat-safe, secret pass-through)
         if buttonData.auraTracking or buttonData.isPassive then
@@ -253,32 +274,33 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         end
         button._inPandemic = inPandemic
 
-        -- Dynamic icon for multi-CDM-child buttons: pass through the viewer
-        -- child's rendered icon texture each tick. SetTexture accepts secret
-        -- values (GetTextureFileID returns secret in combat). Only needed for
-        -- cdmChildSlot buttons where multiple children share the same base
-        -- spellID — single-child buttons get correct icons from UpdateButtonIcon.
-        if buttonData.cdmChildSlot then
-            if auraOverrideActive and viewerFrame then
-                local iconTexture = viewerFrame.Icon
-                -- BuffBar: viewerFrame.Icon is a Frame; the Texture is .Icon.Icon
-                if iconTexture and not iconTexture.GetTextureFileID then
-                    iconTexture = iconTexture.Icon
-                end
-                if iconTexture then
+        -- Pass through the CDM item's current aura visuals when aura tracking is
+        -- active. This mirrors CDM state-based icons/names (e.g. Light/Moderate/Heavy).
+        if auraOverrideActive then
+            if viewerFrame then
+                local iconTexture = GetViewerIconTexture(viewerFrame)
+                if iconTexture and iconTexture.GetTextureFileID then
                     button.icon:SetTexture(iconTexture:GetTextureFileID())
                 end
-                button._hadViewerIcon = true
-            elseif not auraOverrideActive and button._hadViewerIcon then
-                button._hadViewerIcon = nil
-                local baseIcon = C_Spell.GetSpellTexture(buttonData.id)
-                if baseIcon then
-                    button.icon:SetTexture(baseIcon)
-                    button._displaySpellId = buttonData.id
-                    if button.nameText then
-                        local baseName = C_Spell.GetSpellName(buttonData.id)
-                        if baseName then button.nameText:SetText(baseName) end
-                    end
+                local viewerName = GetViewerNameFontString(viewerFrame)
+                if button.nameText and not buttonData.customName and viewerName and viewerName.GetText then
+                    -- Pass through the CDM-rendered text directly; avoid calling viewer mixin methods
+                    -- from tainted code (they can execute secret-value logic internally).
+                    button.nameText:SetText(viewerName:GetText())
+                end
+                button._viewerAuraVisualsActive = true
+            end
+        elseif button._viewerAuraVisualsActive then
+            button._viewerAuraVisualsActive = nil
+            local restoreSpellID = button._displaySpellId or buttonData.id
+            local baseIcon = C_Spell.GetSpellTexture(restoreSpellID)
+            if baseIcon then
+                button.icon:SetTexture(baseIcon)
+            end
+            if button.nameText and not buttonData.customName then
+                local baseName = C_Spell.GetSpellName(restoreSpellID)
+                if baseName then
+                    button.nameText:SetText(baseName)
                 end
             end
         end
