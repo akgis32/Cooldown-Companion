@@ -47,6 +47,7 @@ local DEFAULT_MW_MAX_COLOR = { 0.5, 0.8, 1 }
 local DEFAULT_CUSTOM_AURA_MAX_COLOR = { 1, 0.84, 0 }
 local DEFAULT_RESOURCE_AURA_ACTIVE_COLOR = { 1, 0.84, 0 }
 local DEFAULT_RESOURCE_TEXT_FORMAT = "current"
+local DEFAULT_CUSTOM_AURA_STACK_TEXT_FORMAT = "current_max"
 local DEFAULT_RESOURCE_TEXT_FONT = "Friz Quadrata TT"
 local DEFAULT_RESOURCE_TEXT_SIZE = 10
 local DEFAULT_RESOURCE_TEXT_OUTLINE = "OUTLINE"
@@ -254,6 +255,13 @@ local function GetSpecCustomAuraBars(settings)
         }
     end
     return settings.customAuraBars[specID]
+end
+
+local function NormalizeCustomAuraStackTextFormat(textFormat)
+    if textFormat == "current" or textFormat == "current_max" then
+        return textFormat
+    end
+    return DEFAULT_CUSTOM_AURA_STACK_TEXT_FORMAT
 end
 
 local function IsHealerSpec()
@@ -1350,7 +1358,12 @@ local function UpdateCustomAuraBar(barInfo)
                 if isActive then
                     bar.stackText:SetFormattedText("%d", applications)
                 else
-                    bar.stackText:SetFormattedText("%d / %d", stacks, maxStacks)
+                    local stackTextFormat = NormalizeCustomAuraStackTextFormat(cabConfig.stackTextFormat)
+                    if stackTextFormat == "current" then
+                        bar.stackText:SetFormattedText("%d", stacks)
+                    else
+                        bar.stackText:SetFormattedText("%d / %d", stacks, maxStacks)
+                    end
                 end
             else
                 bar.stackText:SetText("")
@@ -2319,7 +2332,12 @@ local function ApplyPreviewData()
                     if isActive then
                         barInfo.frame.stackText:SetFormattedText("%d", 3)
                     else
-                        barInfo.frame.stackText:SetFormattedText("%d / %d", previewValue, maxStacks)
+                        local stackTextFormat = NormalizeCustomAuraStackTextFormat(cabConfig and cabConfig.stackTextFormat)
+                        if stackTextFormat == "current" then
+                            barInfo.frame.stackText:SetFormattedText("%d", previewValue)
+                        else
+                            barInfo.frame.stackText:SetFormattedText("%d / %d", previewValue, maxStacks)
+                        end
                     end
                 end
             elseif barInfo.barType == "custom_segmented" then

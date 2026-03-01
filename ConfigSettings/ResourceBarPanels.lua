@@ -136,6 +136,7 @@ local DEFAULT_ESSENCE_RECHARGING_COLOR_CONFIG = { 0.490, 0.490, 0.490 }
 local DEFAULT_ESSENCE_MAX_COLOR_CONFIG = { 0.851, 0.482, 0.780 }
 local DEFAULT_RESOURCE_AURA_ACTIVE_COLOR_CONFIG = { 1, 0.84, 0 }
 local DEFAULT_RESOURCE_TEXT_FORMAT_CONFIG = "current"
+local DEFAULT_CUSTOM_AURA_STACK_TEXT_FORMAT_CONFIG = "current_max"
 local DEFAULT_RESOURCE_TEXT_FONT_CONFIG = "Friz Quadrata TT"
 local DEFAULT_RESOURCE_TEXT_SIZE_CONFIG = 10
 local DEFAULT_RESOURCE_TEXT_OUTLINE_CONFIG = "OUTLINE"
@@ -1737,6 +1738,32 @@ local function BuildCustomAuraBarPanel(container)
 
                     local stackAdvExpanded = AddAdvancedToggle(stackTextCb, "rbCabStackText_" .. capturedIdx, rbCabTextAdvBtns, showStack)
                     if stackAdvExpanded and showStack then
+                        if not isActive then
+                            local stackTextFormatDrop = AceGUI:Create("Dropdown")
+                            stackTextFormatDrop:SetLabel("Text Format")
+                            local stackTextFormatOptions = {
+                                current = "Current Value",
+                                current_max = "Current / Max",
+                            }
+                            local stackTextFormatOrder = { "current", "current_max" }
+                            stackTextFormatDrop:SetList(stackTextFormatOptions, stackTextFormatOrder)
+                            local stackTextFormatValue = cab.stackTextFormat or DEFAULT_CUSTOM_AURA_STACK_TEXT_FORMAT_CONFIG
+                            if stackTextFormatValue ~= "current" and stackTextFormatValue ~= "current_max" then
+                                stackTextFormatValue = DEFAULT_CUSTOM_AURA_STACK_TEXT_FORMAT_CONFIG
+                            end
+                            stackTextFormatDrop:SetValue(stackTextFormatValue)
+                            stackTextFormatDrop:SetFullWidth(true)
+                            stackTextFormatDrop:SetCallback("OnValueChanged", function(widget, event, val)
+                                if val == "current" or val == "current_max" then
+                                    customBars[cabIdx].stackTextFormat = val
+                                else
+                                    customBars[cabIdx].stackTextFormat = DEFAULT_CUSTOM_AURA_STACK_TEXT_FORMAT_CONFIG
+                                end
+                                CooldownCompanion:ApplyResourceBars()
+                            end)
+                            container:AddChild(stackTextFormatDrop)
+                        end
+
                         local fontDrop = AceGUI:Create("Dropdown")
                         fontDrop:SetLabel("Stack Font")
                         CS.SetupFontDropdown(fontDrop)
