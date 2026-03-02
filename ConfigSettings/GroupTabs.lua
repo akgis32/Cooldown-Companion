@@ -593,6 +593,19 @@ local function BuildEffectsTab(container)
         CreateCheckboxPromoteButton(procEnableCb, procAdvBtn, "procGlow", group, style)
     end
 
+    if style.procGlowStyle ~= "none" then
+        local procCombatCb = AceGUI:Create("CheckBox")
+        procCombatCb:SetLabel("Show Only In Combat")
+        procCombatCb:SetValue(style.procGlowCombatOnly or false)
+        procCombatCb:SetFullWidth(true)
+        procCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+            style.procGlowCombatOnly = val
+            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        end)
+        container:AddChild(procCombatCb)
+        ApplyCheckboxIndent(procCombatCb, 20)
+    end
+
     if procAdvExpanded and style.procGlowStyle ~= "none" then
     BuildProcGlowControls(container, style, function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
@@ -605,17 +618,6 @@ local function BuildEffectsTab(container)
         CooldownCompanion:PlayGroupProcGlowPreview(CS.selectedGroup, 3)
     end)
     container:AddChild(procPreviewBtn)
-
-    local procCombatCb = AceGUI:Create("CheckBox")
-    procCombatCb:SetLabel("Show Only In Combat")
-    procCombatCb:SetValue(style.procGlowCombatOnly or false)
-    procCombatCb:SetFullWidth(true)
-    procCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
-        style.procGlowCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
-    container:AddChild(procCombatCb)
-    ApplyCheckboxIndent(procCombatCb, 20)
     else
     CooldownCompanion:SetGroupProcGlowPreview(CS.selectedGroup, false)
     end -- procAdvExpanded
@@ -637,6 +639,19 @@ local function BuildEffectsTab(container)
     local auraAdvExpanded, auraAdvBtn = AddAdvancedToggle(auraEnableCb, "auraGlow", tabInfoButtons, style.auraGlowStyle ~= "none")
     CreateCheckboxPromoteButton(auraEnableCb, auraAdvBtn, "auraIndicator", group, style)
 
+    if style.auraGlowStyle ~= "none" then
+        local auraCombatCb = AceGUI:Create("CheckBox")
+        auraCombatCb:SetLabel("Show Only In Combat")
+        auraCombatCb:SetValue(style.auraGlowCombatOnly or false)
+        auraCombatCb:SetFullWidth(true)
+        auraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+            style.auraGlowCombatOnly = val
+            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        end)
+        container:AddChild(auraCombatCb)
+        ApplyCheckboxIndent(auraCombatCb, 20)
+    end
+
     if auraAdvExpanded and style.auraGlowStyle ~= "none" then
     BuildAuraIndicatorControls(container, style, function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
@@ -649,17 +664,6 @@ local function BuildEffectsTab(container)
         CooldownCompanion:PlayGroupAuraGlowPreview(CS.selectedGroup, 3)
     end)
     container:AddChild(auraPreviewBtn)
-
-    local auraCombatCb = AceGUI:Create("CheckBox")
-    auraCombatCb:SetLabel("Show Only In Combat")
-    auraCombatCb:SetValue(style.auraGlowCombatOnly or false)
-    auraCombatCb:SetFullWidth(true)
-    auraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
-        style.auraGlowCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
-    container:AddChild(auraCombatCb)
-    ApplyCheckboxIndent(auraCombatCb, 20)
     else
     CooldownCompanion:SetGroupAuraGlowPreview(CS.selectedGroup, false)
     end -- auraAdvExpanded
@@ -681,6 +685,19 @@ local function BuildEffectsTab(container)
     local pandemicAdvExpanded, pandemicAdvBtn = AddAdvancedToggle(pandemicGlowCb, "pandemicGlow", tabInfoButtons, style.showPandemicGlow ~= false)
     CreateCheckboxPromoteButton(pandemicGlowCb, pandemicAdvBtn, "pandemicGlow", group, style)
 
+    if style.showPandemicGlow ~= false then
+        local pandemicCombatCb = AceGUI:Create("CheckBox")
+        pandemicCombatCb:SetLabel("Show Only In Combat")
+        pandemicCombatCb:SetValue(style.pandemicGlowCombatOnly or false)
+        pandemicCombatCb:SetFullWidth(true)
+        pandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+            style.pandemicGlowCombatOnly = val
+            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        end)
+        container:AddChild(pandemicCombatCb)
+        ApplyCheckboxIndent(pandemicCombatCb, 20)
+    end
+
     if pandemicAdvExpanded and style.showPandemicGlow ~= false then
     BuildPandemicGlowControls(container, style, function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
@@ -693,17 +710,6 @@ local function BuildEffectsTab(container)
         CooldownCompanion:PlayGroupPandemicPreview(CS.selectedGroup, 3)
     end)
     container:AddChild(pandemicPreviewBtn)
-
-    local pandemicCombatCb = AceGUI:Create("CheckBox")
-    pandemicCombatCb:SetLabel("Show Only In Combat")
-    pandemicCombatCb:SetValue(style.pandemicGlowCombatOnly or false)
-    pandemicCombatCb:SetFullWidth(true)
-    pandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
-        style.pandemicGlowCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
-    container:AddChild(pandemicCombatCb)
-    ApplyCheckboxIndent(pandemicCombatCb, 20)
     else
     CooldownCompanion:SetGroupPandemicPreview(CS.selectedGroup, false)
     end -- pandemicAdvExpanded
@@ -819,21 +825,23 @@ local function BuildEffectsTab(container)
 
     local assistedAdvExpanded = AddAdvancedToggle(assistedCb, "assistedHighlight", tabInfoButtons, style.showAssistedHighlight or false)
 
+    if style.showAssistedHighlight then
+        local assistedCombatCb = AceGUI:Create("CheckBox")
+        assistedCombatCb:SetLabel("Show Only In Combat")
+        assistedCombatCb:SetValue(style.assistedHighlightCombatOnly or false)
+        assistedCombatCb:SetFullWidth(true)
+        assistedCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+            style.assistedHighlightCombatOnly = val
+            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        end)
+        container:AddChild(assistedCombatCb)
+        ApplyCheckboxIndent(assistedCombatCb, 20)
+    end
+
     if assistedAdvExpanded and style.showAssistedHighlight then
     BuildAssistedHighlightControls(container, style, function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
     end)
-
-    local assistedCombatCb = AceGUI:Create("CheckBox")
-    assistedCombatCb:SetLabel("Show Only In Combat")
-    assistedCombatCb:SetValue(style.assistedHighlightCombatOnly or false)
-    assistedCombatCb:SetFullWidth(true)
-    assistedCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
-        style.assistedHighlightCombatOnly = val
-        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-    end)
-    container:AddChild(assistedCombatCb)
-    ApplyCheckboxIndent(assistedCombatCb, 20)
     end -- assistedAdvExpanded
 
     -- Apply "Hide CDC Tooltips" to tab info buttons (skip advanced toggles)

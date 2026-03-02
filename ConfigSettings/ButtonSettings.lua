@@ -11,6 +11,7 @@ local CreatePromoteButton = ST._CreatePromoteButton
 local CreateRevertButton = ST._CreateRevertButton
 local CreateCheckboxPromoteButton = ST._CreateCheckboxPromoteButton
 local CreateInfoButton = ST._CreateInfoButton
+local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 
 -- Imports from SectionBuilders.lua (used by BuildOverridesTab)
 local BuildCooldownTextControls = ST._BuildCooldownTextControls
@@ -988,6 +989,30 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                             end
                         end)
                         scroll:AddChild(pandemicPreviewBtn)
+                    end
+
+                    -- Combat-only checkbox for applicable glow/effect sections
+                    local combatOnlyKey
+                    if sectionId == "procGlow" then
+                        combatOnlyKey = "procGlowCombatOnly"
+                    elseif sectionId == "auraIndicator" or sectionId == "barActiveAura" then
+                        combatOnlyKey = "auraGlowCombatOnly"
+                    elseif sectionId == "pandemicGlow" or sectionId == "pandemicBar" then
+                        combatOnlyKey = "pandemicGlowCombatOnly"
+                    elseif sectionId == "assistedHighlight" then
+                        combatOnlyKey = "assistedHighlightCombatOnly"
+                    end
+                    if combatOnlyKey then
+                        local combatCb = AceGUI:Create("CheckBox")
+                        combatCb:SetLabel("Show Only In Combat")
+                        combatCb:SetValue(overrides[combatOnlyKey] or false)
+                        combatCb:SetFullWidth(true)
+                        combatCb:SetCallback("OnValueChanged", function(widget, event, val)
+                            overrides[combatOnlyKey] = val
+                            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+                        end)
+                        scroll:AddChild(combatCb)
+                        ApplyCheckboxIndent(combatCb, 20)
                     end
                 end
                 end
