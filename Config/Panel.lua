@@ -22,12 +22,24 @@ local RefreshColumn2 = ST._RefreshColumn2
 local RefreshColumn3 = ST._RefreshColumn3
 local RefreshColumn4 = ST._RefreshColumn4
 local RefreshProfileBar = ST._RefreshProfileBar
+local SetConfigPrimaryMode = ST._SetConfigPrimaryMode
+
+local function SetPrimaryMode(mode, opts)
+    if SetConfigPrimaryMode then
+        return SetConfigPrimaryMode(mode, opts)
+    end
+    CS.resourceBarPanelActive = (mode == "bars")
+    if not (opts and opts.skipRefresh) then
+        CooldownCompanion:RefreshConfigPanel()
+    end
+    return true
+end
 
 -- Shared reset for profile change/copy/reset callbacks
 local function ResetConfigForProfileChange()
     ResetConfigSelection(true)
     wipe(CS.collapsedFolders)
-    CS.resourceBarPanelActive = false
+    SetPrimaryMode("buttons", { skipRefresh = true })
     if ST._CancelAutoAddFlow then
         ST._CancelAutoAddFlow()
     end
@@ -48,7 +60,7 @@ local function CreateConfigPanel()
     local frame = AceGUI:Create("Frame")
     frame:SetTitle("Cooldown Companion")
     frame:SetStatusText("")
-    frame:SetWidth(1304)
+    frame:SetWidth(1384)
     frame:SetHeight(700)
     frame:SetLayout(nil) -- manual positioning
 
@@ -68,9 +80,9 @@ local function CreateConfigPanel()
         frame.sizer_e:Hide()
     end
 
-    -- Custom resize grip — expand freely, shrink horizontally up to 30% (min 913px)
+    -- Custom resize grip — expand freely, shrink horizontally up to 30% (min 993px)
     content:SetResizable(true)
-    content:SetResizeBounds(913, 400)
+    content:SetResizeBounds(993, 400)
 
     local resizeGrip = CreateFrame("Button", nil, content)
     resizeGrip:SetSize(16, 16)
@@ -171,53 +183,82 @@ local function CreateConfigPanel()
     collapseBtn:SetHighlightAtlas("common-icon-minus")
     collapseBtn:GetHighlightTexture():SetAlpha(0.3)
 
-    -- Bars & Frames button — left of CDM
-    local resourceBarBtn = CreateFrame("Button", nil, content, "BackdropTemplate")
-    resourceBarBtn:SetSize(16, 16)
-    local resourceBarIcon = resourceBarBtn:CreateTexture(nil, "ARTWORK")
-    resourceBarIcon:SetAtlas("UF-Essence-Icon-Active")
-    resourceBarIcon:SetAllPoints()
-    resourceBarBtn:SetHighlightAtlas("UF-Essence-Icon-Active")
-    resourceBarBtn:GetHighlightTexture():SetAlpha(0.3)
+    -- Bottom text-based mode status row (Currently viewing: <mode button>)
+    local MODE_VIEW_BUTTONS_COLOR = {1.0, 0.82, 0.0}
+    local MODE_VIEW_BARS_COLOR = {0.30, 0.62, 1.0}
+    local MODE_MIN_BUTTON_WIDTH = 90
+    local MODE_BUTTON_TEXT_PADDING = 28
+    local MODE_BUTTON_GROW_STEP = 8
+    local MODE_BUTTON_GROW_MAX = 900
 
-    -- Highlight function
-    local resourceBarBtnBorder = nil
+    local modeStatusRow
+    local modeToggleButton
+    local modeValueText
+    local modeToggleTooltipText = "Switch settings mode"
 
-    local function UpdateResourceBarBtnHighlight()
-        if CS.resourceBarPanelActive then
-            if not resourceBarBtnBorder then
-                resourceBarBtnBorder = resourceBarBtn:CreateTexture(nil, "OVERLAY")
-                resourceBarBtnBorder:SetPoint("TOPLEFT", -1, 1)
-                resourceBarBtnBorder:SetPoint("BOTTOMRIGHT", 1, -1)
-                resourceBarBtnBorder:SetColorTexture(0.85, 0.65, 0.0, 0.6)
-            end
-            resourceBarBtnBorder:Show()
-        else
-            if resourceBarBtnBorder then
-                resourceBarBtnBorder:Hide()
-            end
+    local function RGBToHex(r, g, b)
+        local function clamp(v)
+            if v < 0 then return 0 end
+            if v > 1 then return 1 end
+            return v
         end
+        local ri = math.floor((clamp(r or 1) * 255) + 0.5)
+        local gi = math.floor((clamp(g or 1) * 255) + 0.5)
+        local bi = math.floor((clamp(b or 1) * 255) + 0.5)
+        return string.format("%02x%02x%02x", ri, gi, bi)
     end
 
-    resourceBarBtn:SetScript("OnClick", function()
-        if CS.resourceBarPanelActive then
-            CS.resourceBarPanelActive = false
-            CooldownCompanion:StopCastBarPreview()
-            CooldownCompanion:StopResourceBarPreview()
-        else
-            CS.resourceBarPanelActive = true
-            ResetConfigSelection(true)
+    local function UpdateModeRowLayout()
+        if not modeStatusRow or not modeValueText or not modeToggleButton then return end
+
+        local valueW = math.ceil(modeValueText:GetStringWidth() or 0)
+        local buttonW = math.max(MODE_MIN_BUTTON_WIDTH, valueW + MODE_BUTTON_TEXT_PADDING)
+        local buttonH = (modeToggleButton.frame and modeToggleButton.frame:GetHeight()) or 22
+        local rowH = math.max(16, math.ceil(modeValueText:GetStringHeight() or 0), buttonH)
+
+        modeToggleButton.frame:ClearAllPoints()
+        modeToggleButton.frame:SetPoint("LEFT", modeStatusRow, "LEFT", 0, 0)
+        modeToggleButton:SetWidth(buttonW)
+        if modeValueText.IsTruncated and modeValueText:IsTruncated() then
+            local guard = 0
+            while modeValueText:IsTruncated() and buttonW < MODE_BUTTON_GROW_MAX do
+                buttonW = buttonW + MODE_BUTTON_GROW_STEP
+                modeToggleButton:SetWidth(buttonW)
+                guard = guard + 1
+                if guard > 128 then break end
+            end
         end
-        UpdateResourceBarBtnHighlight()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    resourceBarBtn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:AddLine("Bars & Frames")
-        GameTooltip:AddLine("Configure resource bars, cast bar, and unit frame anchoring", 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    resourceBarBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+        modeStatusRow:SetSize(buttonW, rowH + 2)
+    end
+
+    local function UpdateModeNavigationUI()
+        if not modeValueText or not modeToggleButton then return end
+
+        local classColor = C_ClassColor.GetClassColor(select(2, UnitClass("player")))
+        local prefixR, prefixG, prefixB = 1, 0.82, 0
+        if classColor then
+            prefixR, prefixG, prefixB = classColor.r, classColor.g, classColor.b
+        end
+
+        local isBars = CS.resourceBarPanelActive == true
+        local modeLabel, modeR, modeG, modeB
+        if isBars then
+            modeLabel = "Bars & Frames"
+            modeR, modeG, modeB = MODE_VIEW_BARS_COLOR[1], MODE_VIEW_BARS_COLOR[2], MODE_VIEW_BARS_COLOR[3]
+            modeToggleTooltipText = "Switch to Buttons settings"
+        else
+            modeLabel = "Buttons"
+            modeR, modeG, modeB = MODE_VIEW_BUTTONS_COLOR[1], MODE_VIEW_BUTTONS_COLOR[2], MODE_VIEW_BUTTONS_COLOR[3]
+            modeToggleTooltipText = "Switch to Bars & Frames settings"
+        end
+
+        local prefixHex = RGBToHex(prefixR, prefixG, prefixB)
+        local modeHex = RGBToHex(modeR, modeG, modeB)
+        modeToggleButton:SetText("|cff" .. prefixHex .. "Currently Viewing:|r |cff" .. modeHex .. modeLabel .. "|r")
+
+        UpdateModeRowLayout()
+    end
 
     -- Cooldown Manager button — left of Collapse
     local cdmBtn = CreateFrame("Button", nil, content, "BackdropTemplate")
@@ -270,7 +311,6 @@ local function CreateConfigPanel()
     gearBtn:SetSize(20, 20)
     gearBtn:SetPoint("RIGHT", collapseBtn, "LEFT", -4, 0)
     cdmBtn:SetPoint("RIGHT", gearBtn, "LEFT", -4, 0)
-    resourceBarBtn:SetPoint("RIGHT", cdmBtn, "LEFT", -4, 0)
     local gearIcon = gearBtn:CreateTexture(nil, "ARTWORK")
     gearIcon:SetTexture("Interface\\WorldMap\\GEAR_64GREY")
     gearIcon:SetAllPoints()
@@ -471,6 +511,11 @@ local function CreateConfigPanel()
     profileBar:SetPoint("RIGHT", content, "RIGHT", -20, 0)
     profileBar:Hide()
 
+    local function SyncModeToggleWithProfileBar()
+        if not modeStatusRow then return end
+        modeStatusRow:SetShown(not profileBar:IsShown())
+    end
+
     profileGear:SetScript("OnClick", function()
         if profileBar:IsShown() then
             profileBar:Hide()
@@ -478,6 +523,48 @@ local function CreateConfigPanel()
             RefreshProfileBar(profileBar)
             profileBar:Show()
         end
+        SyncModeToggleWithProfileBar()
+    end)
+    profileBar:HookScript("OnShow", SyncModeToggleWithProfileBar)
+    profileBar:HookScript("OnHide", SyncModeToggleWithProfileBar)
+
+    -- Bottom text-based mode row
+    modeStatusRow = CreateFrame("Frame", nil, content)
+    modeStatusRow:SetPoint("BOTTOM", content, "BOTTOM", 0, 21)
+    modeStatusRow:SetSize(200, 18)
+    SyncModeToggleWithProfileBar()
+
+    modeToggleButton = AceGUI:Create("Button")
+    modeToggleButton:SetText("Currently Viewing: Buttons")
+    modeToggleButton:SetWidth(MODE_MIN_BUTTON_WIDTH)
+    modeToggleButton:SetHeight(22)
+    modeToggleButton:SetCallback("OnClick", function()
+        if CS.resourceBarPanelActive then
+            SetPrimaryMode("buttons")
+        else
+            SetPrimaryMode("bars")
+        end
+    end)
+    modeToggleButton.frame:SetParent(modeStatusRow)
+    modeToggleButton.frame:ClearAllPoints()
+    modeToggleButton.frame:SetPoint("LEFT", modeStatusRow, "LEFT", 0, 0)
+    modeToggleButton.frame:Show()
+
+    modeValueText = modeToggleButton.text
+
+    modeToggleButton.frame:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine("Switch Settings Mode")
+        GameTooltip:AddLine(modeToggleTooltipText, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    modeToggleButton.frame:HookScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    -- Keep button row vertically centered in the status row.
+    modeToggleButton.frame:HookScript("OnShow", function(self)
+        self:ClearAllPoints()
+        self:SetPoint("LEFT", modeStatusRow, "LEFT", 0, 0)
     end)
 
     -- Column containers fill the content area
@@ -811,6 +898,37 @@ local function CreateConfigPanel()
     -- Column 4 content area (use InlineGroup's content directly)
     CS.col4Container = col4.content
 
+    local function PositionPrimaryAxisUI()
+        local contentCenterX = select(1, content:GetCenter())
+        local col2Right = select(1, col2.frame:GetRight())
+        local col3Left = select(1, col3.frame:GetLeft())
+        local contentBottom = content:GetBottom()
+        local versionBottom = versionText and versionText:GetBottom()
+        local versionTop = versionText and versionText:GetTop()
+
+        local xOffset = 0
+        if contentCenterX and col2Right and col3Left then
+            xOffset = ((col2Right + col3Left) * 0.5) - contentCenterX
+        end
+
+        local yCenterOffset = 0
+        if contentBottom and versionBottom and versionTop then
+            yCenterOffset = math.floor((((versionBottom + versionTop) * 0.5) - contentBottom) + 0.5)
+        else
+            yCenterOffset = 40
+        end
+
+        if modeStatusRow then
+            modeStatusRow:ClearAllPoints()
+            modeStatusRow:SetPoint("CENTER", content, "BOTTOM", xOffset, yCenterOffset)
+        end
+
+        if frame.titlebg then
+            frame.titlebg:ClearAllPoints()
+            frame.titlebg:SetPoint("TOP", content, "TOP", xOffset, 12)
+        end
+    end
+
     -- Layout columns on size change
     local function LayoutColumns()
         local w = colParent:GetWidth()
@@ -818,15 +936,21 @@ local function CreateConfigPanel()
         local pad = COLUMN_PADDING
 
         local baseW = w - (pad * 3)
-        local smallCol = math.floor(baseW / 4.2)
-        local col1Width = smallCol
-        local col2Width = smallCol
-        local remaining = baseW - (smallCol * 2)
-        local col3Width = math.floor(remaining / 2)
-        local col4Width  = remaining - col3Width
+        local oldSmall = math.floor(baseW / 4.2)
+        local oldRemaining = baseW - (oldSmall * 2)
+        local groupReferenceWidth = oldRemaining - math.floor(oldRemaining / 2)
+        local equalColWidth = math.min(groupReferenceWidth, math.floor(baseW / 4))
+
+        local usedWidth = (equalColWidth * 4) + (pad * 3)
+        local leftInset = math.floor((w - usedWidth) * 0.5)
+
+        local col1Width = equalColWidth
+        local col2Width = equalColWidth
+        local col3Width = equalColWidth
+        local col4Width = equalColWidth
 
         col1.frame:ClearAllPoints()
-        col1.frame:SetPoint("TOPLEFT", colParent, "TOPLEFT", 0, 0)
+        col1.frame:SetPoint("TOPLEFT", colParent, "TOPLEFT", leftInset, 0)
         col1.frame:SetSize(col1Width, h)
 
         col2.frame:ClearAllPoints()
@@ -840,6 +964,8 @@ local function CreateConfigPanel()
         col4.frame:ClearAllPoints()
         col4.frame:SetPoint("TOPLEFT", col3.frame, "TOPRIGHT", pad, 0)
         col4.frame:SetSize(col4Width, h)
+
+        PositionPrimaryAxisUI()
     end
 
     colParent:SetScript("OnSizeChanged", function()
@@ -870,7 +996,8 @@ local function CreateConfigPanel()
     frame.col4 = col4
     frame.colParent = colParent
     frame.LayoutColumns = LayoutColumns
-    frame.UpdateResourceBarBtnHighlight = UpdateResourceBarBtnHighlight
+    frame.UpdateModeNavigationUI = UpdateModeNavigationUI
+    UpdateModeNavigationUI()
 
     CS.configFrame = frame
     return frame
@@ -930,8 +1057,8 @@ function CooldownCompanion:RefreshConfigPanel()
         RefreshProfileBar(CS.configFrame.profileBar)
     end
     CS.configFrame.versionText:SetText("v1.7  |  " .. (self.db:GetCurrentProfile() or "Default"))
-    if CS.configFrame.UpdateResourceBarBtnHighlight then
-        CS.configFrame.UpdateResourceBarBtnHighlight()
+    if CS.configFrame.UpdateModeNavigationUI then
+        CS.configFrame.UpdateModeNavigationUI()
     end
     if CS.resourceBarPanelActive then
         CS.configFrame.col1:SetTitle("Bars & Frames")
@@ -993,6 +1120,7 @@ function CooldownCompanion:ToggleConfig()
 
     if not CS.configFrame then
         CreateConfigPanel()
+        SetPrimaryMode("buttons", { skipRefresh = true })
         -- Defer first refresh until after column layout is computed (next frame)
         C_Timer.After(0, function()
             CooldownCompanion:RefreshConfigPanel()
@@ -1009,6 +1137,7 @@ function CooldownCompanion:ToggleConfig()
     if CS.configFrame.frame:IsShown() then
         CS.configFrame.frame:Hide()
     else
+        SetPrimaryMode("buttons", { skipRefresh = true })
         CS.configFrame.frame:Show()
         self:RefreshConfigPanel()
     end
