@@ -460,6 +460,7 @@ local function BuildSpellSettings(scroll, buttonData, infoButtons)
     hideCdmBtn:SetCallback("OnClick", function()
         db.profile.cdmHidden = not db.profile.cdmHidden
         CooldownCompanion:ApplyCdmAlpha()
+        if CS.UpdateCdmDisplayIcon then CS.UpdateCdmDisplayIcon() end
     end)
     hideCdmBtn:SetCallback("OnEnter", function(widget)
         GameTooltip:SetOwner(widget.frame, "ANCHOR_TOP")
