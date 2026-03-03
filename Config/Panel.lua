@@ -306,11 +306,44 @@ local function CreateConfigPanel()
         end)
     end
 
-    -- Gear button — left of CDM
+    -- CDM Display toggle button — left of CDM button
+    local cdmDisplayBtn = CreateFrame("Button", nil, content)
+    cdmDisplayBtn:SetSize(20, 20)
+    local cdmDisplayIcon = cdmDisplayBtn:CreateTexture(nil, "ARTWORK")
+    cdmDisplayIcon:SetAllPoints()
+
+    local function UpdateCdmDisplayIcon()
+        if CooldownCompanion.db.profile.cdmHidden then
+            cdmDisplayIcon:SetAtlas("GM-icon-visibleDis-pressed", false)
+            cdmDisplayBtn:SetHighlightAtlas("GM-icon-visibleDis-pressed")
+        else
+            cdmDisplayIcon:SetAtlas("GM-icon-visible", false)
+            cdmDisplayBtn:SetHighlightAtlas("GM-icon-visible")
+        end
+        cdmDisplayBtn:GetHighlightTexture():SetAlpha(0.3)
+    end
+    UpdateCdmDisplayIcon()
+    CS.UpdateCdmDisplayIcon = UpdateCdmDisplayIcon
+
+    cdmDisplayBtn:SetScript("OnClick", function()
+        CooldownCompanion.db.profile.cdmHidden = not CooldownCompanion.db.profile.cdmHidden
+        CooldownCompanion:ApplyCdmAlpha()
+        UpdateCdmDisplayIcon()
+    end)
+    cdmDisplayBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:AddLine("Toggle CDM Display")
+        GameTooltip:AddLine("This only toggles the visibility of the Cooldown Manager on your screen. Aura tracking will continue to work regardless.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    cdmDisplayBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Gear button — left of CDM Display
     local gearBtn = CreateFrame("Button", nil, content)
     gearBtn:SetSize(20, 20)
     gearBtn:SetPoint("RIGHT", collapseBtn, "LEFT", -4, 0)
     cdmBtn:SetPoint("RIGHT", gearBtn, "LEFT", -4, 0)
+    cdmDisplayBtn:SetPoint("RIGHT", cdmBtn, "LEFT", -4, 0)
     local gearIcon = gearBtn:CreateTexture(nil, "ARTWORK")
     gearIcon:SetTexture("Interface\\WorldMap\\GEAR_64GREY")
     gearIcon:SetAllPoints()
