@@ -25,6 +25,7 @@ function CooldownCompanion:OnUnitAura(event, unit, updateInfo)
     if unit == "player" and self._isDracthyr then
         self:InvalidateMountAlphaCache()
     end
+
     if not updateInfo then return end
 
     -- Process removals first so refreshed auras (remove + add in same event) work.
@@ -72,6 +73,7 @@ function CooldownCompanion:ClearAuraUnit(unitToken)
                 button._auraInstanceID = nil
                 button._auraActive = false
                 button._inPandemic = false
+                button._targetSwitchAt = nil
             end
         end
     end)
@@ -79,6 +81,31 @@ function CooldownCompanion:ClearAuraUnit(unitToken)
 end
 
 function CooldownCompanion:OnTargetChanged()
+    if not UnitExists("target") then
+        -- Deselected target: clear all target aura state immediately
+        self:ClearAuraUnit("target")
+        return
+    end
+    -- New target: clear stale instance IDs so the viewer path doesn't
+    -- read old auraInstanceIDs.  Keep _auraActive so the grace period
+    -- can provide a brief (~450ms) holdover while CDM refreshes.
+    local now = GetTime()
+    local vf = self.viewerAuraFrames
+    self:ForEachButton(function(button, bd)
+        if bd.auraTracking then
+            local isTarget = button._auraUnit == "target"
+            if not isTarget and vf then
+                local f = (button._auraSpellID and vf[button._auraSpellID])
+                    or vf[bd.id]
+                isTarget = f and f.auraDataUnit == "target"
+            end
+            if isTarget then
+                button._auraInstanceID = nil
+                button._inPandemic = false
+                button._targetSwitchAt = now
+            end
+        end
+    end)
     self._cooldownsDirty = true
 end
 

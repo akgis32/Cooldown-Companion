@@ -38,6 +38,7 @@ local IsConfigButtonForceVisible = ST.IsConfigButtonForceVisible
 
 -- IsItemEquippable from Helpers (exported on CooldownCompanion)
 local IsItemEquippable = CooldownCompanion.IsItemEquippable
+local TARGET_SWITCH_HOLD_SECS = 0.45
 
 local function GetViewerIconTexture(viewerFrame)
     local iconTexture = viewerFrame and viewerFrame.Icon
@@ -189,11 +190,12 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     if buttonData.auraTracking and button._auraSpellID then
         local auraUnit = button._auraUnit or "player"
 
+        local viewerFrame
+
         -- Viewer-based aura tracking: Blizzard's cooldown viewer frames run
         -- untainted code that matches spell IDs to auras during combat and
         -- stores auraInstanceID + auraDataUnit as plain readable properties.
         -- Requires the Blizzard Cooldown Manager to be visible with this spell.
-        local viewerFrame
         -- CDM child slot: use specific child for multi-entry spells (e.g., Diabolic Ritual)
         if buttonData.cdmChildSlot then
             local allChildren = CooldownCompanion.viewerAuraAllChildren[buttonData.id]
@@ -246,21 +248,8 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                     button._auraUnit = unit
                     auraOverrideActive = true
                     fetchOk = true
-                elseif button._auraActive then
-                    -- GetAuraDuration returned nil — viewer's instID is stale
-                    -- (target switch, CDM hasn't refreshed yet, ~250-430ms).
-                    -- Trust the previous animation state for CDM parity.
-                    -- Self-corrects: next tick CDM refreshes with new target
-                    -- data (primary path) or clears auraInstanceID (else branch).
-                    auraOverrideActive = true
-                    fetchOk = true
-                    -- Preserve DurationObject so bar fill + desaturation
-                    -- continue animating during the linger window.
-                    if prevAuraDurationObj then
-                        button._durationObj = prevAuraDurationObj
-                    end
                 end
-            else
+            elseif not button._targetSwitchAt then
                 -- No auraInstanceID — fall back to reading the viewer's cooldown widget.
                 -- Covers spells where the viewer tracks the buff duration internally
                 -- (auraDataUnit set by GetAuraData) but doesn't expose auraInstanceID.
@@ -329,18 +318,21 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         -- ~250-430ms) but we had an active aura DurationObject last tick, keep
         -- aura state alive.  Restoring _durationObj preserves bar fill, color,
         -- and time text.
-        -- Fast path: if we can read the old DurationObject (non-secret), check
-        -- expiry directly — clears instantly when the aura has genuinely ended.
-        -- Slow path (combat, HasSecretValues=true): bounded tick counter.
+        -- Target-switch path: _targetSwitchAt set → time-bounded hold (skip stale
+        -- DurationObject expiry which references old target's aura instance).
+        -- Player path: DurationObject fast-path + 3-tick counter.
         if not auraOverrideActive and button._auraActive
            and prevAuraDurationObj and not buttonData.isPassive then
             local expired = false
-            if not prevAuraDurationObj:HasSecretValues() then
+            if button._targetSwitchAt then
+                -- Target-switch hold: time-bounded, skip stale DurationObject expiry
+                expired = (GetTime() - button._targetSwitchAt) > TARGET_SWITCH_HOLD_SECS
+            elseif not prevAuraDurationObj:HasSecretValues() then
                 expired = prevAuraDurationObj:GetRemainingDuration() <= 0
             end
             if not expired then
                 button._auraGraceTicks = (button._auraGraceTicks or 0) + 1
-                if button._auraGraceTicks <= 3 then
+                if button._auraGraceTicks <= 3 or button._targetSwitchAt then
                     button._durationObj = prevAuraDurationObj
                     auraOverrideActive = true
                 else
@@ -348,10 +340,28 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                 end
             else
                 button._auraGraceTicks = nil
+                button._targetSwitchAt = nil
             end
         else
-            -- Fresh aura data (or no aura at all): reset grace counter
             button._auraGraceTicks = nil
+            if button._targetSwitchAt then
+                if auraOverrideActive and button._durationObj then
+                    -- Primary path provided fresh DurationObject: hold complete
+                    button._targetSwitchAt = nil
+                elseif not button._auraActive then
+                    -- Safety: _auraActive already false, clear stale hold
+                    button._targetSwitchAt = nil
+                end
+            end
+        end
+        -- Target-switch hold catch-all: preserve _auraActive for buttons
+        -- without a previous DurationObject (tracked via fallback path only)
+        if not auraOverrideActive and button._targetSwitchAt and button._auraActive then
+            if (GetTime() - button._targetSwitchAt) > TARGET_SWITCH_HOLD_SECS then
+                button._targetSwitchAt = nil
+            else
+                auraOverrideActive = true
+            end
         end
         button._auraActive = auraOverrideActive
         if not auraOverrideActive then
