@@ -352,6 +352,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
             if (GetTime() - button._targetSwitchAt) > TARGET_SWITCH_HOLD_SECS then
                 button._targetSwitchAt = nil
             else
+                button._durationObj = prevAuraDurationObj
                 auraOverrideActive = true
             end
         end
