@@ -957,6 +957,10 @@ local function BuildGlowStyleControls(container, styleTable, refreshCallback, cf
         end
     end
 
+    if opts and opts.afterEnableCallback then
+        opts.afterEnableCallback(container)
+    end
+
     if styleTable[cfg.styleKey] == "lcgProc" then
         styleTable[cfg.styleKey] = "glow"
     end
@@ -1043,6 +1047,10 @@ local function BuildBarEffectControls(container, styleTable, refreshCallback, cf
         if not isEnabled then
             return
         end
+    end
+
+    if opts and opts.afterEnableCallback then
+        opts.afterEnableCallback(container)
     end
 
     local barColorPicker = AceGUI:Create("ColorPicker")
@@ -1136,19 +1144,6 @@ local function BuildAuraIndicatorControls(container, styleTable, refreshCallback
         styleOptions = LCG_GLOW_STYLE_OPTIONS,
         styleOrder = LCG_GLOW_STYLE_ORDER,
     }, opts)
-
-    -- "Show When Missing" invert toggle (only when glow is enabled)
-    if styleTable.auraGlowStyle ~= "none" then
-        local invertCb = AceGUI:Create("CheckBox")
-        invertCb:SetLabel("Show When Missing")
-        invertCb:SetValue(styleTable.auraGlowInvert or false)
-        invertCb:SetFullWidth(true)
-        invertCb:SetCallback("OnValueChanged", function(widget, event, val)
-            styleTable.auraGlowInvert = val
-            refreshCallback()
-        end)
-        container:AddChild(invertCb)
-    end
 end
 
 local function BuildPandemicBarControls(container, styleTable, refreshCallback, opts)

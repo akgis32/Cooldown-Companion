@@ -955,9 +955,66 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                 if not overrideCollapsed then
                 local builder = sectionBuilders[sectionId]
                 if builder then
+                    -- Combat-only key mapping
+                    local combatOnlyKey
+                    if sectionId == "procGlow" then
+                        combatOnlyKey = "procGlowCombatOnly"
+                    elseif sectionId == "auraIndicator" or sectionId == "barActiveAura" then
+                        combatOnlyKey = "auraGlowCombatOnly"
+                    elseif sectionId == "pandemicGlow" or sectionId == "pandemicBar" then
+                        combatOnlyKey = "pandemicGlowCombatOnly"
+                    elseif sectionId == "assistedHighlight" then
+                        combatOnlyKey = "assistedHighlightCombatOnly"
+                    end
+
+                    -- Assisted highlight: combat-only stays inline (no parent enable toggle)
+                    if sectionId == "assistedHighlight" and combatOnlyKey then
+                        local combatCb = AceGUI:Create("CheckBox")
+                        combatCb:SetLabel("Show Only In Combat")
+                        combatCb:SetValue(overrides[combatOnlyKey] or false)
+                        combatCb:SetFullWidth(true)
+                        combatCb:SetCallback("OnValueChanged", function(widget, event, val)
+                            overrides[combatOnlyKey] = val
+                            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+                        end)
+                        scroll:AddChild(combatCb)
+                        ApplyCheckboxIndent(combatCb, 20)
+                    end
+
+                    -- For glow sections with a parent enable toggle, nest sub-toggles via callback
+                    local afterEnableCallback
+                    if combatOnlyKey and sectionId ~= "assistedHighlight" then
+                        afterEnableCallback = function(cont)
+                            local combatCb = AceGUI:Create("CheckBox")
+                            combatCb:SetLabel("Show Only In Combat")
+                            combatCb:SetValue(overrides[combatOnlyKey] or false)
+                            combatCb:SetFullWidth(true)
+                            combatCb:SetCallback("OnValueChanged", function(widget, event, val)
+                                overrides[combatOnlyKey] = val
+                                CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+                            end)
+                            cont:AddChild(combatCb)
+                            ApplyCheckboxIndent(combatCb, 20)
+
+                            if sectionId == "auraIndicator" then
+                                local auraInvertCb = AceGUI:Create("CheckBox")
+                                auraInvertCb:SetLabel("Show When Missing")
+                                auraInvertCb:SetValue(overrides.auraGlowInvert or false)
+                                auraInvertCb:SetFullWidth(true)
+                                auraInvertCb:SetCallback("OnValueChanged", function(widget, event, val)
+                                    overrides.auraGlowInvert = val
+                                    CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+                                end)
+                                cont:AddChild(auraInvertCb)
+                                ApplyCheckboxIndent(auraInvertCb, 20)
+                            end
+                        end
+                    end
+
                     builder(scroll, overrides, refreshCallback, {
                         isOverride = true,
                         fallbackStyle = group.style,
+                        afterEnableCallback = afterEnableCallback,
                     })
                     if sectionId == "procGlow" and overrides.procGlowStyle ~= "none" then
                         local procPreviewBtn = AceGUI:Create("Button")
@@ -991,29 +1048,6 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                         scroll:AddChild(pandemicPreviewBtn)
                     end
 
-                    -- Combat-only checkbox for applicable glow/effect sections
-                    local combatOnlyKey
-                    if sectionId == "procGlow" then
-                        combatOnlyKey = "procGlowCombatOnly"
-                    elseif sectionId == "auraIndicator" or sectionId == "barActiveAura" then
-                        combatOnlyKey = "auraGlowCombatOnly"
-                    elseif sectionId == "pandemicGlow" or sectionId == "pandemicBar" then
-                        combatOnlyKey = "pandemicGlowCombatOnly"
-                    elseif sectionId == "assistedHighlight" then
-                        combatOnlyKey = "assistedHighlightCombatOnly"
-                    end
-                    if combatOnlyKey then
-                        local combatCb = AceGUI:Create("CheckBox")
-                        combatCb:SetLabel("Show Only In Combat")
-                        combatCb:SetValue(overrides[combatOnlyKey] or false)
-                        combatCb:SetFullWidth(true)
-                        combatCb:SetCallback("OnValueChanged", function(widget, event, val)
-                            overrides[combatOnlyKey] = val
-                            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-                        end)
-                        scroll:AddChild(combatCb)
-                        ApplyCheckboxIndent(combatCb, 20)
-                    end
                 end
                 end
             end

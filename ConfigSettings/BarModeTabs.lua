@@ -892,20 +892,18 @@ local function BuildBarEffectsTab(container, group, style)
     local barAuraAdvExpanded, barAuraAdvBtn = AddAdvancedToggle(barAuraEnableCb, "barActiveAura", tabInfoButtons, style.barAuraEffect ~= "none")
     CreateCheckboxPromoteButton(barAuraEnableCb, barAuraAdvBtn, "barActiveAura", group, style)
 
-    if style.barAuraEffect ~= "none" then
-        local barAuraCombatCb = AceGUI:Create("CheckBox")
-        barAuraCombatCb:SetLabel("Show Only In Combat")
-        barAuraCombatCb:SetValue(style.auraGlowCombatOnly or false)
-        barAuraCombatCb:SetFullWidth(true)
-        barAuraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
-            style.auraGlowCombatOnly = val
-            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-        end)
-        container:AddChild(barAuraCombatCb)
-        ApplyCheckboxIndent(barAuraCombatCb, 20)
-    end
-
     if barAuraAdvExpanded and style.barAuraEffect ~= "none" then
+    local barAuraCombatCb = AceGUI:Create("CheckBox")
+    barAuraCombatCb:SetLabel("Show Only In Combat")
+    barAuraCombatCb:SetValue(style.auraGlowCombatOnly or false)
+    barAuraCombatCb:SetFullWidth(true)
+    barAuraCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+        style.auraGlowCombatOnly = val
+        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+    end)
+    container:AddChild(barAuraCombatCb)
+    ApplyCheckboxIndent(barAuraCombatCb, 20)
+
     BuildBarActiveAuraControls(container, style, function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
     end)
@@ -928,20 +926,18 @@ local function BuildBarEffectsTab(container, group, style)
     local barPandemicAdvExpanded, barPandemicAdvBtn = AddAdvancedToggle(pandemicIndicatorCb, "barPandemicIndicator", tabInfoButtons, style.showPandemicGlow ~= false)
     CreateCheckboxPromoteButton(pandemicIndicatorCb, barPandemicAdvBtn, "pandemicBar", group, style)
 
-    if style.showPandemicGlow ~= false then
-        local barPandemicCombatCb = AceGUI:Create("CheckBox")
-        barPandemicCombatCb:SetLabel("Show Only In Combat")
-        barPandemicCombatCb:SetValue(style.pandemicGlowCombatOnly or false)
-        barPandemicCombatCb:SetFullWidth(true)
-        barPandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
-            style.pandemicGlowCombatOnly = val
-            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
-        end)
-        container:AddChild(barPandemicCombatCb)
-        ApplyCheckboxIndent(barPandemicCombatCb, 20)
-    end
-
     if barPandemicAdvExpanded and style.showPandemicGlow ~= false then
+    local barPandemicCombatCb = AceGUI:Create("CheckBox")
+    barPandemicCombatCb:SetLabel("Show Only In Combat")
+    barPandemicCombatCb:SetValue(style.pandemicGlowCombatOnly or false)
+    barPandemicCombatCb:SetFullWidth(true)
+    barPandemicCombatCb:SetCallback("OnValueChanged", function(widget, event, val)
+        style.pandemicGlowCombatOnly = val
+        CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+    end)
+    container:AddChild(barPandemicCombatCb)
+    ApplyCheckboxIndent(barPandemicCombatCb, 20)
+
     BuildPandemicBarControls(container, style, function()
         CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
     end)
