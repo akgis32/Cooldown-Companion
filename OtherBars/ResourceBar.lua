@@ -146,6 +146,11 @@ ST.POWER_ATLAS_TYPES = { [8] = true, [11] = true, [13] = true, [17] = true, [18]
 ST.CUSTOM_AURA_BAR_BASE = CUSTOM_AURA_BAR_BASE
 ST.MAX_CUSTOM_AURA_BARS = MAX_CUSTOM_AURA_BARS
 local FormatBarTime = ST._FormatBarTime
+local CreateGlowContainer = ST._CreateGlowContainer
+local ShowGlowStyle = ST._ShowGlowStyle
+local HideGlowStyles = ST._HideGlowStyles
+
+local string_format = string.format
 
 -- Class-to-resource mapping (classID -> ordered list of power types)
 -- Order = stacking order (first = closest to anchor)
@@ -617,6 +622,19 @@ end
 local function ClearResourceAuraVisuals(frame)
     if not frame then return end
     HideResourceAuraStackSegments(frame)
+    -- Clear max stacks glow containers
+    if frame._maxStacksGlowContainer then
+        HideGlowStyles(frame._maxStacksGlowContainer)
+        frame._maxStacksGlowState = nil
+    end
+    if frame.segments then
+        for _, seg in ipairs(frame.segments) do
+            if seg._maxStacksGlowContainer then
+                HideGlowStyles(seg._maxStacksGlowContainer)
+                seg._maxStacksGlowState = nil
+            end
+        end
+    end
 end
 
 local function ApplyContinuousFillColor(bar, powerType, settings, overrideColor)
@@ -750,6 +768,73 @@ local function SetCustomAuraMaxThresholdRange(bar, maxStacks)
     local safeMax = maxStacks or 1
     if safeMax < 1 then safeMax = 1 end
     bar:SetMinMaxValues(safeMax - 1, safeMax)
+end
+
+------------------------------------------------------------------------
+-- Max Stacks Glow helpers (reuses Glows.lua infrastructure)
+------------------------------------------------------------------------
+
+local MAXSTACKS_GLOW_LCG_KEY = "CooldownCompanionMaxStacks"
+
+local function EnsureMaxStacksGlowContainer(frame)
+    if frame._maxStacksGlowContainer then return frame._maxStacksGlowContainer end
+    local container = CreateGlowContainer(frame, 32)
+    -- Ensure glow renders above threshold overlay (which is at parent +1)
+    local baseLevel = frame:GetFrameLevel() + 5
+    if container.solidFrame then
+        container.solidFrame:SetFrameLevel(baseLevel)
+    end
+    if container.procFrame then
+        container.procFrame:SetFrameLevel(baseLevel)
+    end
+    if container.pixelFrame then
+        container.pixelFrame:SetFrameLevel(baseLevel)
+    end
+    frame._maxStacksGlowContainer = container
+    return container
+end
+
+local function SetMaxStacksGlowOnFrame(frame, show, cabConfig)
+    if not frame then return end
+
+    local desiredState
+    if show and cabConfig.maxStacksGlowEnabled then
+        local style = cabConfig.maxStacksGlowStyle or "solid"
+        local c = cabConfig.maxStacksGlowColor or {1, 0.84, 0, 0.9}
+        local sz = cabConfig.maxStacksGlowSize or (style == "solid" and 2 or style == "pixel" and 4 or 32)
+        local th = (style == "pixel") and (cabConfig.maxStacksGlowThickness or 2) or 0
+        local spd = (style == "pixel" or style == "lcgButton" or style == "lcgAutocast")
+            and (cabConfig.maxStacksGlowSpeed or 60) or 0
+        desiredState = string_format("%s%.2f%.2f%.2f%.2f%.2f%.2f%.2f",
+            style, c[1], c[2], c[3], c[4] or 0.9, sz, th, spd)
+    end
+
+    if frame._maxStacksGlowState == desiredState then return end
+    frame._maxStacksGlowState = desiredState
+
+    if not desiredState then
+        if frame._maxStacksGlowContainer then
+            HideGlowStyles(frame._maxStacksGlowContainer)
+        end
+        return
+    end
+
+    local container = EnsureMaxStacksGlowContainer(frame)
+    local style = cabConfig.maxStacksGlowStyle or "solid"
+    local color = cabConfig.maxStacksGlowColor or {1, 0.84, 0, 0.9}
+    local size = cabConfig.maxStacksGlowSize or (style == "solid" and 2 or style == "pixel" and 4 or 32)
+    local thickness = (style == "pixel") and (cabConfig.maxStacksGlowThickness or 2) or 0
+    local usesSpeed = style == "pixel" or style == "lcgButton" or style == "lcgAutocast"
+    local speed = usesSpeed and (cabConfig.maxStacksGlowSpeed or 60) or 0
+    ShowGlowStyle(container, style, frame, color, {
+        size = size,
+        thickness = thickness,
+        speed = speed,
+        frequency = usesSpeed and (math_max(speed, 1) / 480) or nil,
+        scale = math_min(math_max(size, 0.2), 3),
+        key = MAXSTACKS_GLOW_LCG_KEY,
+        defaultAlpha = 0.9,
+    })
 end
 
 local function EnsureCustomAuraContinuousThresholdOverlay(bar)
@@ -1414,6 +1499,16 @@ local function UpdateCustomAuraBar(barInfo)
     local maxStacks = cabConfig.maxStacks or 1
     local thresholdEnabled = IsCustomAuraMaxThresholdEnabled(cabConfig)
 
+    -- Max stacks glow: update cached state using issecretvalue guard
+    if cabConfig.maxStacksGlowEnabled then
+        if not auraPresent then
+            barInfo._atMaxStacks = false
+        elseif not issecretvalue(applications) then
+            barInfo._atMaxStacks = (applications >= maxStacks and applications > 0)
+        end
+        -- When secret + aura present: retain cached _atMaxStacks (stale but safe)
+    end
+
     if barInfo.barType == "custom_continuous" then
         local bar = barInfo.frame
         if useDrain then
@@ -1522,6 +1617,46 @@ local function UpdateCustomAuraBar(barInfo)
                     thresholdSeg:Hide()
                 end
             end
+        end
+    end
+
+    -- Apply max stacks glow
+    if cabConfig.maxStacksGlowEnabled then
+        local showGlow = barInfo._atMaxStacks == true
+
+        if barInfo.barType == "custom_continuous" then
+            SetMaxStacksGlowOnFrame(barInfo.frame, showGlow, cabConfig)
+        elseif barInfo.barType == "custom_segmented" then
+            local holder = barInfo.frame
+            if holder.segments then
+                for _, seg in ipairs(holder.segments) do
+                    SetMaxStacksGlowOnFrame(seg, showGlow, cabConfig)
+                end
+            end
+        elseif barInfo.barType == "custom_overlay" then
+            -- Glow base segments only — overlay segments are co-located on top,
+            -- and the glow frame level (+5) renders above both layers
+            local holder = barInfo.frame
+            if holder.segments then
+                for _, seg in ipairs(holder.segments) do
+                    SetMaxStacksGlowOnFrame(seg, showGlow, cabConfig)
+                end
+            end
+        end
+    elseif barInfo._atMaxStacks ~= nil then
+        -- Feature was disabled: clean up any active glow
+        barInfo._atMaxStacks = nil
+        local holder = barInfo.frame
+        if holder.segments then
+            for _, seg in ipairs(holder.segments) do
+                if seg._maxStacksGlowContainer then
+                    HideGlowStyles(seg._maxStacksGlowContainer)
+                    seg._maxStacksGlowState = nil
+                end
+            end
+        elseif holder._maxStacksGlowContainer then
+            HideGlowStyles(holder._maxStacksGlowContainer)
+            holder._maxStacksGlowState = nil
         end
     end
 end
