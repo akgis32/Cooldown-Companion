@@ -150,6 +150,15 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     -- by UpdateButtonIcon on SPELL_UPDATE_ICON and creation.
     local cooldownSpellId = button._displaySpellId or buttonData.id
 
+    -- Deferred icon refresh for cdmChildSlot buttons (set by OnSpellUpdateIcon).
+    -- One-tick delay ensures the CDM viewer's RefreshSpellTexture has already
+    -- run, so child.Icon:GetTextureFileID() returns the current texture.
+    if button._iconDirty then
+        button._iconDirty = nil
+        CooldownCompanion:UpdateButtonIcon(button)
+        cooldownSpellId = button._displaySpellId or buttonData.id
+    end
+
     -- Proc state: event-driven table lookup (base spell + current displayed override).
     -- Keeps visibility and glow checks aligned without polling overlay APIs.
     local procOverlayActive = false
@@ -409,6 +418,13 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                     -- from tainted code (they can execute secret-value logic internally).
                     button.nameText:SetText(viewerName:GetText())
                 end
+                -- Multi-slot buttons read their icon from the viewer's Icon widget.
+                -- Event-driven UpdateButtonIcon calls can race with the CDM viewer's
+                -- internal icon update on transforms (e.g. Diabolic Ritual), so re-sync
+                -- the icon every tick to ensure it reflects the viewer's current state.
+                if buttonData.cdmChildSlot then
+                    CooldownCompanion:UpdateButtonIcon(button)
+                end
                 button._viewerAuraVisualsActive = true
             end
         elseif button._viewerAuraVisualsActive then
@@ -419,6 +435,12 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                 if baseName then
                     button.nameText:SetText(baseName)
                 end
+            end
+            -- Multi-slot buttons got their icon from per-tick viewer reads while
+            -- the aura was active. Now that the aura has dropped, re-sync the icon
+            -- to the viewer's current (base) state.
+            if buttonData.cdmChildSlot then
+                CooldownCompanion:UpdateButtonIcon(button)
             end
         end
     end
