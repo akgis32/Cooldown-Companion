@@ -8,6 +8,7 @@ local ColorHeading = ST._ColorHeading
 local AttachCollapseButton = ST._AttachCollapseButton
 local AddAdvancedToggle = ST._AddAdvancedToggle
 local CreateInfoButton = ST._CreateInfoButton
+local tabInfoButtons = CS.tabInfoButtons
 
 ------------------------------------------------------------------------
 -- Aura bar autocomplete cache (TrackedBuff + TrackedBar spells only)
@@ -1713,7 +1714,7 @@ local function BuildCustomAuraBarPanel(container)
                 -- Max Stacks Glow (independent of threshold color)
                 if not isActiveTracking then
                     local glowCb = AceGUI:Create("CheckBox")
-                    glowCb:SetLabel("Max Stack Glow")
+                    glowCb:SetLabel("Max Stack Indicator")
                     glowCb:SetValue(cab.maxStacksGlowEnabled == true)
                     glowCb:SetFullWidth(true)
                     glowCb:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1723,30 +1724,72 @@ local function BuildCustomAuraBarPanel(container)
                     end)
                     container:AddChild(glowCb)
 
-                    if cab.maxStacksGlowEnabled then
+                    local glowAdvExpanded, glowAdvBtn = AddAdvancedToggle(glowCb, "maxStacksIndicator", tabInfoButtons, cab.maxStacksGlowEnabled == true)
+
+                    CreateInfoButton(glowCb.frame, glowAdvBtn, "LEFT", "RIGHT", 4, 0, {
+                        "Max Stack Indicator",
+                        {"Due to combat restrictions, individual bar segments cannot be highlighted independently.", 1, 1, 1, true},
+                        " ",
+                        {"The indicator covers the entire resource bar and appears automatically when your buff reaches its maximum stack count.", 1, 1, 1, true},
+                        " ",
+                        {"The Pulsing Overlay style is only available for continuous display mode.", 1, 1, 1, true},
+                    }, glowCb)
+
+                    if glowAdvExpanded and cab.maxStacksGlowEnabled then
+                        -- Preview (ephemeral, not saved)
+                        local previewCb = AceGUI:Create("CheckBox")
+                        previewCb:SetLabel("Preview Indicator")
+                        previewCb:SetValue(CooldownCompanion:IsResourceBarPreviewActive())
+                        previewCb:SetFullWidth(true)
+                        previewCb:SetCallback("OnValueChanged", function(widget, event, val)
+                            if val then
+                                CooldownCompanion:StartResourceBarPreview()
+                            else
+                                CooldownCompanion:StopResourceBarPreview()
+                            end
+                        end)
+                        container:AddChild(previewCb)
+
+                        -- Pulsing Overlay only available for continuous display
+                        local isContinuousDisplay = (cab.trackingMode == "active") or (cab.displayMode == "continuous")
+                        local currentStyle = cab.maxStacksGlowStyle or "solidBorder"
+                        if currentStyle == "pulsingOverlay" and not isContinuousDisplay then
+                            currentStyle = "solidBorder"
+                            customBars[cabIdx].maxStacksGlowStyle = "solidBorder"
+                        end
+
                         -- Style dropdown
-                        local glowStyleDrop = AceGUI:Create("Dropdown")
-                        glowStyleDrop:SetLabel("Glow Style")
-                        glowStyleDrop:SetList({
-                            solid = "Solid Border",
-                            pixel = "Pixel",
-                            glow = "Proc Glow",
-                            lcgButton = "Button Glow (LCG)",
-                            lcgAutocast = "AutoCast (LCG)",
-                        }, { "solid", "pixel", "glow", "lcgButton", "lcgAutocast" })
-                        glowStyleDrop:SetValue(cab.maxStacksGlowStyle or "solid")
-                        glowStyleDrop:SetFullWidth(true)
-                        glowStyleDrop:SetCallback("OnValueChanged", function(widget, event, val)
+                        local styleList, styleOrder
+                        if isContinuousDisplay then
+                            styleList = {
+                                solidBorder = "Solid Border",
+                                pulsingBorder = "Pulsing Border",
+                                pulsingOverlay = "Pulsing Overlay",
+                            }
+                            styleOrder = { "solidBorder", "pulsingBorder", "pulsingOverlay" }
+                        else
+                            styleList = {
+                                solidBorder = "Solid Border",
+                                pulsingBorder = "Pulsing Border",
+                            }
+                            styleOrder = { "solidBorder", "pulsingBorder" }
+                        end
+                        local styleDrop = AceGUI:Create("Dropdown")
+                        styleDrop:SetLabel("Indicator Style")
+                        styleDrop:SetList(styleList, styleOrder)
+                        styleDrop:SetValue(currentStyle)
+                        styleDrop:SetFullWidth(true)
+                        styleDrop:SetCallback("OnValueChanged", function(widget, event, val)
                             customBars[cabIdx].maxStacksGlowStyle = val
                             CooldownCompanion:ApplyResourceBars()
                             CooldownCompanion:RefreshConfigPanel()
                         end)
-                        container:AddChild(glowStyleDrop)
+                        container:AddChild(styleDrop)
 
                         -- Color picker
                         local glowColor = cab.maxStacksGlowColor or {1, 0.84, 0, 0.9}
                         local cpGlow = AceGUI:Create("ColorPicker")
-                        cpGlow:SetLabel("Glow Color")
+                        cpGlow:SetLabel("Indicator Color")
                         cpGlow:SetColor(glowColor[1], glowColor[2], glowColor[3], glowColor[4] or 0.9)
                         cpGlow:SetHasAlpha(true)
                         cpGlow:SetFullWidth(true)
@@ -1760,45 +1803,26 @@ local function BuildCustomAuraBarPanel(container)
                         end)
                         container:AddChild(cpGlow)
 
-                        -- Size slider (label and range vary by style)
-                        local currentStyle = cab.maxStacksGlowStyle or "solid"
-                        local sizeLabel = (currentStyle == "solid") and "Border Size"
-                            or (currentStyle == "pixel") and "Line Length"
-                            or "Glow Size"
-                        local sizeMin = (currentStyle == "solid") and 1 or (currentStyle == "pixel") and 1 or 8
-                        local sizeMax = (currentStyle == "solid") and 8 or (currentStyle == "pixel") and 20 or 64
-                        local sizeDefault = (currentStyle == "solid") and 2 or (currentStyle == "pixel") and 4 or 32
-                        local glowSizeSlider = AceGUI:Create("Slider")
-                        glowSizeSlider:SetLabel(sizeLabel)
-                        glowSizeSlider:SetSliderValues(sizeMin, sizeMax, 1)
-                        glowSizeSlider:SetValue(cab.maxStacksGlowSize or sizeDefault)
-                        glowSizeSlider:SetFullWidth(true)
-                        glowSizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                            customBars[cabIdx].maxStacksGlowSize = val
-                            CooldownCompanion:ApplyResourceBars()
-                        end)
-                        container:AddChild(glowSizeSlider)
-
-                        -- Thickness slider (pixel style only)
-                        if currentStyle == "pixel" then
-                            local thicknessSlider = AceGUI:Create("Slider")
-                            thicknessSlider:SetLabel("Line Thickness")
-                            thicknessSlider:SetSliderValues(1, 6, 1)
-                            thicknessSlider:SetValue(cab.maxStacksGlowThickness or 2)
-                            thicknessSlider:SetFullWidth(true)
-                            thicknessSlider:SetCallback("OnValueChanged", function(widget, event, val)
-                                customBars[cabIdx].maxStacksGlowThickness = val
+                        -- Border size slider (border styles only — overlay has no size param)
+                        if currentStyle ~= "pulsingOverlay" then
+                            local sizeSlider = AceGUI:Create("Slider")
+                            sizeSlider:SetLabel("Border Size")
+                            sizeSlider:SetSliderValues(1, 8, 1)
+                            sizeSlider:SetValue(cab.maxStacksGlowSize or 2)
+                            sizeSlider:SetFullWidth(true)
+                            sizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
+                                customBars[cabIdx].maxStacksGlowSize = val
                                 CooldownCompanion:ApplyResourceBars()
                             end)
-                            container:AddChild(thicknessSlider)
+                            container:AddChild(sizeSlider)
                         end
 
-                        -- Speed slider (pixel + LCG styles)
-                        if currentStyle == "pixel" or currentStyle == "lcgButton" or currentStyle == "lcgAutocast" then
+                        -- Pulse speed slider (pulsing styles only)
+                        if currentStyle == "pulsingBorder" or currentStyle == "pulsingOverlay" then
                             local speedSlider = AceGUI:Create("Slider")
-                            speedSlider:SetLabel("Animation Speed")
-                            speedSlider:SetSliderValues(10, 200, 1)
-                            speedSlider:SetValue(cab.maxStacksGlowSpeed or 60)
+                            speedSlider:SetLabel("Pulse Duration")
+                            speedSlider:SetSliderValues(0.1, 2.0, 0.1)
+                            speedSlider:SetValue(cab.maxStacksGlowSpeed or 0.5)
                             speedSlider:SetFullWidth(true)
                             speedSlider:SetCallback("OnValueChanged", function(widget, event, val)
                                 customBars[cabIdx].maxStacksGlowSpeed = val
@@ -1806,7 +1830,7 @@ local function BuildCustomAuraBarPanel(container)
                             end)
                             container:AddChild(speedSlider)
                         end
-                    end
+                    end -- glowAdvExpanded
                 end
 
                 -- Overlay Color (overlay mode only)

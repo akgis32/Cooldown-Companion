@@ -206,6 +206,7 @@ local lastAppliedOrientation = nil
 local resourceBarFrames = {}   -- array of bar frame objects (ordered by stacking)
 local activeResources = {}     -- array of power type ints currently displayed
 local isPreviewActive = false
+local ApplyPreviewData
 local pendingSpecChange = false
 local savedContainerAlpha = nil
 local alphaSyncFrame = nil
@@ -622,19 +623,6 @@ end
 local function ClearResourceAuraVisuals(frame)
     if not frame then return end
     HideResourceAuraStackSegments(frame)
-    -- Clear max stacks glow containers
-    if frame._maxStacksGlowContainer then
-        HideGlowStyles(frame._maxStacksGlowContainer)
-        frame._maxStacksGlowState = nil
-    end
-    if frame.segments then
-        for _, seg in ipairs(frame.segments) do
-            if seg._maxStacksGlowContainer then
-                HideGlowStyles(seg._maxStacksGlowContainer)
-                seg._maxStacksGlowState = nil
-            end
-        end
-    end
 end
 
 local function ApplyContinuousFillColor(bar, powerType, settings, overrideColor)
@@ -771,70 +759,99 @@ local function SetCustomAuraMaxThresholdRange(bar, maxStacks)
 end
 
 ------------------------------------------------------------------------
--- Max Stacks Glow helpers (reuses Glows.lua infrastructure)
+-- Max Stacks Indicator (StatusBar-based, secret-safe)
+-- Uses SetMinMaxValues(maxStacks-1, maxStacks) + SetValue(applications):
+-- below max → fill=0% (invisible), at max → fill=100% (visible).
 ------------------------------------------------------------------------
 
-local MAXSTACKS_GLOW_LCG_KEY = "CooldownCompanionMaxStacks"
-
-local function EnsureMaxStacksGlowContainer(frame)
-    if frame._maxStacksGlowContainer then return frame._maxStacksGlowContainer end
-    local container = CreateGlowContainer(frame, 32)
-    -- Ensure glow renders above threshold overlay (which is at parent +1)
-    local baseLevel = frame:GetFrameLevel() + 5
-    if container.solidFrame then
-        container.solidFrame:SetFrameLevel(baseLevel)
-    end
-    if container.procFrame then
-        container.procFrame:SetFrameLevel(baseLevel)
-    end
-    if container.pixelFrame then
-        container.pixelFrame:SetFrameLevel(baseLevel)
-    end
-    frame._maxStacksGlowContainer = container
-    return container
+local function EnsureMaxStacksIndicator(barInfo)
+    if barInfo._maxStacksIndicator then return barInfo._maxStacksIndicator end
+    local indicator = CreateFrame("StatusBar", nil, barInfo.frame)
+    indicator:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+    indicator:EnableMouse(false)
+    indicator:Show()
+    barInfo._maxStacksIndicator = indicator
+    return indicator
 end
 
-local function SetMaxStacksGlowOnFrame(frame, show, cabConfig)
-    if not frame then return end
+local function LayoutMaxStacksIndicator(barInfo, cabConfig, maxStacks, barTexture, borderStyle, borderSize)
+    local indicator = barInfo._maxStacksIndicator
+    if not indicator then return end
 
-    local desiredState
-    if show and cabConfig.maxStacksGlowEnabled then
-        local style = cabConfig.maxStacksGlowStyle or "solid"
-        local c = cabConfig.maxStacksGlowColor or {1, 0.84, 0, 0.9}
-        local sz = cabConfig.maxStacksGlowSize or (style == "solid" and 2 or style == "pixel" and 4 or 32)
-        local th = (style == "pixel") and (cabConfig.maxStacksGlowThickness or 2) or 0
-        local spd = (style == "pixel" or style == "lcgButton" or style == "lcgAutocast")
-            and (cabConfig.maxStacksGlowSpeed or 60) or 0
-        desiredState = string_format("%s%.2f%.2f%.2f%.2f%.2f%.2f%.2f",
-            style, c[1], c[2], c[3], c[4] or 0.9, sz, th, spd)
-    end
-
-    if frame._maxStacksGlowState == desiredState then return end
-    frame._maxStacksGlowState = desiredState
-
-    if not desiredState then
-        if frame._maxStacksGlowContainer then
-            HideGlowStyles(frame._maxStacksGlowContainer)
-        end
-        return
-    end
-
-    local container = EnsureMaxStacksGlowContainer(frame)
-    local style = cabConfig.maxStacksGlowStyle or "solid"
+    local style = cabConfig.maxStacksGlowStyle or "solidBorder"
     local color = cabConfig.maxStacksGlowColor or {1, 0.84, 0, 0.9}
-    local size = cabConfig.maxStacksGlowSize or (style == "solid" and 2 or style == "pixel" and 4 or 32)
-    local thickness = (style == "pixel") and (cabConfig.maxStacksGlowThickness or 2) or 0
-    local usesSpeed = style == "pixel" or style == "lcgButton" or style == "lcgAutocast"
-    local speed = usesSpeed and (cabConfig.maxStacksGlowSpeed or 60) or 0
-    ShowGlowStyle(container, style, frame, color, {
-        size = size,
-        thickness = thickness,
-        speed = speed,
-        frequency = usesSpeed and (math_max(speed, 1) / 480) or nil,
-        scale = math_min(math_max(size, 0.2), 3),
-        key = MAXSTACKS_GLOW_LCG_KEY,
-        defaultAlpha = 0.9,
-    })
+    local size = cabConfig.maxStacksGlowSize or 2
+    local frame = barInfo.frame
+    local isVertical = frame._isVertical
+
+    -- Positioning
+    indicator:ClearAllPoints()
+    if style == "pulsingOverlay" then
+        indicator:SetFrameLevel(frame:GetFrameLevel() + 3)
+        if borderStyle == "pixel" then
+            indicator:SetPoint("TOPLEFT", frame, "TOPLEFT", borderSize, -borderSize)
+            indicator:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -borderSize, borderSize)
+        else
+            indicator:SetAllPoints(frame)
+        end
+    else
+        -- solidBorder / pulsingBorder: sit behind the bar
+        indicator:SetFrameLevel(frame:GetFrameLevel() - 1)
+        indicator:SetPoint("TOPLEFT", frame, "TOPLEFT", -size, size)
+        indicator:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", size, -size)
+    end
+
+    -- Color
+    indicator:SetStatusBarColor(color[1], color[2], color[3], color[4] or 0.9)
+
+    -- Texture & orientation
+    indicator:SetStatusBarTexture(barTexture or "Interface\\Buttons\\WHITE8x8")
+    indicator:SetOrientation(isVertical and "VERTICAL" or "HORIZONTAL")
+
+    -- Range: [maxStacks-1, maxStacks] → 0% below, 100% at max
+    SetCustomAuraMaxThresholdRange(indicator, maxStacks)
+
+    -- Ensure visible (ClearMaxStacksIndicator hides the frame; SetValue controls render)
+    indicator:Show()
+
+    -- Animation
+    local needsPulse = (style == "pulsingBorder" or style == "pulsingOverlay")
+    if needsPulse then
+        local speed = cabConfig.maxStacksGlowSpeed or 0.5
+        if not indicator._pulseAG then
+            local ag = indicator:CreateAnimationGroup()
+            ag:SetLooping("BOUNCE")
+            local anim = ag:CreateAnimation("Alpha")
+            indicator._pulseAG = ag
+            indicator._pulseAnim = anim
+        end
+        -- Update duration and alpha range (stop+play to apply changes)
+        indicator._pulseAnim:SetDuration(speed)
+        if style == "pulsingOverlay" then
+            indicator._pulseAnim:SetFromAlpha(1.0)
+            indicator._pulseAnim:SetToAlpha(0.0)
+        else
+            indicator._pulseAnim:SetFromAlpha(1.0)
+            indicator._pulseAnim:SetToAlpha(0.3)
+        end
+        indicator._pulseAG:Stop()
+        indicator._pulseAG:Play()
+    else
+        if indicator._pulseAG then
+            indicator._pulseAG:Stop()
+        end
+        indicator:SetAlpha(1)
+    end
+end
+
+local function ClearMaxStacksIndicator(barInfo)
+    local indicator = barInfo._maxStacksIndicator
+    if not indicator then return end
+    indicator:Hide()
+    if indicator._pulseAG then
+        indicator._pulseAG:Stop()
+    end
+    indicator:SetValue(0)
 end
 
 local function EnsureCustomAuraContinuousThresholdOverlay(bar)
@@ -1499,16 +1516,6 @@ local function UpdateCustomAuraBar(barInfo)
     local maxStacks = cabConfig.maxStacks or 1
     local thresholdEnabled = IsCustomAuraMaxThresholdEnabled(cabConfig)
 
-    -- Max stacks glow: update cached state using issecretvalue guard
-    if cabConfig.maxStacksGlowEnabled then
-        if not auraPresent then
-            barInfo._atMaxStacks = false
-        elseif not issecretvalue(applications) then
-            barInfo._atMaxStacks = (applications >= maxStacks and applications > 0)
-        end
-        -- When secret + aura present: retain cached _atMaxStacks (stale but safe)
-    end
-
     if barInfo.barType == "custom_continuous" then
         local bar = barInfo.frame
         if useDrain then
@@ -1620,44 +1627,9 @@ local function UpdateCustomAuraBar(barInfo)
         end
     end
 
-    -- Apply max stacks glow
-    if cabConfig.maxStacksGlowEnabled then
-        local showGlow = barInfo._atMaxStacks == true
-
-        if barInfo.barType == "custom_continuous" then
-            SetMaxStacksGlowOnFrame(barInfo.frame, showGlow, cabConfig)
-        elseif barInfo.barType == "custom_segmented" then
-            local holder = barInfo.frame
-            if holder.segments then
-                for _, seg in ipairs(holder.segments) do
-                    SetMaxStacksGlowOnFrame(seg, showGlow, cabConfig)
-                end
-            end
-        elseif barInfo.barType == "custom_overlay" then
-            -- Glow base segments only — overlay segments are co-located on top,
-            -- and the glow frame level (+5) renders above both layers
-            local holder = barInfo.frame
-            if holder.segments then
-                for _, seg in ipairs(holder.segments) do
-                    SetMaxStacksGlowOnFrame(seg, showGlow, cabConfig)
-                end
-            end
-        end
-    elseif barInfo._atMaxStacks ~= nil then
-        -- Feature was disabled: clean up any active glow
-        barInfo._atMaxStacks = nil
-        local holder = barInfo.frame
-        if holder.segments then
-            for _, seg in ipairs(holder.segments) do
-                if seg._maxStacksGlowContainer then
-                    HideGlowStyles(seg._maxStacksGlowContainer)
-                    seg._maxStacksGlowState = nil
-                end
-            end
-        elseif holder._maxStacksGlowContainer then
-            HideGlowStyles(holder._maxStacksGlowContainer)
-            holder._maxStacksGlowState = nil
-        end
+    -- Max stacks indicator: SetValue drives visibility via C-level clamping
+    if cabConfig.maxStacksGlowEnabled and barInfo._maxStacksIndicator then
+        barInfo._maxStacksIndicator:SetValue(auraPresent and applications or 0)
     end
 end
 
@@ -2186,6 +2158,7 @@ function CooldownCompanion:ApplyResourceBars()
     for i = #filtered + 1, #resourceBarFrames do
         if resourceBarFrames[i] and resourceBarFrames[i].frame then
             ClearResourceAuraVisuals(resourceBarFrames[i].frame)
+            ClearMaxStacksIndicator(resourceBarFrames[i])
             resourceBarFrames[i].frame:Hide()
             if resourceBarFrames[i].frame.brightnessOverlay then
                 resourceBarFrames[i].frame.brightnessOverlay:Hide()
@@ -2359,6 +2332,17 @@ function CooldownCompanion:ApplyResourceBars()
             end
             -- Apply bar color AFTER texture setup (SetStatusBarTexture resets vertex color)
             StyleCustomAuraBar(barInfo, cabConfig)
+
+            -- Max stacks indicator (StatusBar-based, secret-safe)
+            if cabConfig.maxStacksGlowEnabled then
+                EnsureMaxStacksIndicator(barInfo)
+                local indBorderStyle = settings.borderStyle or "pixel"
+                local indBorderSize = settings.borderSize or 1
+                local indBarTexture = CooldownCompanion:FetchStatusBar(settings.barTexture or "Solid")
+                LayoutMaxStacksIndicator(barInfo, cabConfig, maxStacks, indBarTexture, indBorderStyle, indBorderSize)
+            else
+                ClearMaxStacksIndicator(barInfo)
+            end
         elseif isSegmented then
             local max = UnitPowerMax("player", powerType)
             if powerType == 5 then max = 6 end  -- Runes always 6
@@ -2485,6 +2469,11 @@ function CooldownCompanion:ApplyResourceBars()
             savedContainerAlpha = nil
         end
     end
+
+    -- Re-apply preview visuals if preview mode is active
+    if isPreviewActive then
+        ApplyPreviewData()
+    end
 end
 
 ------------------------------------------------------------------------
@@ -2522,6 +2511,7 @@ function CooldownCompanion:RevertResourceBars()
     for _, barInfo in ipairs(resourceBarFrames) do
         if barInfo.frame then
             ClearResourceAuraVisuals(barInfo.frame)
+            ClearMaxStacksIndicator(barInfo)
             barInfo.frame:Hide()
             if barInfo.frame.brightnessOverlay then
                 barInfo.frame.brightnessOverlay:Hide()
@@ -2586,7 +2576,7 @@ end
 -- Preview mode
 ------------------------------------------------------------------------
 
-local function ApplyPreviewData()
+ApplyPreviewData = function()
     local settings = GetResourceBarSettings()
 
     local function ApplyResourceAuraLanePreview(barInfo, previewRatio)
@@ -2661,14 +2651,15 @@ local function ApplyPreviewData()
                 local isActive = cabConfig and cabConfig.trackingMode == "active"
                 local maxStacks = (cabConfig and cabConfig.maxStacks) or 1
                 local thresholdEnabled = IsCustomAuraMaxThresholdEnabled(cabConfig)
+                local indicatorPreview = cabConfig and cabConfig.maxStacksGlowEnabled
                 local previewValue
                 if isActive then
                     barInfo.frame:SetMinMaxValues(0, 1)
-                    previewValue = 0.65
+                    previewValue = indicatorPreview and 1 or 0.65
                     barInfo.frame:SetValue(previewValue)
                 else
                     barInfo.frame:SetMinMaxValues(0, maxStacks)
-                    previewValue = math.ceil(maxStacks * 0.65)
+                    previewValue = indicatorPreview and maxStacks or math.ceil(maxStacks * 0.65)
                     barInfo.frame:SetValue(previewValue)
                 end
                 if barInfo.frame.thresholdOverlay then
@@ -2696,18 +2687,17 @@ local function ApplyPreviewData()
                         end
                     end
                 end
-                -- Max stacks glow preview (continuous)
-                if cabConfig and cabConfig.maxStacksGlowEnabled then
-                    SetMaxStacksGlowOnFrame(barInfo.frame, true, cabConfig)
-                else
-                    SetMaxStacksGlowOnFrame(barInfo.frame, false, cabConfig or {})
+                -- Max stacks indicator preview (continuous)
+                if cabConfig and cabConfig.maxStacksGlowEnabled and barInfo._maxStacksIndicator then
+                    barInfo._maxStacksIndicator:SetValue(maxStacks)
                 end
             elseif barInfo.barType == "custom_segmented" then
                 local cabConfig = barInfo.cabConfig
                 local maxStacks = (cabConfig and cabConfig.maxStacks) or 1
                 local thresholdEnabled = IsCustomAuraMaxThresholdEnabled(cabConfig)
+                local indicatorPreview = cabConfig and cabConfig.maxStacksGlowEnabled
                 local n = #barInfo.frame.segments
-                local fill = math.ceil(n * 0.6)
+                local fill = indicatorPreview and n or math.ceil(n * 0.6)
                 -- Segments have MinMax(i-1, i); C-level clamping handles fill/empty
                 for _, seg in ipairs(barInfo.frame.segments) do
                     seg:SetValue(fill)
@@ -2724,20 +2714,15 @@ local function ApplyPreviewData()
                         end
                     end
                 end
-                -- Max stacks glow preview (segmented)
-                if cabConfig and cabConfig.maxStacksGlowEnabled and barInfo.frame.segments then
-                    for _, seg in ipairs(barInfo.frame.segments) do
-                        SetMaxStacksGlowOnFrame(seg, true, cabConfig)
-                    end
-                elseif barInfo.frame.segments then
-                    for _, seg in ipairs(barInfo.frame.segments) do
-                        SetMaxStacksGlowOnFrame(seg, false, cabConfig or {})
-                    end
+                -- Max stacks indicator preview (segmented)
+                if cabConfig and cabConfig.maxStacksGlowEnabled and barInfo._maxStacksIndicator then
+                    barInfo._maxStacksIndicator:SetValue(maxStacks)
                 end
             elseif barInfo.barType == "custom_overlay" then
                 local cabConfig = barInfo.cabConfig
                 local maxStacks = (cabConfig and cabConfig.maxStacks) or 1
-                local previewStacks = math.ceil(maxStacks * 0.7)
+                local indicatorPreview = cabConfig and cabConfig.maxStacksGlowEnabled
+                local previewStacks = indicatorPreview and maxStacks or math.ceil(maxStacks * 0.7)
                 local thresholdEnabled = IsCustomAuraMaxThresholdEnabled(cabConfig)
                 local half = barInfo.halfSegments or 1
                 for i = 1, half do
@@ -2755,15 +2740,9 @@ local function ApplyPreviewData()
                         end
                     end
                 end
-                -- Max stacks glow preview (overlay — base segments only)
-                if cabConfig and cabConfig.maxStacksGlowEnabled and barInfo.frame.segments then
-                    for _, seg in ipairs(barInfo.frame.segments) do
-                        SetMaxStacksGlowOnFrame(seg, true, cabConfig)
-                    end
-                elseif barInfo.frame.segments then
-                    for _, seg in ipairs(barInfo.frame.segments) do
-                        SetMaxStacksGlowOnFrame(seg, false, cabConfig or {})
-                    end
+                -- Max stacks indicator preview (overlay)
+                if cabConfig and cabConfig.maxStacksGlowEnabled and barInfo._maxStacksIndicator then
+                    barInfo._maxStacksIndicator:SetValue(maxStacks)
                 end
             end
         end
@@ -2772,8 +2751,7 @@ end
 
 function CooldownCompanion:StartResourceBarPreview()
     isPreviewActive = true
-    self:ApplyResourceBars()
-    ApplyPreviewData()
+    self:ApplyResourceBars()  -- ApplyPreviewData() called at end when isPreviewActive
 end
 
 function CooldownCompanion:StopResourceBarPreview()
