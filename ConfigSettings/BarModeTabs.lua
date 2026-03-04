@@ -54,7 +54,7 @@ local function BuildBarAppearanceTab(container, group, style)
     if not barSettingsCollapsed then
     local lengthSlider = AceGUI:Create("Slider")
     lengthSlider:SetLabel("Bar Length")
-    lengthSlider:SetSliderValues(50, 500, 0.1)
+    lengthSlider:SetSliderValues(10, 500, 0.1)
     lengthSlider:SetValue(style.barLength or 180)
     lengthSlider:SetFullWidth(true)
     lengthSlider:SetCallback("OnValueChanged", function(widget, event, val)
