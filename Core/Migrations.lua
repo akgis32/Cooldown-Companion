@@ -1112,10 +1112,10 @@ function CooldownCompanion:MigrateMaxStacksGlowStyles()
                     local mapped = OLD_GLOW_STYLE_MAP[cab.maxStacksGlowStyle]
                     if mapped then
                         cab.maxStacksGlowStyle = mapped
+                        -- Clean up removed fields
+                        cab.maxStacksGlowThickness = nil
+                        cab.maxStacksGlowSpeed = nil
                     end
-                    -- Clean up removed fields
-                    cab.maxStacksGlowThickness = nil
-                    cab.maxStacksGlowSpeed = nil
                 end
             end
         end

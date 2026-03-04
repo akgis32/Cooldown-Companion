@@ -2245,6 +2245,7 @@ function CooldownCompanion:ApplyResourceBars()
             if needsRecreate then
                 if barInfo and barInfo.frame then
                     ClearResourceAuraVisuals(barInfo.frame)
+                    ClearMaxStacksIndicator(barInfo)
                     barInfo.frame:Hide()
                 end
                 if mode == "continuous" then
