@@ -125,6 +125,17 @@ local NUDGE_REPEAT_INTERVAL = 0.05
 
 local CreatePixelBorders = ST.CreatePixelBorders
 
+-- Recursively set frame strata on a frame and all its child frames.
+-- Textures/FontStrings inherit from their parent frame automatically,
+-- but child Frame objects (cooldown widgets, overlay frames, glow containers)
+-- may not follow a parent strata change — so we force it explicitly.
+local function PropagateFrameStrata(frame, strata)
+    frame:SetFrameStrata(strata)
+    for _, child in pairs({frame:GetChildren()}) do
+        PropagateFrameStrata(child, strata)
+    end
+end
+
 local function CreateNudger(frame, groupId)
     local NUDGE_GAP = 2
 
@@ -233,7 +244,14 @@ function CooldownCompanion:CreateGroupFrame(groupId)
     
     -- Set initial size (will be updated when buttons are added)
     frame:SetSize(100, 50)
-    
+
+    -- Apply per-group frame strata if configured
+    local strata = group.frameStrata
+    if strata then
+        frame:SetFrameStrata(strata)
+        frame:SetFixedFrameStrata(true)
+    end
+
     -- Position the frame
     self:AnchorGroupFrame(frame, group.anchor)
     
@@ -580,6 +598,12 @@ function CooldownCompanion:PopulateGroupButtons(groupId)
         self:UpdateGroupLayout(groupId)
     end
 
+    -- Propagate group frame strata to all button sub-elements
+    local effectiveStrata = group.frameStrata or "MEDIUM"
+    for _, button in ipairs(frame.buttons) do
+        PropagateFrameStrata(button, effectiveStrata)
+    end
+
     -- Update event-driven range check registrations
     self:UpdateRangeCheckRegistrations()
 end
@@ -729,10 +753,20 @@ function CooldownCompanion:RefreshGroupFrame(groupId)
     if not frame then
         frame = self:CreateGroupFrame(groupId)
     else
+        -- Apply per-group frame strata before populating buttons
+        local strata = group.frameStrata
+        if strata then
+            frame:SetFrameStrata(strata)
+            frame:SetFixedFrameStrata(true)
+        else
+            frame:SetFrameStrata("MEDIUM")
+            frame:SetFixedFrameStrata(false)
+        end
+
         self:AnchorGroupFrame(frame, group.anchor)
         self:PopulateGroupButtons(groupId)
     end
-    
+
     -- Update drag handle text and lock state
     local hasButtons = #group.buttons > 0
     if frame.dragHandle then

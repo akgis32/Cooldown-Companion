@@ -434,9 +434,8 @@ local function BuildLayoutTab(container)
     end -- not alphaCollapsed
 
     -- ================================================================
-    -- ADVANCED: Strata (Layer Order) — hidden for bar mode
+    -- ADVANCED: Strata — Frame Strata (all modes) + Custom Strata (icon mode only)
     -- ================================================================
-    if group.displayMode ~= "bars" then
     local strataHeading = AceGUI:Create("Heading")
     strataHeading:SetText("Strata")
     ColorHeading(strataHeading)
@@ -450,10 +449,45 @@ local function BuildLayoutTab(container)
     end)
 
     if not strataCollapsed then
+
+    -- Frame Strata dropdown (available for both icon and bar mode)
+    do
+        local frameStrataOrder = {"BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG"}
+        local frameStrataLabels = {
+            BACKGROUND = "Background",
+            LOW = "Low",
+            MEDIUM = "Default",
+            HIGH = "High",
+            DIALOG = "Highest",
+        }
+
+        local frameStrataDrop = AceGUI:Create("Dropdown")
+        frameStrataDrop:SetLabel("Frame Strata")
+        frameStrataDrop:SetList(frameStrataLabels, frameStrataOrder)
+        frameStrataDrop:SetValue(group.frameStrata or "MEDIUM")
+        frameStrataDrop:SetFullWidth(true)
+        frameStrataDrop:SetCallback("OnValueChanged", function(widget, event, val)
+            group.frameStrata = (val ~= "MEDIUM") and val or nil
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+        end)
+        container:AddChild(frameStrataDrop)
+
+        CreateInfoButton(frameStrataDrop.frame, frameStrataDrop.label, "LEFT", "RIGHT", 4, 0, {
+            "Frame Strata",
+            {"Sets the rendering layer for this group.", 1, 1, 1, true},
+            " ",
+            {"Higher strata groups fully overlap lower ones.", 1, 1, 1, true},
+            " ",
+            {"Only change this if you need one group to overlap another.", 1, 1, 1, true},
+        }, tabInfoButtons)
+    end
+
+    -- Custom Icon Strata (sub-element ordering) — icon mode only
+    if group.displayMode ~= "bars" then
     local customStrataEnabled = type(style.strataOrder) == "table"
 
     local strataToggle = AceGUI:Create("CheckBox")
-    strataToggle:SetLabel("Custom Strata")
+    strataToggle:SetLabel("Custom Icon Strata")
     strataToggle:SetValue(customStrataEnabled)
     strataToggle:SetFullWidth(true)
     strataToggle:SetCallback("OnValueChanged", function(widget, event, val)
@@ -474,7 +508,7 @@ local function BuildLayoutTab(container)
     container:AddChild(strataToggle)
 
     CreateInfoButton(strataToggle.frame, strataToggle.checkbg, "LEFT", "RIGHT", strataToggle.text:GetStringWidth() + 4, 0, {
-        "Custom Strata",
+        "Custom Icon Strata",
         {"Controls the draw order of overlays on each icon: Cooldown Swipe, Charge Text, Proc Glow, and Assisted Highlight.", 1, 1, 1, true},
         {"Layer 4 draws on top, Layer 1 on the bottom. When disabled, the default order is used.", 1, 1, 1, true},
     }, tabInfoButtons)
@@ -532,8 +566,9 @@ local function BuildLayoutTab(container)
             strataDropdowns[pos] = drop
         end
     end
+    end -- not bars (custom strata)
+
     end -- not strataCollapsed
-    end -- not bars (strata)
 
     -- Apply "Hide CDC Tooltips" to tab info buttons (skip advanced toggles)
     if CooldownCompanion.db.profile.hideInfoButtons then
