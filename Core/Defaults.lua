@@ -137,6 +137,7 @@ local defaults = {
                     },
                     enabled = true,
                     displayMode = "icons",    -- "icons" or "bars"
+                    frameStrata = nil,        -- nil = "MEDIUM" (default), or "BACKGROUND"/"LOW"/"HIGH"/"DIALOG"
                     -- Alpha fade system
                     baselineAlpha = 1,        -- alpha when no force conditions met (0-1)
                     forceAlphaInCombat = false,
