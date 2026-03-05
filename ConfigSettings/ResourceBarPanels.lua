@@ -305,11 +305,12 @@ local function GetContinuousTickAbsoluteConfig(resource)
     return value
 end
 
-local function AddResourceAuraOverrideControls(container, settings, powerType, resourceName)
+local function AddResourceAuraOverrideControls(container, settings, powerType, resourceName, auraAdvButtons)
     if not settings.resources[powerType] then
         settings.resources[powerType] = {}
     end
     local res = settings.resources[powerType]
+    local auraAdvKey = "rbAuraOverlay_" .. powerType
 
     local enableAuraOverlayCb = AceGUI:Create("CheckBox")
     enableAuraOverlayCb:SetLabel("Enable " .. resourceName .. " Aura Overlay")
@@ -317,13 +318,27 @@ local function AddResourceAuraOverrideControls(container, settings, powerType, r
     enableAuraOverlayCb:SetFullWidth(true)
     enableAuraOverlayCb:SetCallback("OnValueChanged", function(widget, event, val)
         if not settings.resources[powerType] then settings.resources[powerType] = {} end
+        local wasEnabled = IsResourceAuraOverlayEnabledConfig(settings.resources[powerType])
         settings.resources[powerType].auraOverlayEnabled = (val == true)
+        if val and not wasEnabled then
+            if type(CooldownCompanion.db.profile.showAdvanced) ~= "table" then
+                CooldownCompanion.db.profile.showAdvanced = {}
+            end
+            CooldownCompanion.db.profile.showAdvanced[auraAdvKey] = true
+        end
         CooldownCompanion:ApplyResourceBars()
-        CooldownCompanion:RefreshConfigPanel()
+        C_Timer.After(0, function() CooldownCompanion:RefreshConfigPanel() end)
     end)
     container:AddChild(enableAuraOverlayCb)
 
-    if not IsResourceAuraOverlayEnabledConfig(res) then
+    local auraAdvExpanded = AddAdvancedToggle(
+        enableAuraOverlayCb,
+        auraAdvKey,
+        auraAdvButtons or tabInfoButtons,
+        IsResourceAuraOverlayEnabledConfig(res)
+    )
+
+    if not IsResourceAuraOverlayEnabledConfig(res) or not auraAdvExpanded then
         return
     end
 
@@ -791,7 +806,7 @@ local function GetResourceBarTextureOptions()
     return t
 end
 
-local function BuildResourceBarStylingPanel(container)
+local function BuildResourceBarStylingPanel(container, sectionMode)
     local db = CooldownCompanion.db.profile
     local settings = db.resourceBars
 
@@ -803,6 +818,11 @@ local function BuildResourceBarStylingPanel(container)
         return
     end
 
+    local mode = sectionMode or "all"
+    local showBarText = (mode == "all" or mode == "bar_text")
+    local showColors = (mode == "all" or mode == "colors")
+
+    if showBarText then
     -- Bar Texture
     local texDrop = AceGUI:Create("Dropdown")
     texDrop:SetLabel("Bar Texture")
@@ -1031,6 +1051,9 @@ local function BuildResourceBarStylingPanel(container)
         end
     end
 
+    end
+
+    if showColors then
     -- ============ Per-Resource Colors Section ============
     local colorHeading = AceGUI:Create("Heading")
     colorHeading:SetText("Per-Resource Colors")
@@ -1482,6 +1505,7 @@ local function BuildResourceBarStylingPanel(container)
     auraHeading.right:SetPoint("LEFT", auraInfoBtn, "RIGHT", 4, 0)
 
     if not auraCollapsed then
+        local rbAuraOverlayAdvBtns = {}
         local resources = GetConfigActiveResources()
         for _, pt in ipairs(resources) do
             if not settings.resources[pt] then
@@ -1489,7 +1513,7 @@ local function BuildResourceBarStylingPanel(container)
             end
             if settings.resources[pt].enabled ~= false then
                 local resourceName = POWER_NAMES_CONFIG[pt] or ("Power " .. pt)
-                AddResourceAuraOverrideControls(container, settings, pt, resourceName)
+                AddResourceAuraOverrideControls(container, settings, pt, resourceName, rbAuraOverlayAdvBtns)
             end
         end
     end
@@ -1702,6 +1726,16 @@ local function BuildResourceBarStylingPanel(container)
         end
     end
 
+    end
+
+end
+
+local function BuildResourceBarBarTextStylingPanel(container)
+    BuildResourceBarStylingPanel(container, "bar_text")
+end
+
+local function BuildResourceBarColorsStylingPanel(container)
+    BuildResourceBarStylingPanel(container, "colors")
 end
 
 ------------------------------------------------------------------------
@@ -2668,5 +2702,7 @@ end
 -- Expose for ButtonSettings.lua and Config.lua
 ST._BuildResourceBarAnchoringPanel = BuildResourceBarAnchoringPanel
 ST._BuildResourceBarStylingPanel = BuildResourceBarStylingPanel
+ST._BuildResourceBarBarTextStylingPanel = BuildResourceBarBarTextStylingPanel
+ST._BuildResourceBarColorsStylingPanel = BuildResourceBarColorsStylingPanel
 ST._BuildCustomAuraBarPanel = BuildCustomAuraBarPanel
 ST._BuildLayoutOrderPanel = BuildLayoutOrderPanel

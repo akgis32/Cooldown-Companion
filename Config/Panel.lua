@@ -1083,13 +1083,25 @@ function CooldownCompanion:RefreshConfigPanel()
     end
     local function getBarsStylingScrollKey()
         if not CS.resourceBarPanelActive then return nil end
-        return tostring(CS.barPanelTab or "")
+        local barTab = tostring(CS.barPanelTab or "")
+        if barTab == "resource_anchoring" then
+            local styleTab = tostring(CS.resourceStylingTab or "bar_text")
+            return barTab .. ":" .. styleTab
+        end
+        return barTab
+    end
+    local function getBarsStylingScrollWidget(col2)
+        if not col2 then return nil end
+        if CS.resourceBarPanelActive and CS.barPanelTab == "resource_anchoring" then
+            return col2._resourceStylingSubScroll
+        end
+        return col2._barsStylingScroll
     end
 
     local saved1   = saveScroll(CS.col1Scroll)
     local saved2   = saveScroll(CS.col2Scroll)
     local col2Before = CS.configFrame and CS.configFrame.col2
-    local savedBarsStyling = col2Before and col2Before._barsStylingScroll and saveScroll(col2Before._barsStylingScroll)
+    local savedBarsStyling = saveScroll(getBarsStylingScrollWidget(col2Before))
     local savedBarsStylingKey = getBarsStylingScrollKey()
     local col3Before = CS.configFrame and CS.configFrame.col3
     local savedCab = col3Before and col3Before._customAuraScroll and saveScroll(col3Before._customAuraScroll)
@@ -1137,12 +1149,13 @@ function CooldownCompanion:RefreshConfigPanel()
     restoreScroll(CS.col1Scroll, saved1)
     restoreScroll(CS.col2Scroll, saved2)
     local col2After = CS.configFrame and CS.configFrame.col2
-    if col2After and col2After._barsStylingScroll then
+    local barsStylingAfter = getBarsStylingScrollWidget(col2After)
+    if barsStylingAfter then
         local currentBarsKey = getBarsStylingScrollKey()
         if savedBarsStyling and savedBarsStylingKey and currentBarsKey and savedBarsStylingKey == currentBarsKey then
-            restoreScroll(col2After._barsStylingScroll, savedBarsStyling)
+            restoreScroll(barsStylingAfter, savedBarsStyling)
         else
-            clearScroll(col2After._barsStylingScroll)
+            clearScroll(barsStylingAfter)
         end
     end
     local col3After = CS.configFrame and CS.configFrame.col3
