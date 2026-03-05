@@ -1483,7 +1483,7 @@ local function UpdateSegmentedBar(holder, powerType, settings, auraActiveCache)
             end
         end
         local thresholdActive = thresholdEnabled and readyCount >= thresholdValue
-        local activeReadyColor = thresholdActive and thresholdColor or (allReady and maxColor or readyColor)
+        local activeReadyColor = allReady and maxColor or (thresholdActive and thresholdColor or readyColor)
         for i = 1, numSegs do
             local r = runeData[i]
             local seg = holder.segments[i]
@@ -1528,7 +1528,7 @@ local function UpdateSegmentedBar(holder, powerType, settings, auraActiveCache)
                 local readyColor, rechargingColor, maxColor = GetResourceColors(7, settings)
                 local isMax = (filled == max)
                 local thresholdActive = thresholdEnabled and filled >= thresholdValue
-                local activeReadyColor = thresholdActive and thresholdColor or (isMax and maxColor or readyColor)
+                local activeReadyColor = isMax and maxColor or (thresholdActive and thresholdColor or readyColor)
                 for i = 1, math_min(#holder.segments, max) do
                     local seg = holder.segments[i]
                     if i <= filled then
@@ -1574,7 +1574,7 @@ local function UpdateSegmentedBar(holder, powerType, settings, auraActiveCache)
         local readyColor, rechargingColor, maxColor = GetResourceColors(19, settings)
         local isMax = (filled == max)
         local thresholdActive = thresholdEnabled and filled >= thresholdValue
-        local activeReadyColor = thresholdActive and thresholdColor or (isMax and maxColor or readyColor)
+        local activeReadyColor = isMax and maxColor or (thresholdActive and thresholdColor or readyColor)
         for i = 1, math_min(#holder.segments, max) do
             local seg = holder.segments[i]
             if i <= filled then
@@ -1612,7 +1612,7 @@ local function UpdateSegmentedBar(holder, powerType, settings, auraActiveCache)
         local normalColor, maxColor, chargedColor = GetResourceColors(4, settings)
         local isMax = (current == max and max > 0)
         local thresholdActive = thresholdEnabled and current >= thresholdValue
-        local baseColor = thresholdActive and thresholdColor or (isMax and maxColor or normalColor)
+        local baseColor = isMax and maxColor or (thresholdActive and thresholdColor or normalColor)
 
         -- Charged combo points (Rogue only)
         local chargedPoints
@@ -1661,7 +1661,7 @@ local function UpdateSegmentedBar(holder, powerType, settings, auraActiveCache)
     end
     local isMax = (current == max and max > 0)
     local thresholdActive = thresholdEnabled and current >= thresholdValue
-    local activeColor = thresholdActive and thresholdColor or (isMax and maxColor or normalColor)
+    local activeColor = isMax and maxColor or (thresholdActive and thresholdColor or normalColor)
     for i = 1, math_min(#holder.segments, max) do
         local seg = holder.segments[i]
         if i <= current then
