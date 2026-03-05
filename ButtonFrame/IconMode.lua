@@ -230,6 +230,8 @@ function CooldownCompanion:CreateButtonFrame(parent, index, buttonData, style)
     button._auraUnit = buttonData.auraUnit or "player"
     button._auraActive = false
     button._showingAuraIcon = false
+    button._auraViewerFrame = nil
+    button._lastViewerTexId = nil
 
     button._auraInstanceID = nil
     button._viewerAuraVisualsActive = nil
@@ -364,9 +366,29 @@ function CooldownCompanion:UpdateButtonIcon(button)
                     end
                 end
             else
-                local baseSpellId = child.cooldownInfo.spellID
-                if baseSpellId then
-                    icon = C_Spell.GetSpellTexture(baseSpellId)
+                -- For passive aura-tracked buttons, read the viewer frame's Icon
+                -- widget which updates per-stage (e.g. Heating Up → Hot Streak).
+                -- Same BuffIcon/BuffBar dual-structure handling as cdmChildSlot above.
+                local vf = button._auraViewerFrame
+                local hasViewerIcon
+                if vf then
+                    local iconTexture = vf.Icon
+                    if iconTexture and not iconTexture.GetTextureFileID then
+                        iconTexture = iconTexture.Icon
+                    end
+                    if iconTexture and iconTexture.GetTextureFileID then
+                        -- GetTextureFileID may return a secret value in combat;
+                        -- pass it straight through — do not test or branch on it.
+                        icon = iconTexture:GetTextureFileID()
+                        hasViewerIcon = true
+                    end
+                end
+                if not hasViewerIcon then
+                    -- Fallback: static spell texture (viewer hidden or unavailable)
+                    local baseSpellId = child.cooldownInfo.spellID
+                    if baseSpellId then
+                        icon = C_Spell.GetSpellTexture(baseSpellId)
+                    end
                 end
             end
         end
@@ -388,8 +410,26 @@ function CooldownCompanion:UpdateButtonIcon(button)
     -- Aura icon swap: show the tracked aura spell's icon while aura is active
     if buttonData.type == "spell" and button._auraActive
        and buttonData.auraShowAuraIcon and buttonData.auraSpellID and button._auraSpellID then
-        local auraIcon = C_Spell.GetSpellTexture(button._auraSpellID)
-        if auraIcon then icon = auraIcon end
+        -- Read the viewer frame's Icon texture (updates per-stage for multi-stage
+        -- auras like Hot Streak). GetTextureFileID may return a secret value in
+        -- combat; pass it straight through — do not test or branch on it.
+        local vf = button._auraViewerFrame
+        local hasViewerIcon
+        if vf then
+            local iconTexture = vf.Icon
+            if iconTexture and not iconTexture.GetTextureFileID then
+                iconTexture = iconTexture.Icon
+            end
+            if iconTexture and iconTexture.GetTextureFileID then
+                icon = iconTexture:GetTextureFileID()
+                hasViewerIcon = true
+            end
+        end
+        if not hasViewerIcon then
+            -- Fallback: static spell texture (viewer hidden or unavailable)
+            local auraIcon = C_Spell.GetSpellTexture(button._auraSpellID)
+            if auraIcon then icon = auraIcon end
+        end
     end
 
     local prevDisplayId = button._displaySpellId
@@ -643,6 +683,8 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
     button._itemCount = nil
     button._auraActive = nil
     button._showingAuraIcon = nil
+    button._auraViewerFrame = nil
+    button._lastViewerTexId = nil
 
     button._auraInstanceID = nil
     button._inPandemic = nil
