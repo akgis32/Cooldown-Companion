@@ -1047,8 +1047,12 @@ function CooldownCompanion:RefreshConfigPanel()
     local function saveScroll(widget)
         if not widget then return nil end
         local s = widget.status or widget.localstatus
-        if s and s.offset and s.offset > 0 then
-            return { offset = s.offset, scrollvalue = s.scrollvalue }
+        if s then
+            local offset = tonumber(s.offset) or 0
+            local scrollvalue = tonumber(s.scrollvalue) or 0
+            if offset > 0 or scrollvalue > 0 then
+                return { offset = s.offset, scrollvalue = s.scrollvalue }
+            end
         end
     end
     local function restoreScroll(widget, saved)
@@ -1077,9 +1081,16 @@ function CooldownCompanion:RefreshConfigPanel()
             tostring(tonumber(state.step) or 0),
         }, ":")
     end
+    local function getBarsStylingScrollKey()
+        if not CS.resourceBarPanelActive then return nil end
+        return tostring(CS.barPanelTab or "")
+    end
 
     local saved1   = saveScroll(CS.col1Scroll)
     local saved2   = saveScroll(CS.col2Scroll)
+    local col2Before = CS.configFrame and CS.configFrame.col2
+    local savedBarsStyling = col2Before and col2Before._barsStylingScroll and saveScroll(col2Before._barsStylingScroll)
+    local savedBarsStylingKey = getBarsStylingScrollKey()
     local col3Before = CS.configFrame and CS.configFrame.col3
     local savedCab = col3Before and col3Before._customAuraScroll and saveScroll(col3Before._customAuraScroll)
     local savedAaf = col3Before and col3Before._autoAddScroll and saveScroll(col3Before._autoAddScroll)
@@ -1125,6 +1136,15 @@ function CooldownCompanion:RefreshConfigPanel()
     -- Restore AceGUI scroll state.
     restoreScroll(CS.col1Scroll, saved1)
     restoreScroll(CS.col2Scroll, saved2)
+    local col2After = CS.configFrame and CS.configFrame.col2
+    if col2After and col2After._barsStylingScroll then
+        local currentBarsKey = getBarsStylingScrollKey()
+        if savedBarsStyling and savedBarsStylingKey and currentBarsKey and savedBarsStylingKey == currentBarsKey then
+            restoreScroll(col2After._barsStylingScroll, savedBarsStyling)
+        else
+            clearScroll(col2After._barsStylingScroll)
+        end
+    end
     local col3After = CS.configFrame and CS.configFrame.col3
     if col3After and col3After._customAuraScroll then
         restoreScroll(col3After._customAuraScroll, savedCab)

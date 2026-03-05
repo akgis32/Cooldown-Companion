@@ -142,6 +142,11 @@ local DEFAULT_RESOURCE_TEXT_FONT_CONFIG = "Friz Quadrata TT"
 local DEFAULT_RESOURCE_TEXT_SIZE_CONFIG = 10
 local DEFAULT_RESOURCE_TEXT_OUTLINE_CONFIG = "OUTLINE"
 local DEFAULT_RESOURCE_TEXT_COLOR_CONFIG = { 1, 1, 1, 1 }
+local DEFAULT_SEG_THRESHOLD_COLOR_CONFIG = { 1, 0.84, 0 }
+local DEFAULT_CONTINUOUS_TICK_COLOR_CONFIG = { 1, 0.84, 0, 1 }
+local DEFAULT_CONTINUOUS_TICK_MODE_CONFIG = "percent"
+local DEFAULT_CONTINUOUS_TICK_PERCENT_CONFIG = 50
+local DEFAULT_CONTINUOUS_TICK_ABSOLUTE_CONFIG = 50
 
 -- Class-to-resource mapping for config UI
 local CLASS_RESOURCES_CONFIG = {
@@ -238,6 +243,66 @@ local function GetResourceAuraTrackingModeConfig(resource)
         return "stacks"
     end
     return "active"
+end
+
+local function GetSafeRGBConfig(color, fallback)
+    if type(color) == "table" and color[1] ~= nil and color[2] ~= nil and color[3] ~= nil then
+        return color
+    end
+    return fallback
+end
+
+local function GetSafeRGBAConfig(color, fallback)
+    if type(color) == "table" and color[1] ~= nil and color[2] ~= nil and color[3] ~= nil then
+        return color
+    end
+    return fallback
+end
+
+local function GetSegmentedThresholdValueConfig(resource)
+    local value = tonumber(resource and resource.segThresholdValue)
+    if not value then
+        return 1
+    end
+    value = math.floor(value)
+    if value < 1 then
+        value = 1
+    elseif value > 99 then
+        value = 99
+    end
+    return value
+end
+
+local function GetContinuousTickModeConfig(resource)
+    local mode = resource and resource.continuousTickMode
+    if mode == "percent" or mode == "absolute" then
+        return mode
+    end
+    return DEFAULT_CONTINUOUS_TICK_MODE_CONFIG
+end
+
+local function GetContinuousTickPercentConfig(resource)
+    local value = tonumber(resource and resource.continuousTickPercent)
+    if not value then
+        return DEFAULT_CONTINUOUS_TICK_PERCENT_CONFIG
+    end
+    if value < 0 then
+        value = 0
+    elseif value > 100 then
+        value = 100
+    end
+    return value
+end
+
+local function GetContinuousTickAbsoluteConfig(resource)
+    local value = tonumber(resource and resource.continuousTickAbsolute)
+    if not value then
+        return DEFAULT_CONTINUOUS_TICK_ABSOLUTE_CONFIG
+    end
+    if value < 0 then
+        value = 0
+    end
+    return value
 end
 
 local function AddResourceAuraOverrideControls(container, settings, powerType, resourceName)
@@ -1425,6 +1490,214 @@ local function BuildResourceBarStylingPanel(container)
             if settings.resources[pt].enabled ~= false then
                 local resourceName = POWER_NAMES_CONFIG[pt] or ("Power " .. pt)
                 AddResourceAuraOverrideControls(container, settings, pt, resourceName)
+            end
+        end
+    end
+
+    -- ============ Thresholds & Ticks Section ============
+    local thresholdHeading = AceGUI:Create("Heading")
+    thresholdHeading:SetText("Thresholds & Ticks")
+    ColorHeading(thresholdHeading)
+    thresholdHeading:SetFullWidth(true)
+    container:AddChild(thresholdHeading)
+
+    local thresholdKey = "rb_thresholds_ticks"
+    local thresholdCollapsed = resourceBarCollapsedSections[thresholdKey]
+
+    local thresholdCollapseBtn = AttachCollapseButton(thresholdHeading, thresholdCollapsed, function()
+        resourceBarCollapsedSections[thresholdKey] = not resourceBarCollapsedSections[thresholdKey]
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+
+    local thresholdInfoBtn = CreateInfoButton(thresholdHeading.frame, thresholdCollapseBtn, "LEFT", "RIGHT", 4, 0, {
+        "Thresholds & Ticks",
+        {"Segmented resources: recolor when current value is at/above a configured threshold.", 1, 1, 1, true},
+        " ",
+        {"Continuous resources: draw a static marker by percent or absolute value.", 1, 1, 1, true},
+    }, thresholdHeading)
+
+    thresholdHeading.right:ClearAllPoints()
+    thresholdHeading.right:SetPoint("RIGHT", thresholdHeading.frame, "RIGHT", -3, 0)
+    thresholdHeading.right:SetPoint("LEFT", thresholdInfoBtn, "RIGHT", 4, 0)
+
+    if not thresholdCollapsed then
+        local rbThresholdTickAdvBtns = {}
+        local resources = GetConfigActiveResources()
+        for _, pt in ipairs(resources) do
+            if not settings.resources[pt] then
+                settings.resources[pt] = {}
+            end
+            if settings.resources[pt].enabled ~= false then
+                local resourceName = POWER_NAMES_CONFIG[pt] or ("Power " .. pt)
+                local capturedPt = pt
+                local res = settings.resources[capturedPt]
+                local isSegmented = SEGMENTED_TYPES_CONFIG[capturedPt] == true or capturedPt == 100
+
+                if isSegmented then
+                    local thresholdAdvKey = "rbSegThreshold_" .. capturedPt
+                    local thresholdEnableCb = AceGUI:Create("CheckBox")
+                    thresholdEnableCb:SetLabel("Enable " .. resourceName .. " Threshold Color")
+                    thresholdEnableCb:SetValue(res.segThresholdEnabled == true)
+                    thresholdEnableCb:SetFullWidth(true)
+                    thresholdEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
+                        if not settings.resources[capturedPt] then settings.resources[capturedPt] = {} end
+                        local wasEnabled = settings.resources[capturedPt].segThresholdEnabled == true
+                        settings.resources[capturedPt].segThresholdEnabled = val and true or nil
+                        if val and not wasEnabled then
+                            if type(CooldownCompanion.db.profile.showAdvanced) ~= "table" then
+                                CooldownCompanion.db.profile.showAdvanced = {}
+                            end
+                            CooldownCompanion.db.profile.showAdvanced[thresholdAdvKey] = true
+                        end
+                        CooldownCompanion:ApplyResourceBars()
+                        C_Timer.After(0, function() CooldownCompanion:RefreshConfigPanel() end)
+                    end)
+                    container:AddChild(thresholdEnableCb)
+
+                    local thresholdAdvExpanded = AddAdvancedToggle(
+                        thresholdEnableCb,
+                        thresholdAdvKey,
+                        rbThresholdTickAdvBtns,
+                        res.segThresholdEnabled == true
+                    )
+                    if res.segThresholdEnabled == true and thresholdAdvExpanded then
+                        local thresholdEdit = AceGUI:Create("EditBox")
+                        if thresholdEdit.editbox.Instructions then thresholdEdit.editbox.Instructions:Hide() end
+                        thresholdEdit:SetLabel(resourceName .. " Threshold Value (>=)")
+                        thresholdEdit:SetText(tostring(GetSegmentedThresholdValueConfig(res)))
+                        thresholdEdit:SetFullWidth(true)
+                        thresholdEdit:DisableButton(true)
+                        thresholdEdit:SetCallback("OnEnterPressed", function(widget, event, text)
+                            local parsed = tonumber(text)
+                            if not parsed then
+                                widget:SetText(tostring(GetSegmentedThresholdValueConfig(settings.resources[capturedPt])))
+                                return
+                            end
+                            parsed = math.floor(parsed)
+                            if parsed < 1 then
+                                parsed = 1
+                            elseif parsed > 99 then
+                                parsed = 99
+                            end
+                            settings.resources[capturedPt].segThresholdValue = parsed
+                            widget:SetText(tostring(parsed))
+                            CooldownCompanion:ApplyResourceBars()
+                        end)
+                        container:AddChild(thresholdEdit)
+
+                        local thresholdColor = GetSafeRGBConfig(res.segThresholdColor, DEFAULT_SEG_THRESHOLD_COLOR_CONFIG)
+                        local thresholdColorPicker = AceGUI:Create("ColorPicker")
+                        thresholdColorPicker:SetLabel(resourceName .. " Threshold Color")
+                        thresholdColorPicker:SetColor(thresholdColor[1], thresholdColor[2], thresholdColor[3])
+                        thresholdColorPicker:SetHasAlpha(false)
+                        thresholdColorPicker:SetFullWidth(true)
+                        thresholdColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b)
+                            settings.resources[capturedPt].segThresholdColor = { r, g, b }
+                        end)
+                        thresholdColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b)
+                            settings.resources[capturedPt].segThresholdColor = { r, g, b }
+                            CooldownCompanion:ApplyResourceBars()
+                        end)
+                        container:AddChild(thresholdColorPicker)
+                    end
+                else
+                    local tickAdvKey = "rbTickMarker_" .. capturedPt
+                    local tickEnableCb = AceGUI:Create("CheckBox")
+                    tickEnableCb:SetLabel("Enable " .. resourceName .. " Tick Marker")
+                    tickEnableCb:SetValue(res.continuousTickEnabled == true)
+                    tickEnableCb:SetFullWidth(true)
+                    tickEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
+                        if not settings.resources[capturedPt] then settings.resources[capturedPt] = {} end
+                        local wasEnabled = settings.resources[capturedPt].continuousTickEnabled == true
+                        settings.resources[capturedPt].continuousTickEnabled = val and true or nil
+                        if val and not wasEnabled then
+                            if type(CooldownCompanion.db.profile.showAdvanced) ~= "table" then
+                                CooldownCompanion.db.profile.showAdvanced = {}
+                            end
+                            CooldownCompanion.db.profile.showAdvanced[tickAdvKey] = true
+                        end
+                        CooldownCompanion:ApplyResourceBars()
+                        C_Timer.After(0, function() CooldownCompanion:RefreshConfigPanel() end)
+                    end)
+                    container:AddChild(tickEnableCb)
+
+                    local tickAdvExpanded = AddAdvancedToggle(
+                        tickEnableCb,
+                        tickAdvKey,
+                        rbThresholdTickAdvBtns,
+                        res.continuousTickEnabled == true
+                    )
+                    if res.continuousTickEnabled == true and tickAdvExpanded then
+                        local tickMode = GetContinuousTickModeConfig(res)
+                        local modeDrop = AceGUI:Create("Dropdown")
+                        modeDrop:SetLabel("Tick Mode")
+                        modeDrop:SetList({
+                            percent = "Percent",
+                            absolute = "Absolute Value",
+                        }, { "percent", "absolute" })
+                        modeDrop:SetValue(tickMode)
+                        modeDrop:SetFullWidth(true)
+                        modeDrop:SetCallback("OnValueChanged", function(widget, event, val)
+                            if val ~= "percent" and val ~= "absolute" then
+                                val = DEFAULT_CONTINUOUS_TICK_MODE_CONFIG
+                            end
+                            settings.resources[capturedPt].continuousTickMode = val
+                            CooldownCompanion:ApplyResourceBars()
+                            C_Timer.After(0, function() CooldownCompanion:RefreshConfigPanel() end)
+                        end)
+                        container:AddChild(modeDrop)
+
+                        if tickMode == "percent" then
+                            local percentSlider = AceGUI:Create("Slider")
+                            percentSlider:SetLabel(resourceName .. " Tick Percent")
+                            percentSlider:SetSliderValues(0, 100, 1)
+                            percentSlider:SetValue(GetContinuousTickPercentConfig(res))
+                            percentSlider:SetIsPercent(false)
+                            percentSlider:SetFullWidth(true)
+                            percentSlider:SetCallback("OnValueChanged", function(widget, event, val)
+                                settings.resources[capturedPt].continuousTickPercent = val
+                                CooldownCompanion:ApplyResourceBars()
+                            end)
+                            container:AddChild(percentSlider)
+                        else
+                            local absoluteEdit = AceGUI:Create("EditBox")
+                            if absoluteEdit.editbox.Instructions then absoluteEdit.editbox.Instructions:Hide() end
+                            absoluteEdit:SetLabel(resourceName .. " Tick Absolute Value")
+                            absoluteEdit:SetText(tostring(GetContinuousTickAbsoluteConfig(res)))
+                            absoluteEdit:SetFullWidth(true)
+                            absoluteEdit:DisableButton(true)
+                            absoluteEdit:SetCallback("OnEnterPressed", function(widget, event, text)
+                                local parsed = tonumber(text)
+                                if not parsed then
+                                    widget:SetText(tostring(GetContinuousTickAbsoluteConfig(settings.resources[capturedPt])))
+                                    return
+                                end
+                                if parsed < 0 then
+                                    parsed = 0
+                                end
+                                settings.resources[capturedPt].continuousTickAbsolute = parsed
+                                widget:SetText(tostring(parsed))
+                                CooldownCompanion:ApplyResourceBars()
+                            end)
+                            container:AddChild(absoluteEdit)
+                        end
+
+                        local tickColor = GetSafeRGBAConfig(res.continuousTickColor, DEFAULT_CONTINUOUS_TICK_COLOR_CONFIG)
+                        local tickColorPicker = AceGUI:Create("ColorPicker")
+                        tickColorPicker:SetLabel(resourceName .. " Tick Color")
+                        tickColorPicker:SetColor(tickColor[1], tickColor[2], tickColor[3], tickColor[4] ~= nil and tickColor[4] or 1)
+                        tickColorPicker:SetHasAlpha(true)
+                        tickColorPicker:SetFullWidth(true)
+                        tickColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
+                            settings.resources[capturedPt].continuousTickColor = { r, g, b, a }
+                        end)
+                        tickColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
+                            settings.resources[capturedPt].continuousTickColor = { r, g, b, a }
+                            CooldownCompanion:ApplyResourceBars()
+                        end)
+                        container:AddChild(tickColorPicker)
+                    end
+                end
             end
         end
     end
