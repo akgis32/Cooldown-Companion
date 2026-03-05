@@ -1779,6 +1779,24 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
 
     if cab.enabled then
 
+            local trackedAuraName = cab.spellID and C_Spell.GetSpellName(cab.spellID)
+            local trackedAuraIcon = cab.spellID and C_Spell.GetSpellTexture(cab.spellID)
+            local trackedAuraLabel = AceGUI:Create("Label")
+            local trackedAuraText
+            if trackedAuraName then
+                local iconPrefix = trackedAuraIcon and ("|T" .. trackedAuraIcon .. ":16:16:0:0|t ") or ""
+                trackedAuraText = "|cffffcc00Tracking Aura:|r " .. iconPrefix
+                    .. "|cffffffff" .. trackedAuraName .. "|r"
+            elseif cab.spellID then
+                trackedAuraText = "|cffffcc00Tracking Aura:|r |cffffffffSpell ID "
+                    .. tostring(cab.spellID) .. "|r"
+            else
+                trackedAuraText = "|cffffcc00Tracking Aura:|r |cff999999None selected|r"
+            end
+            trackedAuraLabel:SetText(trackedAuraText)
+            trackedAuraLabel:SetFullWidth(true)
+            container:AddChild(trackedAuraLabel)
+
             -- Spell ID edit box with autocomplete
             local spellEdit = AceGUI:Create("EditBox")
             if spellEdit.editbox.Instructions then spellEdit.editbox.Instructions:Hide() end
@@ -1833,17 +1851,6 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             end
 
             container:AddChild(spellEdit)
-
-            -- Label (read-only display)
-            if cab.spellID then
-                local spellName = C_Spell.GetSpellName(cab.spellID)
-                if spellName then
-                    local labelDisplay = AceGUI:Create("Label")
-                    labelDisplay:SetText("|cff888888" .. spellName .. "|r")
-                    labelDisplay:SetFullWidth(true)
-                    container:AddChild(labelDisplay)
-                end
-            end
 
             -- Tracking Mode dropdown
             local trackDrop = AceGUI:Create("Dropdown")
