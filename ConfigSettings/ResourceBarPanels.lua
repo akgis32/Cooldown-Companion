@@ -1742,7 +1742,7 @@ end
 -- Custom Aura Bar Panel (col2 takeover when resource bar panel active)
 ------------------------------------------------------------------------
 
-local function BuildCustomAuraBarPanel(container)
+local function BuildCustomAuraBarPanel(container, slotIdx)
     auraBarAutocompleteCache = nil
     local db = CooldownCompanion.db.profile
     local settings = db.resourceBars
@@ -1750,73 +1750,52 @@ local function BuildCustomAuraBarPanel(container)
     local customBars = CooldownCompanion:GetSpecCustomAuraBars()
     local maxSlots = ST.MAX_CUSTOM_AURA_BARS or 3
     local rbCabTextAdvBtns = {}
+    local selectedSlot = tonumber(slotIdx) or 1
 
-    -- Spec label
-    local specIdx = C_SpecializationInfo.GetSpecialization()
-    if specIdx then
-        local _, specName, _, specIcon = C_SpecializationInfo.GetSpecializationInfo(specIdx)
-        if specName then
-            local specLabel = AceGUI:Create("Label")
-            specLabel:SetText("|T" .. specIcon .. ":14:14:0:0|t  Configuring: |cffffd100" .. specName .. "|r")
-            specLabel:SetFullWidth(true)
-            specLabel:SetFontObject(GameFontNormal)
-            container:AddChild(specLabel)
-
-            local spacer = AceGUI:Create("Label")
-            spacer:SetText(" ")
-            spacer:SetFullWidth(true)
-            container:AddChild(spacer)
-        end
+    if selectedSlot < 1 then
+        selectedSlot = 1
+    elseif selectedSlot > maxSlots then
+        selectedSlot = maxSlots
     end
 
-    for slotIdx = 1, maxSlots do
-        if not customBars[slotIdx] then
-            customBars[slotIdx] = { enabled = false }
-        end
-        local cab = customBars[slotIdx]
+    if not customBars[selectedSlot] then
+        customBars[selectedSlot] = { enabled = false }
+    end
+    local cab = customBars[selectedSlot]
+    local capturedIdx = selectedSlot
 
-        local slotKey = "rb_cab_slot_" .. slotIdx
-        local slotCollapsed = resourceBarCollapsedSections[slotKey]
-        local slotHeadingText = "Slot " .. slotIdx
-        if cab.enabled then
-            local slotLabel = cab.label or ""
-            if cab.spellID then
-                local spellName = C_Spell.GetSpellName(cab.spellID)
-                if spellName then slotLabel = spellName end
+    -- Enable checkbox
+    local enableCab = AceGUI:Create("CheckBox")
+    enableCab:SetLabel("Enable")
+    enableCab:SetValue(cab.enabled == true)
+    enableCab:SetFullWidth(true)
+    enableCab:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].enabled = val
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:UpdateAnchorStacking()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(enableCab)
+
+    if cab.enabled then
+
+            local trackedAuraName = cab.spellID and C_Spell.GetSpellName(cab.spellID)
+            local trackedAuraIcon = cab.spellID and C_Spell.GetSpellTexture(cab.spellID)
+            local trackedAuraLabel = AceGUI:Create("Label")
+            local trackedAuraText
+            if trackedAuraName then
+                local iconPrefix = trackedAuraIcon and ("|T" .. trackedAuraIcon .. ":16:16:0:0|t ") or ""
+                trackedAuraText = "|cffffcc00Tracking Aura:|r " .. iconPrefix
+                    .. "|cffffffff" .. trackedAuraName .. "|r"
+            elseif cab.spellID then
+                trackedAuraText = "|cffffcc00Tracking Aura:|r |cffffffffSpell ID "
+                    .. tostring(cab.spellID) .. "|r"
+            else
+                trackedAuraText = "|cffffcc00Tracking Aura:|r |cff999999None selected|r"
             end
-            if slotLabel == "" then slotLabel = "Empty" end
-            slotHeadingText = slotHeadingText .. ": " .. slotLabel
-        end
-
-        local slotHeading = AceGUI:Create("Heading")
-        slotHeading:SetText(slotHeadingText)
-        ColorHeading(slotHeading)
-        slotHeading:SetFullWidth(true)
-        container:AddChild(slotHeading)
-
-        local capturedSlotKey = slotKey
-        AttachCollapseButton(slotHeading, slotCollapsed, function()
-            resourceBarCollapsedSections[capturedSlotKey] = not resourceBarCollapsedSections[capturedSlotKey]
-            CooldownCompanion:RefreshConfigPanel()
-        end)
-
-        if not slotCollapsed then
-            local capturedIdx = slotIdx
-
-            -- Enable checkbox
-            local enableCab = AceGUI:Create("CheckBox")
-            enableCab:SetLabel("Enable")
-            enableCab:SetValue(cab.enabled == true)
-            enableCab:SetFullWidth(true)
-            enableCab:SetCallback("OnValueChanged", function(widget, event, val)
-                customBars[capturedIdx].enabled = val
-                CooldownCompanion:ApplyResourceBars()
-                CooldownCompanion:UpdateAnchorStacking()
-                CooldownCompanion:RefreshConfigPanel()
-            end)
-            container:AddChild(enableCab)
-
-            if cab.enabled then
+            trackedAuraLabel:SetText(trackedAuraText)
+            trackedAuraLabel:SetFullWidth(true)
+            container:AddChild(trackedAuraLabel)
 
             -- Spell ID edit box with autocomplete
             local spellEdit = AceGUI:Create("EditBox")
@@ -1872,17 +1851,6 @@ local function BuildCustomAuraBarPanel(container)
             end
 
             container:AddChild(spellEdit)
-
-            -- Label (read-only display)
-            if cab.spellID then
-                local spellName = C_Spell.GetSpellName(cab.spellID)
-                if spellName then
-                    local labelDisplay = AceGUI:Create("Label")
-                    labelDisplay:SetText("|cff888888" .. spellName .. "|r")
-                    labelDisplay:SetFullWidth(true)
-                    container:AddChild(labelDisplay)
-                end
-            end
 
             -- Tracking Mode dropdown
             local trackDrop = AceGUI:Create("Dropdown")
@@ -2346,14 +2314,13 @@ local function BuildCustomAuraBarPanel(container)
                 end)
                 container:AddChild(hideCb)
             end
-            end -- if cab.enabled
-        end
-    end
+    end -- if cab.enabled
 
     -- "Copy from..." button
     local _, _, classID = UnitClass("player")
     local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classID)
     local currentSpecID
+    local specIdx = C_SpecializationInfo.GetSpecialization()
     if specIdx then
         currentSpecID = C_SpecializationInfo.GetSpecializationInfo(specIdx)
     end
