@@ -15,19 +15,30 @@ local math_floor = math.floor
 ------------------------------------------------------------------------
 -- CONSTANTS
 ------------------------------------------------------------------------
-local FRAME_WIDTH = 620
-local FRAME_HEIGHT = 520
-local NODE_SIZE = 30
-local NODE_PADDING = 20  -- extra padding around bounding box edges
+local FRAME_WIDTH = 880
+local FRAME_HEIGHT = 620
+local NODE_SIZE = 32
+local NODE_PADDING = 16
 local CHOICE_ICON_SIZE = 22
 local CHOICE_ICON_GAP = 2
+
+local PANEL_GAP = 12
+local PANEL_HEADER_HEIGHT = 20
+local NORMAL_BORDER_SIZE = 2
+local CHOICE_BORDER_SIZE = 3
+
+local EDGE_THICKNESS_ACTIVE = 1.8
+local EDGE_THICKNESS_INACTIVE = 1.2
 
 -- Colors
 local COLOR_BORDER_TAKEN    = { 0.3, 0.85, 0.3, 1 }
 local COLOR_BORDER_NOTTAKEN = { 0.4, 0.4, 0.4, 0.7 }
 local COLOR_BORDER_SELECTED = { 1.0, 0.82, 0.0, 1 }
+local COLOR_BORDER_CHOICE   = { 0.6, 0.5, 0.85, 1 }
 local COLOR_BG              = { 0.08, 0.08, 0.12, 0.95 }
 local COLOR_TITLE_BG        = { 0.15, 0.15, 0.2, 1 }
+local COLOR_EDGE_ACTIVE     = { 0.85, 0.75, 0.2, 0.9 }
+local COLOR_EDGE_INACTIVE   = { 0.35, 0.35, 0.35, 0.5 }
 
 ------------------------------------------------------------------------
 -- FRAME POOL
@@ -35,6 +46,7 @@ local COLOR_TITLE_BG        = { 0.15, 0.15, 0.2, 1 }
 local pickerFrame = nil
 local nodeButtons = {}
 local choiceButtons = {}
+local edgeLines = {}
 local onSelectCallback = nil
 
 ------------------------------------------------------------------------
@@ -44,19 +56,29 @@ local function SetBorderColor(tex, color)
     tex:SetColorTexture(color[1], color[2], color[3], color[4])
 end
 
+local function SetNodeBorderThickness(btn, thickness)
+    btn.borders[1]:SetHeight(thickness)
+    btn.borders[2]:SetHeight(thickness)
+    btn.borders[3]:SetWidth(thickness)
+    btn.borders[4]:SetWidth(thickness)
+    btn.icon:ClearAllPoints()
+    btn.icon:SetPoint("TOPLEFT", thickness, -thickness)
+    btn.icon:SetPoint("BOTTOMRIGHT", -thickness, thickness)
+end
+
 local function CreateNodeButton(parent, index)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(NODE_SIZE, NODE_SIZE)
 
     -- Icon
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
-    btn.icon:SetPoint("TOPLEFT", 2, -2)
-    btn.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+    btn.icon:SetPoint("TOPLEFT", NORMAL_BORDER_SIZE, -NORMAL_BORDER_SIZE)
+    btn.icon:SetPoint("BOTTOMRIGHT", -NORMAL_BORDER_SIZE, NORMAL_BORDER_SIZE)
     btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     -- Border (4 edge textures)
     btn.borders = {}
-    local bSize = 2
+    local bSize = NORMAL_BORDER_SIZE
     local b
     b = btn:CreateTexture(nil, "BORDER"); b:SetPoint("TOPLEFT", 0, 0); b:SetPoint("TOPRIGHT", 0, 0); b:SetHeight(bSize)
     btn.borders[1] = b
@@ -274,6 +296,26 @@ local function EnsurePickerFrame()
     pickerFrame.scrollChild = scrollChild
     pickerFrame.scrollFrame = scrollFrame
 
+    -- Panel header labels (positioned in PopulateTree)
+    local classLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    classLabel:SetText("Class")
+    classLabel:SetTextColor(0.8, 0.8, 0.6, 1)
+    classLabel:Hide()
+    pickerFrame.classLabel = classLabel
+
+    local specLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    specLabel:SetText("Spec")
+    specLabel:SetTextColor(0.8, 0.8, 0.6, 1)
+    specLabel:Hide()
+    pickerFrame.specLabel = specLabel
+
+    -- Vertical divider line between panels (positioned in PopulateTree)
+    local divider = scrollChild:CreateLine(nil, "ARTWORK")
+    divider:SetThickness(1)
+    divider:SetColorTexture(0.3, 0.3, 0.4, 0.6)
+    divider:Hide()
+    pickerFrame.divider = divider
+
     -- Bottom buttons
     local clearBtn = CreateFrame("Button", nil, pickerFrame, "UIPanelButtonTemplate")
     clearBtn:SetSize(100, 24)
@@ -344,17 +386,158 @@ local function GetEntryDisplayInfo(configID, entryID)
     }
 end
 
+local function ComputeBounds(nodeSet)
+    local mnX, mxX, mnY, mxY = math.huge, -math.huge, math.huge, -math.huge
+    for _, n in ipairs(nodeSet) do
+        if n.px < mnX then mnX = n.px end
+        if n.px > mxX then mxX = n.px end
+        if n.py < mnY then mnY = n.py end
+        if n.py > mxY then mxY = n.py end
+    end
+    return mnX, mxX, mnY, mxY
+end
+
+local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
+                                  panelMinX, panelMinY, panelScale,
+                                  currentNodeID, currentEntryID,
+                                  btnIndex, nodeIDToBtn)
+    for _, node in ipairs(nodeSet) do
+        btnIndex = btnIndex + 1
+        local btn = nodeButtons[btnIndex]
+        if not btn then
+            btn = CreateNodeButton(scrollChild, btnIndex)
+            nodeButtons[btnIndex] = btn
+        end
+
+        local x = panelOffsetX + (node.px - panelMinX) * panelScale + NODE_PADDING
+        local y = yOffset + (node.py - panelMinY) * panelScale + NODE_PADDING
+
+        btn:SetParent(scrollChild)
+        btn:ClearAllPoints()
+        btn:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", x, -y)
+        btn:Show()
+
+        -- Border thickness: choice nodes get thicker borders
+        if node.isChoice then
+            SetNodeBorderThickness(btn, CHOICE_BORDER_SIZE)
+        else
+            SetNodeBorderThickness(btn, NORMAL_BORDER_SIZE)
+        end
+
+        -- Display: use active entry's icon for choice nodes, else first entry
+        local primaryEntry = node.entries[1]
+        if node.isChoice and node.activeEntryID then
+            for _, entry in ipairs(node.entries) do
+                if entry.entryID == node.activeEntryID then
+                    primaryEntry = entry
+                    break
+                end
+            end
+        end
+
+        btn.icon:SetTexture(primaryEntry.icon)
+        local isTaken = node.activeRank > 0
+        btn.icon:SetDesaturated(not isTaken)
+        if not isTaken then
+            btn.icon:SetVertexColor(0.6, 0.6, 0.6)
+        else
+            btn.icon:SetVertexColor(1, 1, 1)
+        end
+
+        btn._talentName = primaryEntry.name
+        btn._isChoiceNode = node.isChoice
+        btn._rankText = (node.activeRank .. "/" .. node.maxRanks)
+
+        -- Border color: selected > taken > choice-untaken > not taken
+        local borderColor
+        if node.nodeID == currentNodeID then
+            borderColor = COLOR_BORDER_SELECTED
+        elseif isTaken then
+            borderColor = COLOR_BORDER_TAKEN
+        elseif node.isChoice then
+            borderColor = COLOR_BORDER_CHOICE
+        else
+            borderColor = COLOR_BORDER_NOTTAKEN
+        end
+        SetNodeBorderColor(btn, borderColor)
+
+        -- Click handler
+        local nodeRef = node
+        btn:SetScript("OnClick", function(self)
+            if nodeRef.isChoice and #nodeRef.entries > 1 then
+                ShowChoiceFrame(self, nodeRef.entries, nodeRef.nodeID, currentEntryID)
+            else
+                HideChoiceFrame()
+                if onSelectCallback then
+                    onSelectCallback({
+                        nodeID = nodeRef.nodeID,
+                        entryID = nil,
+                        spellID = primaryEntry.spellID,
+                        talentName = primaryEntry.name,
+                    })
+                end
+                pickerFrame:Hide()
+            end
+        end)
+
+        nodeIDToBtn[node.nodeID] = btn
+    end
+
+    return btnIndex
+end
+
+local function DrawEdges(scrollChild, allNodes, nodeIDToBtn)
+    local lineIndex = 0
+
+    for _, node in ipairs(allNodes) do
+        if node.visibleEdges then
+            local srcBtn = nodeIDToBtn[node.nodeID]
+            if srcBtn then
+                for _, edge in ipairs(node.visibleEdges) do
+                    local dstBtn = nodeIDToBtn[edge.targetNode]
+                    if dstBtn then
+                        lineIndex = lineIndex + 1
+                        local line = edgeLines[lineIndex]
+                        if not line then
+                            line = scrollChild:CreateLine(nil, "BACKGROUND")
+                            edgeLines[lineIndex] = line
+                        end
+
+                        line:ClearAllPoints()
+                        line:SetStartPoint("CENTER", srcBtn)
+                        line:SetEndPoint("CENTER", dstBtn)
+
+                        if edge.isActive then
+                            line:SetThickness(EDGE_THICKNESS_ACTIVE)
+                            line:SetColorTexture(COLOR_EDGE_ACTIVE[1], COLOR_EDGE_ACTIVE[2],
+                                                 COLOR_EDGE_ACTIVE[3], COLOR_EDGE_ACTIVE[4])
+                        else
+                            line:SetThickness(EDGE_THICKNESS_INACTIVE)
+                            line:SetColorTexture(COLOR_EDGE_INACTIVE[1], COLOR_EDGE_INACTIVE[2],
+                                                 COLOR_EDGE_INACTIVE[3], COLOR_EDGE_INACTIVE[4])
+                        end
+
+                        line:Show()
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function PopulateTree(currentNodeID, currentEntryID)
     local scrollChild = pickerFrame.scrollChild
 
-    -- Hide all existing buttons
-    for _, btn in ipairs(nodeButtons) do
-        btn:Hide()
-    end
-    for _, cb in ipairs(choiceButtons) do
-        cb:Hide()
-    end
+    -- Hide all existing buttons and edges
+    for _, btn in ipairs(nodeButtons) do btn:Hide() end
+    for _, cb in ipairs(choiceButtons) do cb:Hide() end
+    for _, line in ipairs(edgeLines) do line:Hide() end
     HideChoiceFrame()
+
+    -- Hide panel UI until we know if dual-panel mode applies
+    pickerFrame.classLabel:Hide()
+    pickerFrame.specLabel:Hide()
+    pickerFrame.divider:Hide()
 
     local configID = C_ClassTalents.GetActiveConfigID()
     if not configID then return end
@@ -368,9 +551,18 @@ local function PopulateTree(currentNodeID, currentEntryID)
     local nodeIDs = C_Traits.GetTreeNodes(treeID)
     if not nodeIDs then return end
 
+    -- Get tree currencies for class/spec split
+    local treeCurrencyInfo = C_Traits.GetTreeCurrencyInfo(configID, treeID, false)
+    local classCurrencyID, specCurrencyID
+    if treeCurrencyInfo and #treeCurrencyInfo >= 2 then
+        classCurrencyID = treeCurrencyInfo[1].traitCurrencyID
+        specCurrencyID = treeCurrencyInfo[2].traitCurrencyID
+    end
+
     -- Gather visible class/spec nodes (exclude hero talent subtrees)
-    local nodes = {}
-    local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
+    local classNodes = {}
+    local specNodes = {}
+    local allNodes = {}
 
     for _, nodeID in ipairs(nodeIDs) do
         local nodeInfo = C_Traits.GetNodeInfo(configID, nodeID)
@@ -395,7 +587,7 @@ local function PopulateTree(currentNodeID, currentEntryID)
 
             if #entries > 0 then
                 local isChoice = (nodeInfo.type == Enum.TraitNodeType.Selection)
-                nodes[#nodes + 1] = {
+                local record = {
                     nodeID = nodeID,
                     px = px,
                     py = py,
@@ -405,102 +597,118 @@ local function PopulateTree(currentNodeID, currentEntryID)
                     entries = entries,
                     isChoice = isChoice,
                     nodeType = nodeInfo.type,
+                    visibleEdges = nodeInfo.visibleEdges,
                 }
 
-                if px < minX then minX = px end
-                if px > maxX then maxX = px end
-                if py < minY then minY = py end
-                if py > maxY then maxY = py end
+                allNodes[#allNodes + 1] = record
+
+                -- Classify by currency
+                if classCurrencyID and specCurrencyID then
+                    local costs = C_Traits.GetNodeCost(configID, nodeID)
+                    local isSpec = false
+                    if costs and #costs > 0 then
+                        for _, cost in ipairs(costs) do
+                            if cost.ID == specCurrencyID then
+                                isSpec = true
+                                break
+                            end
+                        end
+                        if isSpec then
+                            specNodes[#specNodes + 1] = record
+                        else
+                            classNodes[#classNodes + 1] = record
+                        end
+                    else
+                        -- No cost (granted starting talents) → default to class
+                        classNodes[#classNodes + 1] = record
+                    end
+                end
             end
         end
     end
 
-    if #nodes == 0 then return end
+    if #allNodes == 0 then return end
 
-    -- Calculate scaling to fit within the scroll child area
-    local treeWidth = maxX - minX + NODE_SIZE
-    local treeHeight = maxY - minY + NODE_SIZE
-    local availWidth = FRAME_WIDTH - 50
-    local availHeight = FRAME_HEIGHT - 100
+    local dualPanel = (#classNodes > 0 and #specNodes > 0)
+    local nodeIDToBtn = {}
+    local btnIndex = 0
 
-    local scaleX = treeWidth > 0 and (availWidth - NODE_PADDING * 2) / treeWidth or 1
-    local scaleY = treeHeight > 0 and (availHeight - NODE_PADDING * 2) / treeHeight or 1
-    local scale = math_min(scaleX, scaleY, 1.0)
+    if dualPanel then
+        local panelAvailWidth = (FRAME_WIDTH - 50 - PANEL_GAP) / 2
+        local panelAvailHeight = FRAME_HEIGHT - 100 - PANEL_HEADER_HEIGHT
 
-    local contentWidth = treeWidth * scale + NODE_PADDING * 2
-    local contentHeight = treeHeight * scale + NODE_PADDING * 2
-    scrollChild:SetSize(math_max(contentWidth, availWidth), math_max(contentHeight, availHeight))
+        -- Class panel bounds & scale
+        local cMinX, cMaxX, cMinY, cMaxY = ComputeBounds(classNodes)
+        local cTreeW = cMaxX - cMinX + NODE_SIZE
+        local cTreeH = cMaxY - cMinY + NODE_SIZE
+        local cScaleX = cTreeW > 0 and (panelAvailWidth - NODE_PADDING * 2) / cTreeW or 1
+        local cScaleY = cTreeH > 0 and (panelAvailHeight - NODE_PADDING * 2) / cTreeH or 1
+        local cScale = math_min(cScaleX, cScaleY, 1.0)
 
-    -- Place node buttons
-    for i, node in ipairs(nodes) do
-        local btn = nodeButtons[i]
-        if not btn then
-            btn = CreateNodeButton(scrollChild, i)
-            nodeButtons[i] = btn
-        end
+        -- Spec panel bounds & scale
+        local sMinX, sMaxX, sMinY, sMaxY = ComputeBounds(specNodes)
+        local sTreeW = sMaxX - sMinX + NODE_SIZE
+        local sTreeH = sMaxY - sMinY + NODE_SIZE
+        local sScaleX = sTreeW > 0 and (panelAvailWidth - NODE_PADDING * 2) / sTreeW or 1
+        local sScaleY = sTreeH > 0 and (panelAvailHeight - NODE_PADDING * 2) / sTreeH or 1
+        local sScale = math_min(sScaleX, sScaleY, 1.0)
 
-        local x = (node.px - minX) * scale + NODE_PADDING
-        local y = (node.py - minY) * scale + NODE_PADDING
+        local classContentH = cTreeH * cScale + NODE_PADDING * 2 + PANEL_HEADER_HEIGHT
+        local specContentH = sTreeH * sScale + NODE_PADDING * 2 + PANEL_HEADER_HEIGHT
+        local contentHeight = math_max(classContentH, specContentH)
+        local contentWidth = panelAvailWidth * 2 + PANEL_GAP
 
-        btn:SetParent(scrollChild)
-        btn:ClearAllPoints()
-        btn:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", x, -y)
-        btn:Show()
+        scrollChild:SetSize(math_max(contentWidth, FRAME_WIDTH - 50),
+                            math_max(contentHeight, panelAvailHeight))
 
-        -- Display: use first entry's icon for single/tiered nodes
-        local primaryEntry = node.entries[1]
-        if node.isChoice and node.activeEntryID then
-            for _, entry in ipairs(node.entries) do
-                if entry.entryID == node.activeEntryID then
-                    primaryEntry = entry
-                    break
-                end
-            end
-        end
+        -- Place class nodes (left panel)
+        btnIndex = PlaceNodesInPanel(scrollChild, classNodes, 0, PANEL_HEADER_HEIGHT,
+            cMinX, cMinY, cScale, currentNodeID, currentEntryID, btnIndex, nodeIDToBtn)
 
-        btn.icon:SetTexture(primaryEntry.icon)
-        local isTaken = node.activeRank > 0
-        btn.icon:SetDesaturated(not isTaken)
-        if not isTaken then
-            btn.icon:SetVertexColor(0.6, 0.6, 0.6)
-        else
-            btn.icon:SetVertexColor(1, 1, 1)
-        end
+        -- Place spec nodes (right panel)
+        btnIndex = PlaceNodesInPanel(scrollChild, specNodes,
+            panelAvailWidth + PANEL_GAP, PANEL_HEADER_HEIGHT,
+            sMinX, sMinY, sScale, currentNodeID, currentEntryID, btnIndex, nodeIDToBtn)
 
-        btn._talentName = primaryEntry.name
-        btn._isChoiceNode = node.isChoice
-        btn._rankText = (node.activeRank .. "/" .. node.maxRanks)
+        -- Panel header labels
+        pickerFrame.classLabel:ClearAllPoints()
+        pickerFrame.classLabel:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", NODE_PADDING, 0)
+        pickerFrame.classLabel:Show()
 
-        -- Border color: selected > taken > not taken
-        local borderColor = COLOR_BORDER_NOTTAKEN
-        if node.nodeID == currentNodeID then
-            borderColor = COLOR_BORDER_SELECTED
-        elseif isTaken then
-            borderColor = COLOR_BORDER_TAKEN
-        end
-        SetNodeBorderColor(btn, borderColor)
+        pickerFrame.specLabel:ClearAllPoints()
+        pickerFrame.specLabel:SetPoint("TOPLEFT", scrollChild, "TOPLEFT",
+            panelAvailWidth + PANEL_GAP + NODE_PADDING, 0)
+        pickerFrame.specLabel:Show()
 
-        -- Click handler
-        local nodeRef = node
-        btn:SetScript("OnClick", function(self)
-            if nodeRef.isChoice and #nodeRef.entries > 1 then
-                -- Show choice submenu
-                ShowChoiceFrame(self, nodeRef.entries, nodeRef.nodeID, currentEntryID)
-            else
-                -- Single/tiered node: select directly
-                HideChoiceFrame()
-                if onSelectCallback then
-                    onSelectCallback({
-                        nodeID = nodeRef.nodeID,
-                        entryID = nil,
-                        spellID = primaryEntry.spellID,
-                        talentName = primaryEntry.name,
-                    })
-                end
-                pickerFrame:Hide()
-            end
-        end)
+        -- Vertical divider between panels
+        local dividerX = panelAvailWidth + PANEL_GAP / 2
+        pickerFrame.divider:ClearAllPoints()
+        pickerFrame.divider:SetStartPoint("TOPLEFT", scrollChild, dividerX, 0)
+        pickerFrame.divider:SetEndPoint("BOTTOMLEFT", scrollChild, dividerX, 0)
+        pickerFrame.divider:Show()
+    else
+        -- Single-panel fallback (currency detection failed or all nodes in one category)
+        local minX, maxX, minY, maxY = ComputeBounds(allNodes)
+        local treeWidth = maxX - minX + NODE_SIZE
+        local treeHeight = maxY - minY + NODE_SIZE
+        local availWidth = FRAME_WIDTH - 50
+        local availHeight = FRAME_HEIGHT - 100
+
+        local scaleX = treeWidth > 0 and (availWidth - NODE_PADDING * 2) / treeWidth or 1
+        local scaleY = treeHeight > 0 and (availHeight - NODE_PADDING * 2) / treeHeight or 1
+        local scale = math_min(scaleX, scaleY, 1.0)
+
+        local contentWidth = treeWidth * scale + NODE_PADDING * 2
+        local contentHeight = treeHeight * scale + NODE_PADDING * 2
+        scrollChild:SetSize(math_max(contentWidth, availWidth),
+                            math_max(contentHeight, availHeight))
+
+        btnIndex = PlaceNodesInPanel(scrollChild, allNodes, 0, 0,
+            minX, minY, scale, currentNodeID, currentEntryID, btnIndex, nodeIDToBtn)
     end
+
+    -- Draw edge connector lines
+    DrawEdges(scrollChild, allNodes, nodeIDToBtn)
 end
 
 ------------------------------------------------------------------------
