@@ -102,17 +102,22 @@ local function CreateNodeButton(parent, index)
     btn.highlight:SetColorTexture(1, 1, 1, 0.15)
 
     btn:SetScript("OnEnter", function(self)
-        if self._talentName then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if self._spellID then
+            GameTooltip:SetSpellByID(self._spellID)
+            if self._rankText then
+                GameTooltip:AddLine(self._rankText, 0.7, 0.7, 0.7)
+            end
+        elseif self._talentName then
             GameTooltip:AddLine(self._talentName, 1, 1, 1)
             if self._rankText then
                 GameTooltip:AddLine(self._rankText, 0.7, 0.7, 0.7)
             end
-            if self._isChoiceNode then
-                GameTooltip:AddLine("Click to see choices", 0.5, 0.8, 1)
-            end
-            GameTooltip:Show()
         end
+        if self._isChoiceNode then
+            GameTooltip:AddLine("Click to see choices", 0.5, 0.8, 1)
+        end
+        GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
@@ -543,6 +548,7 @@ local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
         end
 
         btn._talentName = primaryEntry.name
+        btn._spellID = primaryEntry.spellID
         btn._isChoiceNode = node.isChoice
         btn._rankText = (node.activeRank .. "/" .. node.maxRanks)
 
