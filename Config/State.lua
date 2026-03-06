@@ -170,6 +170,7 @@ ST._configState = {
     barPanelTab = "resource_anchoring",
     resourceStylingTab = "bar_text",
     customAuraBarTab = "bar_1",
+    customAuraBarSubTabs = {},
     groupPresetSelection = {
         icons = nil,
         bars = nil,
