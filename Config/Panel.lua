@@ -1051,6 +1051,8 @@ local function CreateConfigPanel()
     -- Store references
     frame.profileBar = profileBar
     frame.versionText = versionText
+    frame.modeStatusRow = modeStatusRow
+    frame.profileGear = profileGear
     frame.col1 = col1
     frame.col2 = col2
     frame.col3 = col3
