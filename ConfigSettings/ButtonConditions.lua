@@ -881,7 +881,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
             -- Per-condition stale node warning
             if not isBatch and cache and not cache[cond.nodeID] then
                 local warnLabel = AceGUI:Create("Label")
-                warnLabel:SetText("|cffff8800  Node not found in current tree.|r")
+                warnLabel:SetText("|cffff8800  This talent is not in your current active tree, so it behaves as not taken right now.|r")
                 warnLabel:SetFullWidth(true)
                 scroll:AddChild(warnLabel)
             end
@@ -965,7 +965,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
             end
             CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
             CooldownCompanion:RefreshConfigPanel()
-        end, initialConditions)
+        end, initialConditions, group)
     end)
     talentBtnRow:AddChild(pickBtn)
 

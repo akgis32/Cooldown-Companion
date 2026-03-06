@@ -60,7 +60,7 @@ function CooldownCompanion:GetEffectiveHeroTalents(group)
     if folderId then
         local folders = self.db and self.db.profile and self.db.profile.folders
         local folder = folders and folders[folderId]
-        if folder and folder.specs and next(folder.specs) then
+        if folder and folder.heroTalents and next(folder.heroTalents) then
             return folder.heroTalents, true
         end
     end
@@ -722,7 +722,7 @@ end
 
 -- Check whether per-button talent conditions are satisfied.
 -- Returns true if no conditions set. All conditions use AND logic.
--- Fail-open per condition: unknown/stale nodes skip (don't fail the check).
+-- Missing nodes are treated as not taken.
 function CooldownCompanion:IsTalentConditionMet(buttonData)
     local conditions = buttonData.talentConditions
     if not conditions or #conditions == 0 then return true end
@@ -738,26 +738,26 @@ function CooldownCompanion:IsTalentConditionMet(buttonData)
     end
 
     local cache = self._talentNodeCache
-    if not cache then return true end
+    if not cache then
+        self:RebuildTalentNodeCache()
+        cache = self._talentNodeCache
+    end
 
     for _, cond in ipairs(conditions) do
-        local entry = cache[cond.nodeID]
-        if entry then
-            local isTaken = entry.activeRank > 0
+        local entry = cache and cache[cond.nodeID] or nil
+        local isTaken = entry and entry.activeRank > 0 or false
 
-            -- For choice nodes: if a specific entryID is required, verify it matches
-            if isTaken and cond.entryID then
-                isTaken = (entry.activeEntryID == cond.entryID)
-            end
-
-            local show = cond.show or "taken"
-            if show == "not_taken" then
-                if isTaken then return false end
-            else
-                if not isTaken then return false end
-            end
+        -- For choice nodes: if a specific entryID is required, verify it matches
+        if isTaken and cond.entryID then
+            isTaken = (entry.activeEntryID == cond.entryID)
         end
-        -- Node not in cache: stale or tree not loaded → fail-open (skip)
+
+        local show = cond.show or "taken"
+        if show == "not_taken" then
+            if isTaken then return false end
+        else
+            if not isTaken then return false end
+        end
     end
 
     return true

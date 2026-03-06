@@ -25,37 +25,39 @@ local NODE_SIZE = 32
 local NODE_PADDING = 16
 local CHOICE_ICON_SIZE = 22
 local CHOICE_ICON_GAP = 2
-local HERO_GUTTER_WIDTH = 120
-local HERO_HEADER_HEIGHT = 20
+local HERO_GUTTER_WIDTH = 132
+local HERO_HEADER_HEIGHT = 36
+local SPEC_CONTROL_ROW_HEIGHT = 36
+local SPEC_DROPDOWN_WIDTH = 150
+local HERO_DROPDOWN_WIDTH = HERO_GUTTER_WIDTH - 4
+local EMPTY_DROPDOWN_VALUE = 0
 
-local NORMAL_BORDER_SIZE = 2
-local CHOICE_BORDER_SIZE = 3
+local DEFAULT_BORDER_SIZE = 0
+local CONDITION_BORDER_SIZE = 3
 
-local EDGE_THICKNESS_ACTIVE = 1.8
-local EDGE_THICKNESS_INACTIVE = 1.2
+local EDGE_THICKNESS = 1.4
 
 local BTN_ROW_HEIGHT = 30
+local VIEW_TRAIT_CONFIG_ID = (Constants and Constants.TraitConsts and Constants.TraitConsts.VIEW_TRAIT_CONFIG_ID) or -3
 
 -- Colors
-local COLOR_BORDER_TAKEN           = { 0.3, 0.85, 0.3, 1 }
-local COLOR_BORDER_NOTTAKEN        = { 0.4, 0.4, 0.4, 0.7 }
-local COLOR_BORDER_CHOICE          = { 0.6, 0.5, 0.85, 1 }
 local COLOR_BORDER_PENDING_TAKEN   = { 0.3, 0.7, 1.0, 1 }
 local COLOR_BORDER_PENDING_NOTTAKEN = { 1.0, 0.3, 0.3, 1 }
-local COLOR_EDGE_ACTIVE            = { 0.85, 0.75, 0.2, 0.9 }
-local COLOR_EDGE_INACTIVE          = { 0.35, 0.35, 0.35, 0.5 }
+local COLOR_BORDER_DEFAULT         = { 0.55, 0.55, 0.55, 0.9 }
+local COLOR_EDGE                    = { 0.7, 0.62, 0.2, 0.75 }
 
 ------------------------------------------------------------------------
 -- STATE
 ------------------------------------------------------------------------
 local classTreeFrame = nil
 local heroTreeFrame = nil
-local heroTreeTitle = nil
 local specTreeFrame = nil
 local specEmptyText = nil
 local backBtn = nil
 local clearBtn = nil
 local acceptBtn = nil
+local specDropdown = nil
+local heroDropdown = nil
 local nodeButtons = {}
 local choiceButtons = {}
 local classEdgeLines = {}
@@ -66,6 +68,12 @@ local savedCol1Title = nil
 local savedCol3Title = nil
 local savedPanelTitle = nil
 local isRestoring = false
+local isUpdatingPickerDropdowns = false
+
+local pickerGroup = nil
+local pickerSelectedSpecID = nil
+local pickerSelectedConfigID = nil
+local pickerSelectedHeroSubTreeID = nil
 
 -- Pending conditions: key = "nodeID" or "nodeID:entryID" → condition table
 local pendingConditions = {}
@@ -177,6 +185,13 @@ local function SetNodeBorderColor(btn, color)
     end
 end
 
+local function GetConditionState(nodeID, entryID)
+    if entryID then
+        return GetPendingState(nodeID, entryID)
+    end
+    return GetPendingStateForNode(nodeID)
+end
+
 local function AddPendingTooltipLine(pending, isChoiceNode)
     if not pending then return end
 
@@ -201,31 +216,18 @@ local function AddPendingTooltipLine(pending, isChoiceNode)
     GameTooltip:AddLine(line, r, g, b, true)
 end
 
--- Determine border color for a node button based on pending state and talent state
-local function GetNodeBorderColor(nodeID, entryID, isTaken, isChoice)
-    -- Check pending state: for choice nodes check the specific entry, for regular check the node
-    local pending
-    if entryID then
-        pending = GetPendingState(nodeID, entryID)
-    else
-        pending = GetPendingStateForNode(nodeID)
+-- Determine border presentation from condition state only.
+local function GetNodeBorderStyle(nodeID, entryID)
+    local pending = GetConditionState(nodeID, entryID)
+    if not pending then
+        return COLOR_BORDER_DEFAULT, DEFAULT_BORDER_SIZE
     end
 
-    if pending then
-        if pending.show == "taken" then
-            return COLOR_BORDER_PENDING_TAKEN
-        else
-            return COLOR_BORDER_PENDING_NOTTAKEN
-        end
+    if pending.show == "taken" then
+        return COLOR_BORDER_PENDING_TAKEN, CONDITION_BORDER_SIZE
     end
 
-    -- No pending state — use talent state colors
-    if isTaken then
-        return COLOR_BORDER_TAKEN
-    elseif isChoice then
-        return COLOR_BORDER_CHOICE
-    end
-    return COLOR_BORDER_NOTTAKEN
+    return COLOR_BORDER_PENDING_NOTTAKEN, CONDITION_BORDER_SIZE
 end
 
 ------------------------------------------------------------------------
@@ -240,13 +242,13 @@ local function CreateNodeButton(parent, index)
 
     -- Icon
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
-    btn.icon:SetPoint("TOPLEFT", NORMAL_BORDER_SIZE, -NORMAL_BORDER_SIZE)
-    btn.icon:SetPoint("BOTTOMRIGHT", -NORMAL_BORDER_SIZE, NORMAL_BORDER_SIZE)
+    btn.icon:SetPoint("TOPLEFT", DEFAULT_BORDER_SIZE, -DEFAULT_BORDER_SIZE)
+    btn.icon:SetPoint("BOTTOMRIGHT", -DEFAULT_BORDER_SIZE, DEFAULT_BORDER_SIZE)
     btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     -- Border (4 edge textures)
     btn.borders = {}
-    local bSize = NORMAL_BORDER_SIZE
+    local bSize = DEFAULT_BORDER_SIZE
     local b
     b = btn:CreateTexture(nil, "BORDER"); b:SetPoint("TOPLEFT", 0, 0); b:SetPoint("TOPRIGHT", 0, 0); b:SetHeight(bSize)
     btn.borders[1] = b
@@ -266,14 +268,8 @@ local function CreateNodeButton(parent, index)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if self._spellID then
             GameTooltip:SetSpellByID(self._spellID)
-            if self._rankText then
-                GameTooltip:AddLine(self._rankText, 0.7, 0.7, 0.7)
-            end
         elseif self._talentName then
             GameTooltip:AddLine(self._talentName, 1, 1, 1)
-            if self._rankText then
-                GameTooltip:AddLine(self._rankText, 0.7, 0.7, 0.7)
-            end
         end
         -- Pending state info
         local pending = self._entryID
@@ -298,12 +294,12 @@ local function CreateChoiceButton(parent)
     btn:RegisterForClicks("AnyUp")
 
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
-    btn.icon:SetPoint("TOPLEFT", 2, -2)
-    btn.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+    btn.icon:SetPoint("TOPLEFT", DEFAULT_BORDER_SIZE, -DEFAULT_BORDER_SIZE)
+    btn.icon:SetPoint("BOTTOMRIGHT", -DEFAULT_BORDER_SIZE, DEFAULT_BORDER_SIZE)
     btn.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     btn.borders = {}
-    local bSize = 2
+    local bSize = DEFAULT_BORDER_SIZE
     local b
     b = btn:CreateTexture(nil, "BORDER"); b:SetPoint("TOPLEFT", 0, 0); b:SetPoint("TOPRIGHT", 0, 0); b:SetHeight(bSize)
     btn.borders[1] = b
@@ -353,6 +349,153 @@ end
 -- Forward declarations
 local HideTalentPicker
 local PopulateTree
+local RefreshPickerDropdowns
+
+local function EnsurePickerViewConfig(specID)
+    if not specID then
+        return nil
+    end
+
+    local playerLevel = UnitLevel("player")
+    if not playerLevel or playerLevel < 1 then
+        return nil
+    end
+
+    C_ClassTalents.InitializeViewLoadout(specID, playerLevel)
+    if C_Traits.GetConfigInfo(VIEW_TRAIT_CONFIG_ID) then
+        return VIEW_TRAIT_CONFIG_ID
+    end
+
+    return nil
+end
+
+local function BuildSpecDropdownOptions(group)
+    local effectiveSpecs = group and CooldownCompanion:GetEffectiveSpecs(group) or nil
+    local hasSpecFilter = effectiveSpecs and next(effectiveSpecs) ~= nil
+    local values = {}
+    local order = {}
+
+    for i = 1, (GetNumSpecializations() or 0) do
+        local specID, name = GetSpecializationInfo(i)
+        if specID and name and (not hasSpecFilter or effectiveSpecs[specID]) then
+            values[specID] = name
+            order[#order + 1] = specID
+        end
+    end
+
+    return values, order
+end
+
+local function BuildHeroDropdownOptions(configID, specID, group)
+    if not specID then
+        return {}, {}, nil
+    end
+
+    local effectiveHeroTalents = group and CooldownCompanion:GetEffectiveHeroTalents(group) or nil
+    local hasHeroFilter = effectiveHeroTalents and next(effectiveHeroTalents) ~= nil
+    local values = {}
+    local order = {}
+    local preferredSubTreeID = nil
+    local subTreeIDs = configID and C_ClassTalents.GetHeroTalentSpecsForClassSpec(configID, specID) or nil
+
+    if not subTreeIDs or #subTreeIDs == 0 then
+        subTreeIDs = C_ClassTalents.GetHeroTalentSpecsForClassSpec(nil, specID)
+    end
+
+    if not subTreeIDs or #subTreeIDs == 0 then
+        return values, order, preferredSubTreeID
+    end
+
+    for _, subTreeID in ipairs(subTreeIDs) do
+        if not hasHeroFilter or effectiveHeroTalents[subTreeID] then
+            local subTreeInfo = configID and C_Traits.GetSubTreeInfo(configID, subTreeID) or nil
+            values[subTreeID] = (subTreeInfo and subTreeInfo.name) or ("Hero " .. subTreeID)
+            order[#order + 1] = subTreeID
+
+            if not preferredSubTreeID then
+                preferredSubTreeID = subTreeID
+            end
+        end
+    end
+
+    return values, order, preferredSubTreeID
+end
+
+local function SetPickerDropdownOptions(dropdown, values, order, selectedValue, disabled, emptyText)
+    if not dropdown then
+        return
+    end
+
+    isUpdatingPickerDropdowns = true
+    if order and #order > 0 then
+        dropdown:SetList(values, order)
+        dropdown:SetValue(selectedValue)
+    else
+        dropdown:SetList({ [EMPTY_DROPDOWN_VALUE] = emptyText }, { EMPTY_DROPDOWN_VALUE })
+        dropdown:SetValue(EMPTY_DROPDOWN_VALUE)
+    end
+    dropdown:SetDisabled(disabled)
+    isUpdatingPickerDropdowns = false
+end
+
+RefreshPickerDropdowns = function(forceSpecReset, forceHeroReset)
+    local specValues, specOrder = BuildSpecDropdownOptions(pickerGroup)
+    local currentSpecID = pickerSelectedSpecID
+
+    if forceSpecReset or not currentSpecID or not specValues[currentSpecID] then
+        local activeSpecID = CooldownCompanion._currentSpecId
+        if activeSpecID and specValues[activeSpecID] then
+            currentSpecID = activeSpecID
+        else
+            currentSpecID = specOrder[1]
+        end
+        forceHeroReset = true
+    end
+
+    pickerSelectedSpecID = currentSpecID
+    pickerSelectedConfigID = EnsurePickerViewConfig(currentSpecID)
+
+    SetPickerDropdownOptions(
+        specDropdown,
+        specValues,
+        specOrder,
+        currentSpecID,
+        #specOrder <= 1,
+        "No allowed specs"
+    )
+
+    if not currentSpecID then
+        pickerSelectedHeroSubTreeID = nil
+        if heroDropdown then
+            heroDropdown.frame:Hide()
+        end
+        return
+    end
+
+    local heroValues, heroOrder, preferredSubTreeID = BuildHeroDropdownOptions(pickerSelectedConfigID, currentSpecID, pickerGroup)
+    local currentHeroSubTreeID = pickerSelectedHeroSubTreeID
+
+    if forceHeroReset or not currentHeroSubTreeID or not heroValues[currentHeroSubTreeID] then
+        if preferredSubTreeID and heroValues[preferredSubTreeID] then
+            currentHeroSubTreeID = preferredSubTreeID
+        else
+            currentHeroSubTreeID = heroOrder[1]
+        end
+    end
+
+    pickerSelectedHeroSubTreeID = currentHeroSubTreeID
+    if heroDropdown then
+        heroDropdown.frame:Show()
+    end
+    SetPickerDropdownOptions(
+        heroDropdown,
+        heroValues,
+        heroOrder,
+        currentHeroSubTreeID,
+        #heroOrder <= 1,
+        "No allowed hero talents"
+    )
+end
 
 local function GetChoiceFrameLevel(parentBtn)
     local level = 0
@@ -392,11 +535,8 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID)
         choiceFrame = CreateFrame("Frame", nil, configFrame.frame, "BackdropTemplate")
         choiceFrame:SetBackdrop({
             bgFile = "Interface\\BUTTONS\\WHITE8X8",
-            edgeFile = "Interface\\BUTTONS\\WHITE8X8",
-            edgeSize = 1,
         })
         choiceFrame:SetBackdropColor(0.12, 0.12, 0.18, 0.98)
-        choiceFrame:SetBackdropBorderColor(0.4, 0.4, 0.5, 1)
         choiceFrame:SetFrameStrata("FULLSCREEN_DIALOG")
         choiceFrame:SetToplevel(true)
     end
@@ -435,22 +575,17 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID)
         cb:Raise()
 
         cb.icon:SetTexture(entry.icon)
-        cb.icon:SetDesaturated(not entry.isTaken)
-        if not entry.isTaken then
-            cb.icon:SetVertexColor(0.6, 0.6, 0.6)
-        else
-            cb.icon:SetVertexColor(1, 1, 1)
-        end
+        cb.icon:SetDesaturated(false)
+        cb.icon:SetVertexColor(1, 1, 1)
 
         -- Store identity for pending state lookups
         cb._nodeID = nodeID
         cb._entryID = entry.entryID
-        cb._isTaken = entry.isTaken
         cb._talentName = entry.name
         cb._spellID = entry.spellID
 
-        -- Border color: pending state > taken > not taken
-        local borderColor = GetNodeBorderColor(nodeID, entry.entryID, entry.isTaken, false)
+        local borderColor, borderSize = GetNodeBorderStyle(nodeID, entry.entryID)
+        SetNodeBorderThickness(cb, borderSize)
         SetNodeBorderColor(cb, borderColor)
 
         cb:SetScript("OnClick", function(_, mouseButton)
@@ -480,19 +615,46 @@ local function EnsureTreeFrames()
     end
     if not heroTreeFrame then
         heroTreeFrame = CreateFrame("Frame", nil, configFrame.col3.content)
-        heroTreeTitle = heroTreeFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        heroTreeTitle:SetPoint("TOPLEFT", heroTreeFrame, "TOPLEFT", 4, -2)
-        heroTreeTitle:SetPoint("TOPRIGHT", heroTreeFrame, "TOPRIGHT", -4, -2)
-        heroTreeTitle:SetJustifyH("LEFT")
-        heroTreeTitle:SetJustifyV("TOP")
     end
     if not specTreeFrame then
         specTreeFrame = CreateFrame("Frame", nil, configFrame.col3.content)
     end
+    if not specDropdown then
+        specDropdown = AceGUI:Create("Dropdown")
+        specDropdown:SetWidth(SPEC_DROPDOWN_WIDTH)
+        specDropdown:SetCallback("OnValueChanged", function(_, _, value)
+            if isUpdatingPickerDropdowns or type(value) ~= "number" or value == EMPTY_DROPDOWN_VALUE then
+                return
+            end
+            pickerSelectedSpecID = value
+            pickerSelectedConfigID = nil
+            pickerSelectedHeroSubTreeID = nil
+            RefreshPickerDropdowns(false, true)
+            PopulateTree()
+        end)
+    end
+    if not heroDropdown then
+        heroDropdown = AceGUI:Create("Dropdown")
+        heroDropdown:SetWidth(HERO_DROPDOWN_WIDTH)
+        heroDropdown:SetCallback("OnValueChanged", function(_, _, value)
+            if isUpdatingPickerDropdowns or type(value) ~= "number" or value == EMPTY_DROPDOWN_VALUE then
+                return
+            end
+            pickerSelectedHeroSubTreeID = value
+            PopulateTree()
+        end)
+    end
 end
 
-local function LayoutSpecFrames(col3Content, hasHeroChoices)
-    if hasHeroChoices and heroTreeFrame then
+local function LayoutSpecFrames(col3Content, showHeroFrame)
+    if specDropdown then
+        specDropdown.frame:SetParent(col3Content)
+        specDropdown.frame:ClearAllPoints()
+        specDropdown.frame:SetPoint("TOPRIGHT", col3Content, "TOPRIGHT", 0, 0)
+        specDropdown.frame:Show()
+    end
+
+    if showHeroFrame and heroTreeFrame then
         heroTreeFrame:SetParent(col3Content)
         heroTreeFrame:ClearAllPoints()
         heroTreeFrame:SetPoint("TOPLEFT", col3Content, "TOPLEFT", 0, 0)
@@ -501,12 +663,18 @@ local function LayoutSpecFrames(col3Content, hasHeroChoices)
         heroTreeFrame:SetFrameStrata(specTreeFrame:GetFrameStrata())
         heroTreeFrame:SetFrameLevel((specTreeFrame:GetFrameLevel() or 0) + 10)
         heroTreeFrame:Show()
+        if heroDropdown then
+            heroDropdown.frame:SetParent(heroTreeFrame)
+            heroDropdown.frame:ClearAllPoints()
+            heroDropdown.frame:SetPoint("TOPLEFT", heroTreeFrame, "TOPLEFT", 0, 0)
+            heroDropdown.frame:Show()
+        end
     else
         if heroTreeFrame then
             heroTreeFrame:Hide()
         end
-        if heroTreeTitle then
-            heroTreeTitle:Hide()
+        if heroDropdown then
+            heroDropdown.frame:Hide()
         end
 
     end
@@ -575,8 +743,12 @@ end
 ------------------------------------------------------------------------
 -- SHOW / HIDE TALENT PICKER
 ------------------------------------------------------------------------
-local function ShowTalentPicker(configFrame, initialConditions)
+local function ShowTalentPicker(configFrame, initialConditions, group)
     CS.talentPickerMode = true
+    pickerGroup = group
+    pickerSelectedSpecID = nil
+    pickerSelectedConfigID = nil
+    pickerSelectedHeroSubTreeID = nil
 
     local col1 = configFrame.col1
     local col2 = configFrame.col2
@@ -651,6 +823,12 @@ local function ShowTalentPicker(configFrame, initialConditions)
         heroTreeFrame:SetParent(col3.content)
     end
     specTreeFrame:SetParent(col3.content)
+    if specDropdown then
+        specDropdown.frame:SetParent(col3.content)
+    end
+    if heroDropdown then
+        heroDropdown.frame:SetParent(heroTreeFrame or col3.content)
+    end
 
     -- Position AceGUI buttons in col1.content
     backBtn.frame:SetParent(col1.content)
@@ -670,7 +848,8 @@ local function ShowTalentPicker(configFrame, initialConditions)
     classTreeFrame:Show()
 
     -- Position spec content; hero gutter is enabled during PopulateTree when needed
-    LayoutSpecFrames(col3.content, false)
+    RefreshPickerDropdowns(true, true)
+    LayoutSpecFrames(col3.content, pickerSelectedSpecID ~= nil)
     specTreeFrame:Show()
 
     -- Position accept button at bottom center of main panel (where modeStatusRow normally sits)
@@ -693,9 +872,10 @@ HideTalentPicker = function()
     -- Hide talent content
     if classTreeFrame then classTreeFrame:Hide() end
     if heroTreeFrame then heroTreeFrame:Hide() end
-    if heroTreeTitle then heroTreeTitle:Hide() end
     if specTreeFrame then specTreeFrame:Hide() end
     if specEmptyText then specEmptyText:Hide() end
+    if specDropdown then specDropdown.frame:Hide() end
+    if heroDropdown then heroDropdown.frame:Hide() end
     if backBtn then backBtn.frame:Hide() end
     if clearBtn then clearBtn.frame:Hide() end
     if acceptBtn then acceptBtn.frame:Hide() end
@@ -745,6 +925,10 @@ HideTalentPicker = function()
     savedCol3Title = nil
     savedPanelTitle = nil
     onAcceptCallback = nil
+    pickerGroup = nil
+    pickerSelectedSpecID = nil
+    pickerSelectedConfigID = nil
+    pickerSelectedHeroSubTreeID = nil
     wipe(pendingConditions)
     isRestoring = false
 
@@ -767,7 +951,6 @@ end
 local function ShouldIncludeHeroChoiceNode(nodeInfo, activeHeroSubTreeID)
     return nodeInfo
         and activeHeroSubTreeID
-        and nodeInfo.isVisible
         and nodeInfo.subTreeID == activeHeroSubTreeID
         and nodeInfo.type == Enum.TraitNodeType.Selection
 end
@@ -808,9 +991,6 @@ local function BuildNodeRecord(configID, nodeID, nodeInfo)
         for _, eid in ipairs(nodeInfo.entryIDs) do
             local displayInfo = GetEntryDisplayInfo(configID, eid)
             if displayInfo then
-                displayInfo.isTaken = (nodeInfo.activeEntry
-                    and nodeInfo.activeEntry.entryID == eid
-                    and nodeInfo.activeRank > 0)
                 entries[#entries + 1] = displayInfo
             end
         end
@@ -824,9 +1004,6 @@ local function BuildNodeRecord(configID, nodeID, nodeInfo)
         nodeID = nodeID,
         px = nodeInfo.posX / 10,
         py = nodeInfo.posY / 10,
-        activeRank = nodeInfo.activeRank or 0,
-        maxRanks = nodeInfo.maxRanks or 1,
-        activeEntryID = nodeInfo.activeEntry and nodeInfo.activeEntry.entryID or nil,
         entries = entries,
         isChoice = (nodeInfo.type == Enum.TraitNodeType.Selection),
         nodeType = nodeInfo.type,
@@ -844,6 +1021,32 @@ local function ComputeBounds(nodeSet)
         if n.py > mxY then mxY = n.py end
     end
     return mnX, mxX, mnY, mxY
+end
+
+local function FindEntryByID(entries, entryID)
+    if not entries or not entryID then
+        return nil
+    end
+
+    for _, entry in ipairs(entries) do
+        if entry.entryID == entryID then
+            return entry
+        end
+    end
+
+    return nil
+end
+
+local function GetPrimaryDisplayEntry(entries, nodeID)
+    local pending = GetPendingStateForNode(nodeID)
+    if pending and pending.entryID then
+        local pendingEntry = FindEntryByID(entries, pending.entryID)
+        if pendingEntry then
+            return pendingEntry
+        end
+    end
+
+    return entries and entries[1] or nil
 end
 
 local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
@@ -867,44 +1070,26 @@ local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
         btn:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", x, -y)
         btn:Show()
 
-        -- Border thickness: choice nodes get thicker borders
-        if node.isChoice then
-            SetNodeBorderThickness(btn, CHOICE_BORDER_SIZE)
-        else
-            SetNodeBorderThickness(btn, NORMAL_BORDER_SIZE)
-        end
-
-        -- Display: use active entry's icon for choice nodes, else first entry
-        local primaryEntry = node.entries[1]
-        if node.isChoice and node.activeEntryID then
-            for _, entry in ipairs(node.entries) do
-                if entry.entryID == node.activeEntryID then
-                    primaryEntry = entry
-                    break
-                end
-            end
-        end
+        -- Display: choice rows prefer the conditioned option, then the first option.
+        local primaryEntry = node.isChoice
+            and GetPrimaryDisplayEntry(node.entries, node.nodeID)
+            or node.entries[1]
 
         btn.icon:SetTexture(primaryEntry.icon)
-        local isTaken = node.activeRank > 0
-        btn.icon:SetDesaturated(not isTaken)
-        if not isTaken then
-            btn.icon:SetVertexColor(0.6, 0.6, 0.6)
-        else
-            btn.icon:SetVertexColor(1, 1, 1)
-        end
+        btn.icon:SetDesaturated(false)
+        btn.icon:SetVertexColor(1, 1, 1)
 
         -- Store identity for pending state and border refresh
         btn._nodeID = node.nodeID
         btn._entryID = nil  -- regular nodes use nil; choice entries set per-entry
-        btn._isTaken = isTaken
         btn._isChoiceNode = node.isChoice
+        btn._entries = node.entries
         btn._talentName = primaryEntry.name
         btn._spellID = primaryEntry.spellID
-        btn._rankText = (node.activeRank .. "/" .. node.maxRanks)
+        btn._rankText = nil
 
-        -- Border color: pending > taken > choice > not taken
-        local borderColor = GetNodeBorderColor(node.nodeID, nil, isTaken, node.isChoice)
+        local borderColor, borderSize = GetNodeBorderStyle(node.nodeID, nil)
+        SetNodeBorderThickness(btn, borderSize)
         SetNodeBorderColor(btn, borderColor)
 
         -- Click handler
@@ -953,15 +1138,8 @@ local function DrawEdgesInPanel(scrollChild, panelNodes, nodeIDToBtn, edgePool)
                         line:SetStartPoint("CENTER", srcBtn)
                         line:SetEndPoint("CENTER", dstBtn)
 
-                        if edge.isActive then
-                            line:SetThickness(EDGE_THICKNESS_ACTIVE)
-                            line:SetColorTexture(COLOR_EDGE_ACTIVE[1], COLOR_EDGE_ACTIVE[2],
-                                                 COLOR_EDGE_ACTIVE[3], COLOR_EDGE_ACTIVE[4])
-                        else
-                            line:SetThickness(EDGE_THICKNESS_INACTIVE)
-                            line:SetColorTexture(COLOR_EDGE_INACTIVE[1], COLOR_EDGE_INACTIVE[2],
-                                                 COLOR_EDGE_INACTIVE[3], COLOR_EDGE_INACTIVE[4])
-                        end
+                        line:SetThickness(EDGE_THICKNESS)
+                        line:SetColorTexture(COLOR_EDGE[1], COLOR_EDGE[2], COLOR_EDGE[3], COLOR_EDGE[4])
 
                         line:Show()
                     end
@@ -1033,25 +1211,27 @@ local function RenderHeroChoiceList(panelFrame, nodeSet, nodeIDToBtn, btnIndex)
     return btnIndex
 end
 
--- Re-apply border colors to all visible node + choice buttons based on pending state
+-- Re-apply border colors and thickness to all visible node + choice buttons.
 RefreshPickerBorders = function()
     for _, btn in ipairs(nodeButtons) do
         if btn:IsShown() and btn._nodeID then
-            local borderColor = GetNodeBorderColor(btn._nodeID, btn._entryID, btn._isTaken, btn._isChoiceNode)
+            if btn._isChoiceNode then
+                local primaryEntry = GetPrimaryDisplayEntry(btn._entries, btn._nodeID)
+                if primaryEntry then
+                    btn.icon:SetTexture(primaryEntry.icon)
+                    btn._talentName = primaryEntry.name
+                    btn._spellID = primaryEntry.spellID
+                end
+            end
+            local borderColor, borderSize = GetNodeBorderStyle(btn._nodeID, btn._entryID)
+            SetNodeBorderThickness(btn, borderSize)
             SetNodeBorderColor(btn, borderColor)
         end
     end
     for _, cb in ipairs(choiceButtons) do
         if cb:IsShown() and cb._nodeID then
-            local pending = GetPendingState(cb._nodeID, cb._entryID)
-            local borderColor
-            if pending then
-                borderColor = pending.show == "taken" and COLOR_BORDER_PENDING_TAKEN or COLOR_BORDER_PENDING_NOTTAKEN
-            elseif cb._isTaken then
-                borderColor = COLOR_BORDER_TAKEN
-            else
-                borderColor = COLOR_BORDER_NOTTAKEN
-            end
+            local borderColor, borderSize = GetNodeBorderStyle(cb._nodeID, cb._entryID)
+            SetNodeBorderThickness(cb, borderSize)
             SetNodeBorderColor(cb, borderColor)
         end
     end
@@ -1070,26 +1250,54 @@ PopulateTree = function()
     if heroTreeFrame then
         heroTreeFrame:Hide()
     end
-    if heroTreeTitle then
-        heroTreeTitle:Hide()
+    if heroDropdown then
+        heroDropdown.frame:Hide()
     end
     if specEmptyText then
         specEmptyText:Hide()
     end
 
-    local configID = C_ClassTalents.GetActiveConfigID()
-    if not configID then return end
+    local specID = pickerSelectedSpecID
+    LayoutSpecFrames(CS.configFrame.col3.content, specID ~= nil)
 
-    local specID = CooldownCompanion._currentSpecId
-    if not specID then return end
+    if not specEmptyText then
+        specEmptyText = specTreeFrame:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+        specEmptyText:SetPoint("CENTER", specTreeFrame, "CENTER", 0, 0)
+    end
 
-    local treeID = C_ClassTalents.GetTraitTreeForSpec(specID)
-    if not treeID then return end
+    if not specID then
+        specEmptyText:SetText("No allowed specs for this group")
+        specEmptyText:Show()
+        return
+    end
+
+    local configID = EnsurePickerViewConfig(specID)
+    pickerSelectedConfigID = configID
+    if not configID then
+        specEmptyText:SetText("No talent tree available for selected spec")
+        specEmptyText:Show()
+        return
+    end
+
+    local configInfo = C_Traits.GetConfigInfo(configID)
+    local treeID = configInfo and configInfo.treeIDs and configInfo.treeIDs[1] or nil
+    if not treeID then
+        treeID = C_ClassTalents.GetTraitTreeForSpec(specID)
+    end
+    if not treeID then
+        specEmptyText:SetText("No talent tree found for selected spec")
+        specEmptyText:Show()
+        return
+    end
 
     local nodeIDs = C_Traits.GetTreeNodes(treeID)
-    if not nodeIDs then return end
-    local activeHeroSubTreeID = C_ClassTalents.GetActiveHeroTalentSpec()
-    local activeHeroSubTreeInfo = activeHeroSubTreeID and C_Traits.GetSubTreeInfo(configID, activeHeroSubTreeID) or nil
+    if not nodeIDs then
+        specEmptyText:SetText("No talents found for selected spec")
+        specEmptyText:Show()
+        return
+    end
+
+    local selectedHeroSubTreeID = pickerSelectedHeroSubTreeID
 
     -- Get tree currencies for class/spec split
     local treeCurrencyInfo = C_Traits.GetTreeCurrencyInfo(configID, treeID, false)
@@ -1099,7 +1307,7 @@ PopulateTree = function()
         specCurrencyID = treeCurrencyInfo[2].traitCurrencyID
     end
 
-    -- Gather visible class/spec nodes plus active hero choice nodes.
+    -- Gather visible class/spec nodes plus selected hero choice nodes.
     local classNodes = {}
     local heroNodes = {}
     local specNodes = {}
@@ -1134,7 +1342,7 @@ PopulateTree = function()
                     end
                 end
             end
-        elseif ShouldIncludeHeroChoiceNode(nodeInfo, activeHeroSubTreeID) then
+        elseif ShouldIncludeHeroChoiceNode(nodeInfo, selectedHeroSubTreeID) then
             local record = BuildNodeRecord(configID, nodeID, nodeInfo)
             if record then
                 heroNodes[#heroNodes + 1] = record
@@ -1142,14 +1350,7 @@ PopulateTree = function()
         end
     end
 
-    if #allNodes == 0 and #heroNodes == 0 then return end
-
     local hasHeroChoices = #heroNodes > 0
-    LayoutSpecFrames(CS.configFrame.col3.content, hasHeroChoices)
-    if hasHeroChoices and heroTreeTitle then
-        heroTreeTitle:SetText((activeHeroSubTreeInfo and activeHeroSubTreeInfo.name) or "Hero Choices")
-        heroTreeTitle:Show()
-    end
 
     local dualPanel = (#classNodes > 0 and #specNodes > 0)
     local nodeIDToBtn = {}
@@ -1157,17 +1358,13 @@ PopulateTree = function()
 
     if dualPanel then
         btnIndex = RenderNodePanel(classTreeFrame, classNodes, nodeIDToBtn, classEdgeLines, btnIndex, 0)
-        btnIndex = RenderNodePanel(specTreeFrame, specNodes, nodeIDToBtn, specEdgeLines, btnIndex, 0)
+        btnIndex = RenderNodePanel(specTreeFrame, specNodes, nodeIDToBtn, specEdgeLines, btnIndex, SPEC_CONTROL_ROW_HEIGHT)
     else
         -- Single-panel fallback: all nodes in left container
         btnIndex = RenderNodePanel(classTreeFrame, allNodes, nodeIDToBtn, classEdgeLines, btnIndex, 0)
 
         -- Right container: empty message
-        if not specEmptyText then
-            specEmptyText = specTreeFrame:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-            specEmptyText:SetPoint("CENTER", specTreeFrame, "CENTER", 0, 0)
-            specEmptyText:SetText("No spec talents found")
-        end
+        specEmptyText:SetText("No spec talents found")
         specEmptyText:Show()
     end
 
@@ -1183,11 +1380,11 @@ end
 -- Open the talent picker inside the config panel columns.
 -- callback(results): called with array of conditions or nil (clear all).
 -- initialConditions: array of existing conditions to pre-load as pending.
-function CooldownCompanion:OpenTalentPicker(callback, initialConditions)
+function CooldownCompanion:OpenTalentPicker(callback, initialConditions, group)
     local configFrame = CS.configFrame
     if not configFrame then return end
     onAcceptCallback = callback
-    ShowTalentPicker(configFrame, initialConditions)
+    ShowTalentPicker(configFrame, initialConditions, group)
 end
 
 function CooldownCompanion:CloseTalentPicker()
