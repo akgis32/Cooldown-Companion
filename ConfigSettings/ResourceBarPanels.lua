@@ -1742,6 +1742,196 @@ end
 -- Custom Aura Bar Panel (col2 takeover when resource bar panel active)
 ------------------------------------------------------------------------
 
+local function ClampCustomAuraIndependentDimension(value, fallback)
+    local dimension = tonumber(value) or tonumber(fallback) or 120
+    if dimension < 4 then
+        dimension = 4
+    elseif dimension > 1200 then
+        dimension = 1200
+    end
+    return dimension
+end
+
+local function EnsureCustomAuraIndependentConfig(cab, settings)
+    if type(cab) ~= "table" then return end
+
+    if cab.independentAnchorTargetMode ~= "group" and cab.independentAnchorTargetMode ~= "frame" then
+        cab.independentAnchorTargetMode = "group"
+    end
+
+    if type(cab.independentAnchor) ~= "table" then
+        cab.independentAnchor = {}
+    end
+    cab.independentAnchor.point = cab.independentAnchor.point or "CENTER"
+    cab.independentAnchor.relativePoint = cab.independentAnchor.relativePoint or "CENTER"
+    cab.independentAnchor.x = tonumber(cab.independentAnchor.x) or 0
+    cab.independentAnchor.y = tonumber(cab.independentAnchor.y) or 0
+
+    if type(cab.independentSize) ~= "table" then
+        cab.independentSize = {}
+    end
+    cab.independentSize.width = ClampCustomAuraIndependentDimension(cab.independentSize.width, 120)
+    cab.independentSize.height = ClampCustomAuraIndependentDimension(cab.independentSize.height, settings and (settings.barHeight or settings.barWidth or 12) or 12)
+end
+
+local function BuildCustomAuraAnchorGroupOptions()
+    local db = CooldownCompanion.db.profile
+    local groupValues = { [""] = "Auto (first available)" }
+    local groupOrder = { "" }
+    for groupId, group in pairs(db.groups) do
+        if CooldownCompanion:IsGroupAvailableForAnchoring(groupId) then
+            groupValues[tostring(groupId)] = group.name or ("Group " .. groupId)
+            table.insert(groupOrder, tostring(groupId))
+        end
+    end
+    return groupValues, groupOrder
+end
+
+local function BuildCustomAuraBarAnchorSettings(container, customBars, settings, capturedIdx)
+    local cab = customBars[capturedIdx]
+    if not cab then return end
+    EnsureCustomAuraIndependentConfig(cab, settings)
+
+    local modeDrop = AceGUI:Create("Dropdown")
+    modeDrop:SetLabel("Anchor Target")
+    modeDrop:SetList({
+        group = "Group",
+        frame = "Frame Name / Pick",
+    }, { "group", "frame" })
+    modeDrop:SetValue(cab.independentAnchorTargetMode or "group")
+    modeDrop:SetFullWidth(true)
+    modeDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].independentAnchorTargetMode = val
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(modeDrop)
+
+    if (cab.independentAnchorTargetMode or "group") == "group" then
+        local groupValues, groupOrder = BuildCustomAuraAnchorGroupOptions()
+        local groupDrop = AceGUI:Create("Dropdown")
+        groupDrop:SetLabel("Anchor to Group")
+        groupDrop:SetList(groupValues, groupOrder)
+        groupDrop:SetValue(cab.independentAnchorGroupId and tostring(cab.independentAnchorGroupId) or "")
+        groupDrop:SetFullWidth(true)
+        groupDrop:SetCallback("OnValueChanged", function(widget, event, val)
+            customBars[capturedIdx].independentAnchorGroupId = val ~= "" and tonumber(val) or nil
+            CooldownCompanion:ApplyResourceBars()
+        end)
+        container:AddChild(groupDrop)
+    else
+        local frameRow = AceGUI:Create("SimpleGroup")
+        frameRow:SetLayout("Flow")
+        frameRow:SetFullWidth(true)
+
+        local frameEdit = AceGUI:Create("EditBox")
+        if frameEdit.editbox.Instructions then frameEdit.editbox.Instructions:Hide() end
+        frameEdit:SetLabel("Anchor to Frame")
+        frameEdit:SetText(cab.independentAnchorFrameName or "")
+        frameEdit:SetRelativeWidth(0.68)
+        frameEdit:SetCallback("OnEnterPressed", function(widget, event, text)
+            customBars[capturedIdx].independentAnchorFrameName = text or ""
+            CooldownCompanion:ApplyResourceBars()
+        end)
+        frameRow:AddChild(frameEdit)
+
+        local pickBtn = AceGUI:Create("Button")
+        pickBtn:SetText("Pick")
+        pickBtn:SetRelativeWidth(0.24)
+        pickBtn:SetCallback("OnClick", function()
+            CS.StartPickFrame(function(name)
+                if CS.configFrame then
+                    CS.configFrame.frame:Show()
+                end
+                if name then
+                    customBars[capturedIdx].independentAnchorFrameName = name
+                    CooldownCompanion:ApplyResourceBars()
+                end
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+        end)
+        frameRow:AddChild(pickBtn)
+
+        container:AddChild(frameRow)
+    end
+
+    local pointValues = {}
+    for _, pt in ipairs(CS.anchorPoints) do
+        pointValues[pt] = CS.anchorPointLabels[pt]
+    end
+
+    local anchorPointDrop = AceGUI:Create("Dropdown")
+    anchorPointDrop:SetLabel("Anchor Point")
+    anchorPointDrop:SetList(pointValues, CS.anchorPoints)
+    anchorPointDrop:SetValue(cab.independentAnchor.point or "CENTER")
+    anchorPointDrop:SetFullWidth(true)
+    anchorPointDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].independentAnchor.point = val
+        CooldownCompanion:ApplyResourceBars()
+    end)
+    container:AddChild(anchorPointDrop)
+
+    local relativePointDrop = AceGUI:Create("Dropdown")
+    relativePointDrop:SetLabel("Relative Point")
+    relativePointDrop:SetList(pointValues, CS.anchorPoints)
+    relativePointDrop:SetValue(cab.independentAnchor.relativePoint or "CENTER")
+    relativePointDrop:SetFullWidth(true)
+    relativePointDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].independentAnchor.relativePoint = val
+        CooldownCompanion:ApplyResourceBars()
+    end)
+    container:AddChild(relativePointDrop)
+
+    local xSlider = AceGUI:Create("Slider")
+    xSlider:SetLabel("X Offset")
+    xSlider:SetSliderValues(-2000, 2000, 0.1)
+    xSlider:SetValue(cab.independentAnchor.x or 0)
+    xSlider:SetFullWidth(true)
+    xSlider:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].independentAnchor.x = val
+        CooldownCompanion:ApplyResourceBars()
+    end)
+    container:AddChild(xSlider)
+
+    local ySlider = AceGUI:Create("Slider")
+    ySlider:SetLabel("Y Offset")
+    ySlider:SetSliderValues(-2000, 2000, 0.1)
+    ySlider:SetValue(cab.independentAnchor.y or 0)
+    ySlider:SetFullWidth(true)
+    ySlider:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].independentAnchor.y = val
+        CooldownCompanion:ApplyResourceBars()
+    end)
+    container:AddChild(ySlider)
+
+    local widthSlider = AceGUI:Create("Slider")
+    widthSlider:SetLabel("Width")
+    widthSlider:SetSliderValues(4, 1200, 0.1)
+    widthSlider:SetValue(cab.independentSize.width or 120)
+    widthSlider:SetFullWidth(true)
+    widthSlider:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].independentSize.width = ClampCustomAuraIndependentDimension(val, 120)
+        CooldownCompanion:ApplyResourceBars()
+    end)
+    container:AddChild(widthSlider)
+
+    local heightSlider = AceGUI:Create("Slider")
+    heightSlider:SetLabel("Height")
+    heightSlider:SetSliderValues(4, 1200, 0.1)
+    heightSlider:SetValue(cab.independentSize.height or 12)
+    heightSlider:SetFullWidth(true)
+    heightSlider:SetCallback("OnValueChanged", function(widget, event, val)
+        customBars[capturedIdx].independentSize.height = ClampCustomAuraIndependentDimension(val, 12)
+        CooldownCompanion:ApplyResourceBars()
+    end)
+    container:AddChild(heightSlider)
+
+    local dragHint = AceGUI:Create("Label")
+    dragHint:SetText("|cff888888Tip: With this mode enabled, drag the bar directly in-world while this config panel is open in Bars mode.|r")
+    dragHint:SetFullWidth(true)
+    container:AddChild(dragHint)
+end
+
 local function BuildCustomAuraBarPanel(container, slotIdx)
     auraBarAutocompleteCache = nil
     local db = CooldownCompanion.db.profile
@@ -1763,6 +1953,22 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
     end
     local cab = customBars[selectedSlot]
     local capturedIdx = selectedSlot
+    EnsureCustomAuraIndependentConfig(cab, settings)
+
+    local function ClassColorText(text)
+        local safeText = tostring(text or "")
+        local classColor = C_ClassColor.GetClassColor(select(2, UnitClass("player")))
+        if classColor then
+            if classColor.WrapTextInColorCode then
+                return classColor:WrapTextInColorCode(safeText)
+            end
+            local r = math.floor(((classColor.r or 1) * 255) + 0.5)
+            local g = math.floor(((classColor.g or 1) * 255) + 0.5)
+            local b = math.floor(((classColor.b or 1) * 255) + 0.5)
+            return string.format("|cff%02x%02x%02x%s|r", r, g, b, safeText)
+        end
+        return safeText
+    end
 
     -- Enable checkbox
     local enableCab = AceGUI:Create("CheckBox")
@@ -1777,7 +1983,89 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
     end)
     container:AddChild(enableCab)
 
-    if cab.enabled then
+    local independentCb = AceGUI:Create("CheckBox")
+    independentCb:SetLabel("Independent Anchor & Size")
+    independentCb:SetValue(cab.independentAnchorEnabled == true)
+    independentCb:SetFullWidth(true)
+    independentCb:SetCallback("OnValueChanged", function(widget, event, val)
+        local bars = CooldownCompanion:GetSpecCustomAuraBars()
+        if not bars[capturedIdx] then
+            bars[capturedIdx] = { enabled = false }
+        end
+
+        local wasEnabled = bars[capturedIdx].independentAnchorEnabled == true
+        bars[capturedIdx].independentAnchorEnabled = val or nil
+        if val then
+            EnsureCustomAuraIndependentConfig(bars[capturedIdx], settings)
+            if CS.customAuraBarSubTabs then
+                local prior = CS.customAuraBarSubTabs[capturedIdx]
+                if prior ~= "settings" and prior ~= "anchor" then
+                    CS.customAuraBarSubTabs[capturedIdx] = "settings"
+                end
+            end
+            if not wasEnabled and CooldownCompanion.InitializeCustomAuraIndependentAnchor then
+                CooldownCompanion:InitializeCustomAuraIndependentAnchor(capturedIdx)
+            end
+        elseif CS.customAuraBarSubTabs then
+            CS.customAuraBarSubTabs[capturedIdx] = nil
+        end
+
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:UpdateAnchorStacking()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(independentCb)
+
+    local independentSubTab = "settings"
+    if cab.independentAnchorEnabled == true then
+        independentSubTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
+        if independentSubTab ~= "settings" and independentSubTab ~= "anchor" then
+            independentSubTab = "settings"
+        end
+        if CS.customAuraBarSubTabs then
+            CS.customAuraBarSubTabs[capturedIdx] = independentSubTab
+        end
+
+        local subTabRow = AceGUI:Create("SimpleGroup")
+        subTabRow:SetLayout("Flow")
+        subTabRow:SetFullWidth(true)
+
+        local settingsBtn = AceGUI:Create("Button")
+        settingsBtn:SetText(independentSubTab == "settings" and ClassColorText("[Settings]") or "Settings")
+        settingsBtn:SetRelativeWidth(0.49)
+        settingsBtn:SetCallback("OnClick", function()
+            local currentTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
+            if currentTab == "settings" then return end
+            if CS.customAuraBarSubTabs then
+                CS.customAuraBarSubTabs[capturedIdx] = "settings"
+            end
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        subTabRow:AddChild(settingsBtn)
+
+        local anchorBtn = AceGUI:Create("Button")
+        anchorBtn:SetText(independentSubTab == "anchor" and ClassColorText("[Anchor Settings]") or "Anchor Settings")
+        anchorBtn:SetRelativeWidth(0.49)
+        anchorBtn:SetCallback("OnClick", function()
+            local currentTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
+            if currentTab == "anchor" then return end
+            if CS.customAuraBarSubTabs then
+                CS.customAuraBarSubTabs[capturedIdx] = "anchor"
+            end
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        subTabRow:AddChild(anchorBtn)
+
+        container:AddChild(subTabRow)
+
+        local subTabDivider = AceGUI:Create("Heading")
+        subTabDivider:SetFullWidth(true)
+        container:AddChild(subTabDivider)
+    elseif CS.customAuraBarSubTabs then
+        CS.customAuraBarSubTabs[capturedIdx] = nil
+    end
+
+    if cab.enabled and independentSubTab ~= "anchor" then
 
             local trackedAuraName = cab.spellID and C_Spell.GetSpellName(cab.spellID)
             local trackedAuraIcon = cab.spellID and C_Spell.GetSpellTexture(cab.spellID)
@@ -2314,7 +2602,11 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 end)
                 container:AddChild(hideCb)
             end
-    end -- if cab.enabled
+    end -- if cab.enabled and settings subtab selected
+
+    if cab.enabled and cab.independentAnchorEnabled == true and independentSubTab == "anchor" then
+        BuildCustomAuraBarAnchorSettings(container, customBars, settings, capturedIdx)
+    end
 
     -- "Copy from..." button
     local _, _, classID = UnitClass("player")
@@ -2573,7 +2865,7 @@ local function BuildLayoutOrderPanel(container)
     -- Custom aura bar slots
     for slotIdx = 1, MAX_SLOTS do
         local cab = customBars and customBars[slotIdx]
-        if cab and cab.enabled and cab.spellID then
+        if cab and cab.enabled and cab.spellID and cab.independentAnchorEnabled ~= true then
             if not rbSettings.customAuraBarSlots then rbSettings.customAuraBarSlots = {} end
             if not rbSettings.customAuraBarSlots[slotIdx] then
                 rbSettings.customAuraBarSlots[slotIdx] = { position = "below", order = 1000 + slotIdx }

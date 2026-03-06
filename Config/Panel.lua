@@ -66,6 +66,7 @@ end
 local function ResetConfigForProfileChange()
     ResetConfigSelection(true)
     wipe(CS.collapsedFolders)
+    wipe(CS.customAuraBarSubTabs)
     SetPrimaryMode("buttons", { skipRefresh = true })
     if ST._CancelAutoAddFlow then
         ST._CancelAutoAddFlow()
@@ -1126,7 +1127,10 @@ function CooldownCompanion:RefreshConfigPanel()
     end
     local function getCustomAuraScrollKey()
         if not CS.resourceBarPanelActive then return nil end
-        return tostring(CS.customAuraBarTab or "bar_1")
+        local barTab = tostring(CS.customAuraBarTab or "bar_1")
+        local slotIdx = tonumber(barTab:match("^bar_(%d+)$")) or 1
+        local subTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[slotIdx] or "settings"
+        return barTab .. ":" .. tostring(subTab)
     end
     local function getCustomAuraScrollWidget(col3)
         if not col3 then return nil end
