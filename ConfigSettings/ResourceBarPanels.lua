@@ -1756,6 +1756,28 @@ local function IsTruthyConfigFlag(value)
     return value == true or value == 1 or value == "1" or value == "true"
 end
 
+local function NormalizeCustomAuraIndependentOrientation(value)
+    if value == "horizontal" or value == "vertical" then
+        return value
+    end
+    return nil
+end
+
+local function NormalizeCustomAuraIndependentVerticalFillDirection(value)
+    if value == "bottom_to_top" or value == "top_to_bottom" or value == "inherit" then
+        return value
+    end
+    return "inherit"
+end
+
+local function GetResolvedCustomAuraIndependentOrientation(cab, settings)
+    local orientation = NormalizeCustomAuraIndependentOrientation(cab and cab.independentOrientation)
+    if orientation then
+        return orientation
+    end
+    return IsResourceBarVerticalConfig(settings) and "vertical" or "horizontal"
+end
+
 local function EnsureCustomAuraIndependentConfig(cab, settings)
     if type(cab) ~= "table" then return end
 
@@ -1769,6 +1791,9 @@ local function EnsureCustomAuraIndependentConfig(cab, settings)
     if type(cab.independentLocked) ~= "boolean" then
         cab.independentLocked = IsTruthyConfigFlag(cab.independentLocked) and true or false
     end
+
+    cab.independentOrientation = NormalizeCustomAuraIndependentOrientation(cab.independentOrientation)
+    cab.independentVerticalFillDirection = NormalizeCustomAuraIndependentVerticalFillDirection(cab.independentVerticalFillDirection)
 
     if type(cab.independentAnchor) ~= "table" then
         cab.independentAnchor = {}
@@ -1948,6 +1973,43 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
         CooldownCompanion:ApplyResourceBars()
     end)
     container:AddChild(heightSlider)
+
+    local resolvedOrientation = GetResolvedCustomAuraIndependentOrientation(cab, settings)
+
+    local orientationDrop = AceGUI:Create("Dropdown")
+    orientationDrop:SetLabel("Orientation")
+    orientationDrop:SetList({
+        horizontal = "Horizontal",
+        vertical = "Vertical",
+    }, { "horizontal", "vertical" })
+    orientationDrop:SetValue(resolvedOrientation)
+    orientationDrop:SetFullWidth(true)
+    orientationDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        if val ~= "horizontal" and val ~= "vertical" then
+            return
+        end
+        customBars[capturedIdx].independentOrientation = val
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(orientationDrop)
+
+    if resolvedOrientation == "vertical" then
+        local fillDrop = AceGUI:Create("Dropdown")
+        fillDrop:SetLabel("Vertical Fill Direction")
+        fillDrop:SetList({
+            inherit = "Inherit Global",
+            bottom_to_top = "Bottom to Top",
+            top_to_bottom = "Top to Bottom",
+        }, { "inherit", "bottom_to_top", "top_to_bottom" })
+        fillDrop:SetValue(cab.independentVerticalFillDirection or "inherit")
+        fillDrop:SetFullWidth(true)
+        fillDrop:SetCallback("OnValueChanged", function(widget, event, val)
+            customBars[capturedIdx].independentVerticalFillDirection = NormalizeCustomAuraIndependentVerticalFillDirection(val)
+            CooldownCompanion:ApplyResourceBars()
+        end)
+        container:AddChild(fillDrop)
+    end
 
     local dragHint = AceGUI:Create("Label")
     dragHint:SetText("|cff888888Tip: When unlocked, drag from the header in-world or use the 4-way nudger. Middle-click the header to lock placement.|r")

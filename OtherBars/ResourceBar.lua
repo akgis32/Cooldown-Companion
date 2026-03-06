@@ -353,6 +353,20 @@ local function IsTruthyConfigFlag(value)
     return value == true or value == 1 or value == "1" or value == "true"
 end
 
+local function NormalizeCustomAuraIndependentOrientation(value)
+    if value == "horizontal" or value == "vertical" then
+        return value
+    end
+    return nil
+end
+
+local function NormalizeCustomAuraIndependentVerticalFillDirection(value)
+    if value == "bottom_to_top" or value == "top_to_bottom" or value == "inherit" then
+        return value
+    end
+    return "inherit"
+end
+
 local function IsCustomAuraBarIndependent(cabConfig)
     return type(cabConfig) == "table" and IsTruthyConfigFlag(cabConfig.independentAnchorEnabled)
 end
@@ -371,6 +385,10 @@ local function EnsureCustomAuraIndependentConfig(cabConfig, settings)
     if type(cabConfig.independentLocked) ~= "boolean" then
         cabConfig.independentLocked = IsTruthyConfigFlag(cabConfig.independentLocked) and true or false
     end
+
+    cabConfig.independentOrientation = NormalizeCustomAuraIndependentOrientation(cabConfig.independentOrientation)
+    cabConfig.independentVerticalFillDirection =
+        NormalizeCustomAuraIndependentVerticalFillDirection(cabConfig.independentVerticalFillDirection)
 
     if type(cabConfig.independentAnchor) ~= "table" then
         cabConfig.independentAnchor = {}
@@ -1121,13 +1139,27 @@ local function HideResourceAuraStackSegments(holder)
     end
 end
 
-local function LayoutResourceAuraStackSegments(holder, settings)
+local function LayoutResourceAuraStackSegments(holder, settings, orientationOverride, reverseFillOverride)
     if not holder or not holder.auraStackSegments or not holder.segments then return end
     local barTexture = CooldownCompanion:FetchStatusBar(settings and settings.barTexture or "Solid")
     local borderStyle = settings and settings.borderStyle or "pixel"
     local borderSize = settings and settings.borderSize or 1
-    local isVertical = IsVerticalResourceLayout(settings)
-    local reverseFill = IsVerticalFillReversed(settings)
+    local isVertical
+    if orientationOverride == "vertical" then
+        isVertical = true
+    elseif orientationOverride == "horizontal" then
+        isVertical = false
+    else
+        isVertical = IsVerticalResourceLayout(settings)
+    end
+    local reverseFill = false
+    if isVertical then
+        if reverseFillOverride == nil then
+            reverseFill = IsVerticalFillReversed(settings)
+        else
+            reverseFill = reverseFillOverride == true
+        end
+    end
 
     for i, auraSeg in ipairs(holder.auraStackSegments) do
         local baseSeg = holder.segments[i]
@@ -1644,7 +1676,7 @@ end
 -- Layout: position segments within a segmented bar
 ------------------------------------------------------------------------
 
-local function LayoutSegments(holder, totalWidth, totalHeight, gap, settings)
+local function LayoutSegments(holder, totalWidth, totalHeight, gap, settings, orientationOverride, reverseFillOverride)
     if not holder or not holder.segments then return end
     local n = #holder.segments
     if n == 0 then return end
@@ -1654,8 +1686,22 @@ local function LayoutSegments(holder, totalWidth, totalHeight, gap, settings)
     local borderStyle = settings and settings.borderStyle or "pixel"
     local borderColor = settings and settings.borderColor or { 0, 0, 0, 1 }
     local borderSize = settings and settings.borderSize or 1
-    local isVertical = IsVerticalResourceLayout(settings)
-    local reverseFill = IsVerticalFillReversed(settings)
+    local isVertical
+    if orientationOverride == "vertical" then
+        isVertical = true
+    elseif orientationOverride == "horizontal" then
+        isVertical = false
+    else
+        isVertical = IsVerticalResourceLayout(settings)
+    end
+    local reverseFill = false
+    if isVertical then
+        if reverseFillOverride == nil then
+            reverseFill = IsVerticalFillReversed(settings)
+        else
+            reverseFill = reverseFillOverride == true
+        end
+    end
     local subSize
     if isVertical then
         subSize = (totalHeight - (n - 1) * gap) / n
@@ -1709,7 +1755,7 @@ local function LayoutSegments(holder, totalWidth, totalHeight, gap, settings)
     end
 
     if holder.auraStackSegments then
-        LayoutResourceAuraStackSegments(holder, settings)
+        LayoutResourceAuraStackSegments(holder, settings, orientationOverride, reverseFill)
     end
 end
 
@@ -1754,7 +1800,7 @@ local function CreateOverlayBar(parent, halfSegments)
     return holder
 end
 
-local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, settings, halfSegments)
+local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, settings, halfSegments, orientationOverride, reverseFillOverride)
     if not holder or not holder.segments then return end
 
     local barTexture = CooldownCompanion:FetchStatusBar(settings and settings.barTexture or "Solid")
@@ -1762,8 +1808,22 @@ local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, setti
     local borderStyle = settings and settings.borderStyle or "pixel"
     local borderColor = settings and settings.borderColor or { 0, 0, 0, 1 }
     local borderSize = settings and settings.borderSize or 1
-    local isVertical = IsVerticalResourceLayout(settings)
-    local reverseFill = IsVerticalFillReversed(settings)
+    local isVertical
+    if orientationOverride == "vertical" then
+        isVertical = true
+    elseif orientationOverride == "horizontal" then
+        isVertical = false
+    else
+        isVertical = IsVerticalResourceLayout(settings)
+    end
+    local reverseFill = false
+    if isVertical then
+        if reverseFillOverride == nil then
+            reverseFill = IsVerticalFillReversed(settings)
+        else
+            reverseFill = reverseFillOverride == true
+        end
+    end
     local subSize
     if isVertical then
         subSize = (totalHeight - (halfSegments - 1) * gap) / halfSegments
@@ -1831,7 +1891,7 @@ local function LayoutOverlaySegments(holder, totalWidth, totalHeight, gap, setti
     end
 
     if holder.auraStackSegments then
-        LayoutResourceAuraStackSegments(holder, settings)
+        LayoutResourceAuraStackSegments(holder, settings, orientationOverride, reverseFill)
     end
 end
 
@@ -3002,6 +3062,47 @@ function CooldownCompanion:ApplyResourceBars()
             local mode = isActive and "continuous" or (cabConfig.displayMode or "segmented")
             local maxStacks = isActive and 1 or (cabConfig.maxStacks or 1)
             local targetBarType = "custom_" .. mode
+            local isIndependentCustomAura = IsCustomAuraBarIndependent(cabConfig)
+            local customOrientation = isVerticalLayout and "vertical" or "horizontal"
+            if isIndependentCustomAura then
+                local independentOrientation = cabConfig.independentOrientation
+                if independentOrientation == "vertical" or independentOrientation == "horizontal" then
+                    customOrientation = independentOrientation
+                end
+            end
+            local customIsVertical = customOrientation == "vertical"
+            local customReverseFill = false
+            if customIsVertical then
+                if isIndependentCustomAura then
+                    local fillDirection = cabConfig.independentVerticalFillDirection
+                    if fillDirection == "top_to_bottom" then
+                        customReverseFill = true
+                    elseif fillDirection == "bottom_to_top" then
+                        customReverseFill = false
+                    else
+                        customReverseFill = settings.verticalFillDirection == "top_to_bottom"
+                    end
+                else
+                    customReverseFill = reverseVerticalFill
+                end
+            end
+            local customWidth = effectiveWidth
+            local customHeight = effectiveHeight
+            if isIndependentCustomAura then
+                local independentSize = cabConfig.independentSize
+                customWidth = tonumber(independentSize and independentSize.width) or customWidth
+                customHeight = tonumber(independentSize and independentSize.height) or customHeight
+                if customWidth < 4 then
+                    customWidth = 4
+                elseif customWidth > 1200 then
+                    customWidth = 1200
+                end
+                if customHeight < 4 then
+                    customHeight = 4
+                elseif customHeight > 1200 then
+                    customHeight = 1200
+                end
+            end
 
             -- Determine if bar needs recreation
             local needsRecreate = not barInfo or barInfo.barType ~= targetBarType
@@ -3047,20 +3148,39 @@ function CooldownCompanion:ApplyResourceBars()
 
             barInfo.cabConfig = cabConfig
             barInfo.frame:Show()  -- ensure reused frames visible for layout; OnUpdate re-hides if hideWhenInactive
-            barInfo.frame:SetSize(effectiveWidth, effectiveHeight)
+            barInfo.frame:SetSize(customWidth, customHeight)
+            barInfo.frame._isVertical = customIsVertical
+            barInfo.frame._reverseFill = customReverseFill
             if mode == "segmented" then
-                LayoutSegments(barInfo.frame, effectiveWidth, effectiveHeight, segmentGap, settings)
+                LayoutSegments(
+                    barInfo.frame,
+                    customWidth,
+                    customHeight,
+                    segmentGap,
+                    settings,
+                    customOrientation,
+                    customReverseFill
+                )
             elseif mode == "overlay" then
-                LayoutOverlaySegments(barInfo.frame, effectiveWidth, effectiveHeight, segmentGap, settings, barInfo.halfSegments)
+                LayoutOverlaySegments(
+                    barInfo.frame,
+                    customWidth,
+                    customHeight,
+                    segmentGap,
+                    settings,
+                    barInfo.halfSegments,
+                    customOrientation,
+                    customReverseFill
+                )
             end
             -- Continuous bar styling (text font, background, borders)
             if mode == "continuous" then
                 local barTexture = CooldownCompanion:FetchStatusBar(settings.barTexture or "Solid")
                 barInfo.frame:SetStatusBarTexture(barTexture)
-                barInfo.frame:SetOrientation(isVerticalLayout and "VERTICAL" or "HORIZONTAL")
-                barInfo.frame:SetReverseFill(isVerticalLayout and reverseVerticalFill or false)
-                barInfo.frame._isVertical = isVerticalLayout
-                barInfo.frame._reverseFill = reverseVerticalFill
+                barInfo.frame:SetOrientation(customIsVertical and "VERTICAL" or "HORIZONTAL")
+                barInfo.frame:SetReverseFill(customIsVertical and customReverseFill or false)
+                barInfo.frame._isVertical = customIsVertical
+                barInfo.frame._reverseFill = customReverseFill
                 local bgc = settings.backgroundColor or { 0, 0, 0, 0.5 }
                 barInfo.frame.bg:SetColorTexture(bgc[1], bgc[2], bgc[3], bgc[4])
                 local borderStyle = settings.borderStyle or "pixel"
