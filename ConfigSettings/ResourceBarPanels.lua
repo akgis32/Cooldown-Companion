@@ -1752,11 +1752,22 @@ local function ClampCustomAuraIndependentDimension(value, fallback)
     return dimension
 end
 
+local function IsTruthyConfigFlag(value)
+    return value == true or value == 1 or value == "1" or value == "true"
+end
+
 local function EnsureCustomAuraIndependentConfig(cab, settings)
     if type(cab) ~= "table" then return end
 
+    if cab.independentAnchorEnabled ~= nil then
+        cab.independentAnchorEnabled = IsTruthyConfigFlag(cab.independentAnchorEnabled) and true or nil
+    end
+
     if cab.independentAnchorTargetMode ~= "group" and cab.independentAnchorTargetMode ~= "frame" then
         cab.independentAnchorTargetMode = "group"
+    end
+    if type(cab.independentLocked) ~= "boolean" then
+        cab.independentLocked = IsTruthyConfigFlag(cab.independentLocked) and true or false
     end
 
     if type(cab.independentAnchor) ~= "table" then
@@ -1791,6 +1802,18 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     local cab = customBars[capturedIdx]
     if not cab then return end
     EnsureCustomAuraIndependentConfig(cab, settings)
+
+    local unlockCb = AceGUI:Create("CheckBox")
+    unlockCb:SetLabel("Unlock Placement")
+    unlockCb:SetValue(cab.independentLocked ~= true)
+    unlockCb:SetFullWidth(true)
+    unlockCb:SetCallback("OnValueChanged", function(widget, event, val)
+        local unlocked = IsTruthyConfigFlag(val)
+        customBars[capturedIdx].independentLocked = not unlocked
+        CooldownCompanion:ApplyResourceBars()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(unlockCb)
 
     local modeDrop = AceGUI:Create("Dropdown")
     modeDrop:SetLabel("Anchor Target")
@@ -1927,7 +1950,7 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     container:AddChild(heightSlider)
 
     local dragHint = AceGUI:Create("Label")
-    dragHint:SetText("|cff888888Tip: With this mode enabled, drag the bar directly in-world while this config panel is open in Bars mode.|r")
+    dragHint:SetText("|cff888888Tip: When unlocked, drag from the header in-world or use the 4-way nudger. Middle-click the header to lock placement.|r")
     dragHint:SetFullWidth(true)
     container:AddChild(dragHint)
 end
@@ -1986,7 +2009,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
     if cab.enabled then
         local independentCb = AceGUI:Create("CheckBox")
         independentCb:SetLabel("Independent Anchor & Size")
-        independentCb:SetValue(cab.independentAnchorEnabled == true)
+        independentCb:SetValue(IsTruthyConfigFlag(cab.independentAnchorEnabled))
         independentCb:SetFullWidth(true)
         independentCb:SetCallback("OnValueChanged", function(widget, event, val)
             local bars = CooldownCompanion:GetSpecCustomAuraBars()
@@ -1994,10 +2017,12 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 bars[capturedIdx] = { enabled = false }
             end
 
-            local wasEnabled = bars[capturedIdx].independentAnchorEnabled == true
-            bars[capturedIdx].independentAnchorEnabled = val or nil
-            if val then
+            local enabled = IsTruthyConfigFlag(val)
+            local wasEnabled = IsTruthyConfigFlag(bars[capturedIdx].independentAnchorEnabled)
+            bars[capturedIdx].independentAnchorEnabled = enabled and true or nil
+            if enabled then
                 EnsureCustomAuraIndependentConfig(bars[capturedIdx], settings)
+                bars[capturedIdx].independentLocked = false
                 if CS.customAuraBarSubTabs then
                     local prior = CS.customAuraBarSubTabs[capturedIdx]
                     if prior ~= "settings" and prior ~= "anchor" then
@@ -2019,7 +2044,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
     end
 
     local independentSubTab = "settings"
-    if cab.enabled and cab.independentAnchorEnabled == true then
+    if cab.enabled and IsTruthyConfigFlag(cab.independentAnchorEnabled) then
         independentSubTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
         if independentSubTab ~= "settings" and independentSubTab ~= "anchor" then
             independentSubTab = "settings"
@@ -2606,7 +2631,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             end
     end -- if cab.enabled and settings subtab selected
 
-    if cab.enabled and cab.independentAnchorEnabled == true and independentSubTab == "anchor" then
+    if cab.enabled and IsTruthyConfigFlag(cab.independentAnchorEnabled) and independentSubTab == "anchor" then
         BuildCustomAuraBarAnchorSettings(container, customBars, settings, capturedIdx)
     end
 
@@ -2815,7 +2840,7 @@ local function BuildLayoutOrderPanel(container)
     -- Custom aura bar slots
     for slotIdx = 1, MAX_SLOTS do
         local cab = customBars and customBars[slotIdx]
-        if cab and cab.enabled and cab.spellID and cab.independentAnchorEnabled ~= true then
+        if cab and cab.enabled and cab.spellID and not IsTruthyConfigFlag(cab.independentAnchorEnabled) then
             if not rbSettings.customAuraBarSlots then rbSettings.customAuraBarSlots = {} end
             if not rbSettings.customAuraBarSlots[slotIdx] then
                 rbSettings.customAuraBarSlots[slotIdx] = { position = "below", order = 1000 + slotIdx }

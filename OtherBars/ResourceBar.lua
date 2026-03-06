@@ -56,6 +56,9 @@ local DEFAULT_CONTINUOUS_TICK_COLOR = { 1, 0.84, 0, 1 }
 local DEFAULT_CONTINUOUS_TICK_MODE = "percent"
 local DEFAULT_CONTINUOUS_TICK_PERCENT = 50
 local DEFAULT_CONTINUOUS_TICK_ABSOLUTE = 50
+local INDEPENDENT_NUDGE_BTN_SIZE = 12
+local INDEPENDENT_NUDGE_REPEAT_DELAY = 0.5
+local INDEPENDENT_NUDGE_REPEAT_INTERVAL = 0.05
 
 local DEFAULT_POWER_COLORS = {
     [0]  = { 0, 0, 1 },              -- Mana
@@ -346,16 +349,27 @@ local function ClampIndependentDimension(value, fallback)
     return dim
 end
 
+local function IsTruthyConfigFlag(value)
+    return value == true or value == 1 or value == "1" or value == "true"
+end
+
 local function IsCustomAuraBarIndependent(cabConfig)
-    return type(cabConfig) == "table" and cabConfig.independentAnchorEnabled == true
+    return type(cabConfig) == "table" and IsTruthyConfigFlag(cabConfig.independentAnchorEnabled)
 end
 
 local function EnsureCustomAuraIndependentConfig(cabConfig, settings)
     if type(cabConfig) ~= "table" then return end
 
+    if cabConfig.independentAnchorEnabled ~= nil then
+        cabConfig.independentAnchorEnabled = IsTruthyConfigFlag(cabConfig.independentAnchorEnabled) and true or nil
+    end
+
     if cabConfig.independentAnchorTargetMode ~= "group"
         and cabConfig.independentAnchorTargetMode ~= "frame" then
         cabConfig.independentAnchorTargetMode = "group"
+    end
+    if type(cabConfig.independentLocked) ~= "boolean" then
+        cabConfig.independentLocked = IsTruthyConfigFlag(cabConfig.independentLocked) and true or false
     end
 
     if type(cabConfig.independentAnchor) ~= "table" then
@@ -450,7 +464,34 @@ local function ApplyIndependentAlphaSync(frame, settings, targetFrame)
     frame:SetAlpha(1)
 end
 
-local function SaveIndependentCustomAuraAnchor(barInfo)
+local function GetCustomAuraSlotFromPowerType(powerType)
+    local pt = tonumber(powerType)
+    if not pt then return nil end
+    if pt < CUSTOM_AURA_BAR_BASE or pt >= CUSTOM_AURA_BAR_BASE + MAX_CUSTOM_AURA_BARS then
+        return nil
+    end
+    return pt - CUSTOM_AURA_BAR_BASE + 1
+end
+
+local function IsIndependentCustomAuraUnlocked(barInfo)
+    return barInfo and barInfo.cabConfig and barInfo.cabConfig.independentLocked ~= true
+end
+
+local function GetIndependentCustomAuraHeaderText(barInfo)
+    local slotIdx = GetCustomAuraSlotFromPowerType(barInfo and barInfo.powerType) or 0
+    if barInfo and barInfo.cabConfig and barInfo.cabConfig.spellID then
+        local spellName = C_Spell.GetSpellName(barInfo.cabConfig.spellID)
+        if spellName and spellName ~= "" then
+            return spellName
+        end
+    end
+    if slotIdx > 0 then
+        return "Aura Bar " .. tostring(slotIdx)
+    end
+    return "Aura Bar"
+end
+
+local function SaveIndependentCustomAuraAnchor(barInfo, refreshConfig)
     if not barInfo or not barInfo.frame or not barInfo.cabConfig then return end
     local settings = GetResourceBarSettings()
     if not settings then return end
@@ -477,39 +518,191 @@ local function SaveIndependentCustomAuraAnchor(barInfo)
     local tax, tay = GetAnchorOffset(anchor.relativePoint, tw, th)
     anchor.x = RoundToTenths((cx + fax) - (tcx + tax))
     anchor.y = RoundToTenths((cy + fay) - (tcy + tay))
+
+    if refreshConfig and IsBarsConfigActive() and CooldownCompanion.RefreshConfigPanel then
+        CooldownCompanion:RefreshConfigPanel()
+    end
 end
 
-local function EnsureIndependentDragScripts(frame)
-    if not frame or frame._cdcIndependentDragScripts then return end
-    frame._cdcIndependentDragScripts = true
+local function CancelIndependentNudgeTimers(button)
+    if not button then return end
+    if button._cdcNudgeDelayTimer then
+        button._cdcNudgeDelayTimer:Cancel()
+        button._cdcNudgeDelayTimer = nil
+    end
+    if button._cdcNudgeTicker then
+        button._cdcNudgeTicker:Cancel()
+        button._cdcNudgeTicker = nil
+    end
+end
 
-    frame:SetScript("OnDragStart", function(self)
-        local info = self._cdcIndependentBarInfo
+local UpdateIndependentDragState
+
+local function EnsureIndependentDragChrome(frame)
+    if not frame or frame._cdcIndependentDragHandle then return end
+
+    local dragHandle = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    dragHandle:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 2)
+    dragHandle:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", 0, 2)
+    dragHandle:SetHeight(15)
+    dragHandle:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    dragHandle:SetBackdropColor(0.2, 0.2, 0.2, 0.8)
+    dragHandle:SetBackdropBorderColor(0, 0, 0, 1)
+    dragHandle:EnableMouse(false)
+    dragHandle:RegisterForDrag()
+
+    dragHandle.text = dragHandle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    dragHandle.text:SetPoint("CENTER")
+    dragHandle.text:SetTextColor(1, 1, 1, 1)
+
+    local NUDGE_GAP = 2
+    local nudger = CreateFrame("Frame", nil, dragHandle, "BackdropTemplate")
+    nudger:SetSize(INDEPENDENT_NUDGE_BTN_SIZE * 2 + NUDGE_GAP, INDEPENDENT_NUDGE_BTN_SIZE * 2 + NUDGE_GAP)
+    nudger:SetPoint("BOTTOM", dragHandle, "TOP", 0, 2)
+    nudger:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    nudger:SetBackdropColor(0.2, 0.2, 0.2, 0.8)
+    nudger:SetBackdropBorderColor(0, 0, 0, 1)
+    nudger:EnableMouse(false)
+    nudger._cdcButtons = {}
+
+    local directions = {
+        { atlas = "common-dropdown-icon-back", rotation = -math.pi / 2, anchor = "BOTTOM", dx = 0, dy = 1, ox = 0, oy = NUDGE_GAP },  -- up
+        { atlas = "common-dropdown-icon-next", rotation = -math.pi / 2, anchor = "TOP", dx = 0, dy = -1, ox = 0, oy = -NUDGE_GAP },   -- down
+        { atlas = "common-dropdown-icon-back", rotation = 0, anchor = "RIGHT", dx = -1, dy = 0, ox = -NUDGE_GAP, oy = 0 },            -- left
+        { atlas = "common-dropdown-icon-next", rotation = 0, anchor = "LEFT", dx = 1, dy = 0, ox = NUDGE_GAP, oy = 0 },               -- right
+    }
+
+    for _, dir in ipairs(directions) do
+        local btn = CreateFrame("Button", nil, nudger)
+        btn:SetSize(INDEPENDENT_NUDGE_BTN_SIZE, INDEPENDENT_NUDGE_BTN_SIZE)
+        btn:SetPoint(dir.anchor, nudger, "CENTER", dir.ox, dir.oy)
+        btn:EnableMouse(true)
+
+        local arrow = btn:CreateTexture(nil, "OVERLAY")
+        arrow:SetAtlas(dir.atlas, false)
+        arrow:SetAllPoints()
+        arrow:SetRotation(dir.rotation)
+        arrow:SetVertexColor(0.8, 0.8, 0.8, 0.8)
+        btn.arrow = arrow
+
+        local function DoNudge()
+            local info = frame._cdcIndependentBarInfo
+            if not info or not info._isIndependent then return end
+            if not IsIndependentCustomAuraUnlocked(info) then return end
+            frame:AdjustPointsOffset(dir.dx, dir.dy)
+        end
+
+        btn:SetScript("OnEnter", function(self)
+            self.arrow:SetVertexColor(1, 1, 1, 1)
+        end)
+        btn:SetScript("OnLeave", function(self)
+            self.arrow:SetVertexColor(0.8, 0.8, 0.8, 0.8)
+            CancelIndependentNudgeTimers(self)
+            local info = frame._cdcIndependentBarInfo
+            if info and info._isIndependent then
+                SaveIndependentCustomAuraAnchor(info, true)
+            end
+        end)
+        btn:SetScript("OnMouseDown", function(self)
+            DoNudge()
+            self._cdcNudgeDelayTimer = C_Timer.NewTimer(INDEPENDENT_NUDGE_REPEAT_DELAY, function()
+                self._cdcNudgeTicker = C_Timer.NewTicker(INDEPENDENT_NUDGE_REPEAT_INTERVAL, function()
+                    DoNudge()
+                end)
+            end)
+        end)
+        btn:SetScript("OnMouseUp", function(self)
+            CancelIndependentNudgeTimers(self)
+            local info = frame._cdcIndependentBarInfo
+            if info and info._isIndependent then
+                SaveIndependentCustomAuraAnchor(info, true)
+            end
+        end)
+
+        nudger._cdcButtons[#nudger._cdcButtons + 1] = btn
+    end
+
+    dragHandle:RegisterForDrag("LeftButton")
+    dragHandle:SetScript("OnDragStart", function()
+        local info = frame._cdcIndependentBarInfo
         if not info or not info._isIndependent then return end
-        if not IsBarsConfigActive() then return end
-        self:StartMoving()
+        if not IsIndependentCustomAuraUnlocked(info) then return end
+        frame:StartMoving()
     end)
-
-    frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        local info = self._cdcIndependentBarInfo
+    dragHandle:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        local info = frame._cdcIndependentBarInfo
         if info and info._isIndependent then
-            SaveIndependentCustomAuraAnchor(info)
+            SaveIndependentCustomAuraAnchor(info, true)
         end
     end)
+    dragHandle:SetScript("OnMouseUp", function(_, button)
+        if button ~= "MiddleButton" then return end
+        local info = frame._cdcIndependentBarInfo
+        if not info or not info._isIndependent or not info.cabConfig then return end
+        info.cabConfig.independentLocked = true
+        SaveIndependentCustomAuraAnchor(info, true)
+        UpdateIndependentDragState(frame, info)
+    end)
+
+    frame._cdcIndependentDragHandle = dragHandle
+    frame._cdcIndependentNudger = nudger
 end
 
-local function UpdateIndependentDragState(frame, barInfo)
+UpdateIndependentDragState = function(frame, barInfo)
     if not frame then return end
 
-    local enableDrag = barInfo and barInfo._isIndependent and IsBarsConfigActive()
+    EnsureIndependentDragChrome(frame)
+    local dragHandle = frame._cdcIndependentDragHandle
+    local nudger = frame._cdcIndependentNudger
+    local canShowChrome = barInfo and barInfo._isIndependent
+    local unlocked = canShowChrome and IsIndependentCustomAuraUnlocked(barInfo)
+
     frame:SetClampedToScreen(true)
-    frame:SetMovable(enableDrag)
-    frame:EnableMouse(enableDrag)
-    if enableDrag then
-        frame:RegisterForDrag("LeftButton")
-    else
-        frame:RegisterForDrag()
+    frame:SetMovable(unlocked)
+    frame:EnableMouse(false)
+    frame:RegisterForDrag()
+
+    if dragHandle then
+        dragHandle:SetShown(unlocked)
+        dragHandle:EnableMouse(unlocked)
+        if unlocked then
+            dragHandle:RegisterForDrag("LeftButton")
+        else
+            dragHandle:RegisterForDrag()
+        end
+        if dragHandle.text then
+            dragHandle.text:SetText(GetIndependentCustomAuraHeaderText(barInfo))
+        end
+        dragHandle:SetFrameStrata(frame:GetFrameStrata())
+        dragHandle:SetFrameLevel(frame:GetFrameLevel() + 20)
+    end
+
+    if nudger then
+        nudger:SetShown(unlocked)
+        nudger:EnableMouse(unlocked)
+        nudger:SetFrameStrata(frame:GetFrameStrata())
+        if dragHandle then
+            nudger:SetFrameLevel(dragHandle:GetFrameLevel() + 5)
+        else
+            nudger:SetFrameLevel(frame:GetFrameLevel() + 25)
+        end
+        if nudger._cdcButtons then
+            for _, btn in ipairs(nudger._cdcButtons) do
+                btn:EnableMouse(unlocked)
+                if not unlocked then
+                    CancelIndependentNudgeTimers(btn)
+                end
+            end
+        end
     end
 end
 
@@ -519,6 +712,23 @@ local function ClearIndependentRuntimeState(frame)
     frame:SetMovable(false)
     frame:EnableMouse(false)
     frame:RegisterForDrag()
+
+    if frame._cdcIndependentDragHandle then
+        frame._cdcIndependentDragHandle:EnableMouse(false)
+        frame._cdcIndependentDragHandle:RegisterForDrag()
+        frame._cdcIndependentDragHandle:Hide()
+    end
+    if frame._cdcIndependentNudger then
+        if frame._cdcIndependentNudger._cdcButtons then
+            for _, btn in ipairs(frame._cdcIndependentNudger._cdcButtons) do
+                CancelIndependentNudgeTimers(btn)
+                btn:EnableMouse(false)
+            end
+        end
+        frame._cdcIndependentNudger:EnableMouse(false)
+        frame._cdcIndependentNudger:Hide()
+    end
+
     ApplyIndependentAlphaSync(frame, nil, nil)
 end
 
@@ -550,7 +760,6 @@ local function ApplyIndependentCustomAuraPlacement(barInfo, cabConfig, settings)
     frame:SetSize(width, height)
 
     frame._cdcIndependentBarInfo = barInfo
-    EnsureIndependentDragScripts(frame)
     UpdateIndependentDragState(frame, barInfo)
     ApplyIndependentAlphaSync(frame, settings, targetFrame)
 end
@@ -2677,7 +2886,7 @@ function CooldownCompanion:ApplyResourceBars()
         if powerType >= CUSTOM_AURA_BAR_BASE then
             local slotIdx = powerType - CUSTOM_AURA_BAR_BASE + 1
             local cabConfig = customBars and customBars[slotIdx]
-            if not (type(cabConfig) == "table" and cabConfig.independentAnchorEnabled == true) then
+            if not IsCustomAuraBarIndependent(cabConfig) then
                 local slotCfg = settings.customAuraBarSlots and settings.customAuraBarSlots[slotIdx]
                 if isVerticalLayout then
                     local storedHorizontalSide = (slotCfg and slotCfg.position) or "below"
@@ -2949,7 +3158,7 @@ function CooldownCompanion:ApplyResourceBars()
         if powerType >= CUSTOM_AURA_BAR_BASE and powerType < CUSTOM_AURA_BAR_BASE + MAX_CUSTOM_AURA_BARS then
             local slotIdx = powerType - CUSTOM_AURA_BAR_BASE + 1
             local cabConfig = customBars and customBars[slotIdx]
-            isIndependentCustomAura = type(cabConfig) == "table" and cabConfig.independentAnchorEnabled == true
+            isIndependentCustomAura = IsCustomAuraBarIndependent(cabConfig)
         end
 
         barInfo._isIndependent = isIndependentCustomAura
