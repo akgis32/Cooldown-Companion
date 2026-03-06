@@ -1,14 +1,15 @@
 --[[
     CooldownCompanion - Config/TalentPicker.lua: Visual talent tree picker
-    embedded in the config panel overlay.
+    rendered inside the existing config panel columns (col1 = class, col3 = spec).
 ]]
 
 local ADDON_NAME, ST = ...
 local CooldownCompanion = ST.Addon
 local CS = ST._configState
 
+local AceGUI = LibStub("AceGUI-3.0")
+
 local ipairs = ipairs
-local pairs = pairs
 local math_min = math.min
 local math_max = math.max
 local math_floor = math.floor
@@ -21,35 +22,39 @@ local NODE_PADDING = 16
 local CHOICE_ICON_SIZE = 22
 local CHOICE_ICON_GAP = 2
 
-local PANEL_GAP = 12
-local PANEL_HEADER_HEIGHT = 20
 local NORMAL_BORDER_SIZE = 2
 local CHOICE_BORDER_SIZE = 3
 
 local EDGE_THICKNESS_ACTIVE = 1.8
 local EDGE_THICKNESS_INACTIVE = 1.2
 
-local TOP_ROW_HEIGHT = 36
+local BTN_ROW_HEIGHT = 30
 
 -- Colors
 local COLOR_BORDER_TAKEN    = { 0.3, 0.85, 0.3, 1 }
 local COLOR_BORDER_NOTTAKEN = { 0.4, 0.4, 0.4, 0.7 }
 local COLOR_BORDER_SELECTED = { 1.0, 0.82, 0.0, 1 }
 local COLOR_BORDER_CHOICE   = { 0.6, 0.5, 0.85, 1 }
-local COLOR_BG              = { 0.08, 0.08, 0.12, 0.95 }
 local COLOR_EDGE_ACTIVE     = { 0.85, 0.75, 0.2, 0.9 }
 local COLOR_EDGE_INACTIVE   = { 0.35, 0.35, 0.35, 0.5 }
 
 ------------------------------------------------------------------------
 -- STATE
 ------------------------------------------------------------------------
-local overlayFrame = nil       -- raw Frame, child of config panel contentFrame
+local classTreeFrame = nil
+local specTreeFrame = nil
+local specEmptyText = nil
+local backBtn = nil
+local clearBtn = nil
 local nodeButtons = {}
 local choiceButtons = {}
-local edgeLines = {}
+local classEdgeLines = {}
+local specEdgeLines = {}
 local onSelectCallback = nil
-local savedTitle = nil         -- original panel title to restore
-local isRestoring = false      -- guard against double-fire in OnHide
+local savedCol1Title = nil
+local savedCol3Title = nil
+local savedPanelTitle = nil
+local isRestoring = false
 
 ------------------------------------------------------------------------
 -- HELPERS
@@ -162,7 +167,7 @@ local function SetNodeBorderColor(btn, color)
 end
 
 ------------------------------------------------------------------------
--- CHOICE SUBMENU
+-- CHOICE SUBMENU (floating frame, parented to configFrame.frame)
 ------------------------------------------------------------------------
 local choiceFrame = nil
 
@@ -173,12 +178,15 @@ local function HideChoiceFrame()
 end
 
 -- Forward declarations
-local HideOverlay
+local HideTalentPicker
 local PopulateTree
 
 local function ShowChoiceFrame(parentBtn, entries, nodeID, currentEntryID)
+    local configFrame = CS.configFrame
+    if not configFrame then return end
+
     if not choiceFrame then
-        choiceFrame = CreateFrame("Frame", nil, overlayFrame, "BackdropTemplate")
+        choiceFrame = CreateFrame("Frame", nil, configFrame.frame, "BackdropTemplate")
         choiceFrame:SetBackdrop({
             bgFile = "Interface\\BUTTONS\\WHITE8X8",
             edgeFile = "Interface\\BUTTONS\\WHITE8X8",
@@ -189,8 +197,8 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID, currentEntryID)
         choiceFrame:SetFrameStrata("FULLSCREEN_DIALOG")
     end
 
-    -- Reparent in case overlay was recreated
-    choiceFrame:SetParent(overlayFrame)
+    choiceFrame:SetParent(configFrame.frame)
+    choiceFrame:SetFrameStrata("FULLSCREEN_DIALOG")
 
     -- Hide previous choice buttons
     for _, cb in ipairs(choiceButtons) do
@@ -244,7 +252,7 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID, currentEntryID)
                 spellID = entry.spellID,
                 talentName = entry.name,
             }
-            HideOverlay(CS.configFrame)
+            HideTalentPicker()
             if selectCb then
                 selectCb(result)
             end
@@ -253,151 +261,194 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID, currentEntryID)
 end
 
 ------------------------------------------------------------------------
--- OVERLAY MANAGEMENT
+-- TREE FRAME CREATION (lazy, created once, reused)
 ------------------------------------------------------------------------
-local function EnsureOverlay(configFrame)
-    if overlayFrame then return end
-
-    local contentFrame = configFrame.content
-
-    overlayFrame = CreateFrame("Frame", nil, contentFrame)
-    overlayFrame:SetPoint("TOPLEFT", contentFrame, "TOPLEFT", 0, 0)
-    overlayFrame:SetPoint("BOTTOMRIGHT", contentFrame, "BOTTOMRIGHT", 0, 0)
-    overlayFrame:SetFrameStrata("DIALOG")
-    overlayFrame:Hide()
-
-    -- Background
-    local bg = overlayFrame:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(COLOR_BG[1], COLOR_BG[2], COLOR_BG[3], COLOR_BG[4])
-
-    -- Top row
-    local topRow = CreateFrame("Frame", nil, overlayFrame)
-    topRow:SetPoint("TOPLEFT", overlayFrame, "TOPLEFT", 8, -8)
-    topRow:SetPoint("TOPRIGHT", overlayFrame, "TOPRIGHT", -8, -8)
-    topRow:SetHeight(TOP_ROW_HEIGHT)
-
-    local backBtn = CreateFrame("Button", nil, topRow, "UIPanelButtonTemplate")
-    backBtn:SetSize(80, 24)
-    backBtn:SetPoint("TOPLEFT", topRow, "TOPLEFT", 0, 0)
-    backBtn:SetText("Back")
-    backBtn:SetScript("OnClick", function()
-        HideOverlay(configFrame)
-    end)
-
-    local clearBtn = CreateFrame("Button", nil, topRow, "UIPanelButtonTemplate")
-    clearBtn:SetSize(80, 24)
-    clearBtn:SetPoint("LEFT", backBtn, "RIGHT", 6, 0)
-    clearBtn:SetText("Clear")
-    clearBtn:SetScript("OnClick", function()
-        local cb = onSelectCallback
-        HideOverlay(configFrame)
-        if cb then
-            cb(nil)
-        end
-    end)
-
-    -- Scroll frame
-    local scrollFrame = CreateFrame("ScrollFrame", nil, overlayFrame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", topRow, "BOTTOMLEFT", 0, -4)
-    scrollFrame:SetPoint("BOTTOMRIGHT", overlayFrame, "BOTTOMRIGHT", -28, 8)
-
-    local scrollChild = CreateFrame("Frame", nil, scrollFrame)
-    scrollChild:SetSize(1, 1) -- sized dynamically
-    scrollFrame:SetScrollChild(scrollChild)
-    overlayFrame.scrollFrame = scrollFrame
-    overlayFrame.scrollChild = scrollChild
-
-    -- Panel header labels (positioned in PopulateTree)
-    local classLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    classLabel:SetText("Class")
-    classLabel:SetTextColor(0.8, 0.8, 0.6, 1)
-    classLabel:Hide()
-    overlayFrame.classLabel = classLabel
-
-    local specLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    specLabel:SetText("Spec")
-    specLabel:SetTextColor(0.8, 0.8, 0.6, 1)
-    specLabel:Hide()
-    overlayFrame.specLabel = specLabel
-
-    -- Vertical divider line between panels (positioned in PopulateTree)
-    local divider = scrollChild:CreateLine(nil, "ARTWORK")
-    divider:SetThickness(1)
-    divider:SetColorTexture(0.3, 0.3, 0.4, 0.6)
-    divider:Hide()
-    overlayFrame.divider = divider
-
-    -- Escape key to go back (not close the whole config panel)
-    overlayFrame:EnableKeyboard(true)
-    overlayFrame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" then
-            self:SetPropagateKeyboardInput(false)
-            HideOverlay(configFrame)
-        else
-            self:SetPropagateKeyboardInput(true)
-        end
-    end)
-
-    -- OnHide: restore panel state if overlay hidden by parent closing
-    overlayFrame:SetScript("OnHide", function()
-        if isRestoring then return end
-        if savedTitle then
-            HideOverlay(configFrame)
-        end
-    end)
+local function EnsureTreeFrames()
+    local configFrame = CS.configFrame
+    if not configFrame then return end
+    if not classTreeFrame then
+        classTreeFrame = CreateFrame("Frame", nil, configFrame.col1.content)
+    end
+    if not specTreeFrame then
+        specTreeFrame = CreateFrame("Frame", nil, configFrame.col3.content)
+    end
 end
 
-local function ShowOverlay(configFrame, currentNodeID, currentEntryID)
-    -- Save title
-    savedTitle = configFrame.titletext:GetText()
+------------------------------------------------------------------------
+-- BACK + CLEAR BUTTONS (lazy, created once)
+------------------------------------------------------------------------
+local function EnsureButtons()
+    if not backBtn then
+        backBtn = AceGUI:Create("Button")
+        backBtn:SetText("Back")
+        backBtn:SetWidth(80)
+        backBtn:SetCallback("OnClick", function()
+            HideTalentPicker()
+        end)
+    end
+
+    if not clearBtn then
+        clearBtn = AceGUI:Create("Button")
+        clearBtn:SetText("Clear")
+        clearBtn:SetWidth(80)
+        clearBtn:SetCallback("OnClick", function()
+            local cb = onSelectCallback
+            HideTalentPicker()
+            if cb then
+                cb(nil)
+            end
+        end)
+    end
+end
+
+------------------------------------------------------------------------
+-- SHOW / HIDE TALENT PICKER
+------------------------------------------------------------------------
+local function ShowTalentPicker(configFrame, currentNodeID, currentEntryID)
+    CS.talentPickerMode = true
+
+    local col1 = configFrame.col1
+    local col2 = configFrame.col2
+    local col3 = configFrame.col3
+    local col4 = configFrame.col4
+
+    -- Save titles
+    savedCol1Title = col1.titletext:GetText()
+    savedCol3Title = col3.titletext:GetText()
+    savedPanelTitle = configFrame.titletext:GetText()
+
+    -- Change titles
+    col1:SetTitle("Class")
+    col3:SetTitle("Spec")
     configFrame:SetTitle("Pick a Talent")
 
+    -- Hide col2 + col4
+    col2.frame:Hide()
+    col4.frame:Hide()
+
+    -- Hide col1 normal content
+    CS.col1Scroll.frame:Hide()
+    CS.col1ButtonBar:Hide()
+
+    -- Hide col3 normal content (all possible states)
+    if col3.bsTabGroup then col3.bsTabGroup.frame:Hide() end
+    if col3.bsPlaceholder then col3.bsPlaceholder:Hide() end
+    if col3._customAuraTabGroup then col3._customAuraTabGroup.frame:Hide() end
+    if col3._autoAddScroll then col3._autoAddScroll.frame:Hide() end
+    if col3.multiSelectScroll then col3.multiSelectScroll.frame:Hide() end
+
+    -- Recompute column layout (2-column mode)
+    configFrame.LayoutColumns()
+
     -- Hide panel elements
-    configFrame.colParent:Hide()
-    configFrame.versionText:Hide()
-    configFrame.profileGear:Hide()
+    configFrame.modeStatusRow:Hide()
     if configFrame.profileBar:IsShown() then
         configFrame.profileBar:Hide()
     end
-    configFrame.modeStatusRow:Hide()
 
-    -- Create overlay if needed
-    EnsureOverlay(configFrame)
-    overlayFrame:Show()
+    -- Hide column info buttons during talent picker
+    if CS.columnInfoButtons[1] then CS.columnInfoButtons[1]:Hide() end
+    if CS.columnInfoButtons[3] then CS.columnInfoButtons[3]:Hide() end
 
+    -- Create/show tree frames + buttons
+    EnsureTreeFrames()
+    EnsureButtons()
+
+    -- Parent tree frames to correct content areas
+    classTreeFrame:SetParent(col1.content)
+    specTreeFrame:SetParent(col3.content)
+
+    -- Position AceGUI buttons in col1.content
+    backBtn.frame:SetParent(col1.content)
+    backBtn.frame:ClearAllPoints()
+    backBtn.frame:SetPoint("TOPLEFT", col1.content, "TOPLEFT", 0, 0)
+    backBtn.frame:Show()
+
+    clearBtn.frame:SetParent(col1.content)
+    clearBtn.frame:ClearAllPoints()
+    clearBtn.frame:SetPoint("LEFT", backBtn.frame, "RIGHT", 4, 0)
+    clearBtn.frame:Show()
+
+    -- Position class tree below buttons
+    classTreeFrame:ClearAllPoints()
+    classTreeFrame:SetPoint("TOPLEFT", col1.content, "TOPLEFT", 0, -BTN_ROW_HEIGHT)
+    classTreeFrame:SetPoint("BOTTOMRIGHT", col1.content, "BOTTOMRIGHT", 0, 0)
+    classTreeFrame:Show()
+
+    -- Position spec tree (full content area)
+    specTreeFrame:ClearAllPoints()
+    specTreeFrame:SetPoint("TOPLEFT", col3.content, "TOPLEFT", 0, 0)
+    specTreeFrame:SetPoint("BOTTOMRIGHT", col3.content, "BOTTOMRIGHT", 0, 0)
+    specTreeFrame:Show()
+
+    -- Populate talent trees
     PopulateTree(currentNodeID, currentEntryID)
 end
 
-HideOverlay = function(configFrame)
+HideTalentPicker = function()
     if isRestoring then return end
     isRestoring = true
 
-    if overlayFrame then
-        overlayFrame:Hide()
-    end
+    local configFrame = CS.configFrame
+    CS.talentPickerMode = false
+
+    -- Hide talent content
+    if classTreeFrame then classTreeFrame:Hide() end
+    if specTreeFrame then specTreeFrame:Hide() end
+    if specEmptyText then specEmptyText:Hide() end
+    if backBtn then backBtn.frame:Hide() end
+    if clearBtn then clearBtn.frame:Hide() end
     HideChoiceFrame()
 
-    -- Restore title
-    if configFrame and savedTitle then
-        configFrame:SetTitle(savedTitle)
-    end
-    savedTitle = nil
+    -- Hide all node buttons and edges
+    for _, btn in ipairs(nodeButtons) do btn:Hide() end
+    for _, cb in ipairs(choiceButtons) do cb:Hide() end
+    for _, line in ipairs(classEdgeLines) do line:Hide() end
+    for _, line in ipairs(specEdgeLines) do line:Hide() end
 
-    -- Restore panel elements
     if configFrame then
-        configFrame.colParent:Show()
-        configFrame.versionText:Show()
-        configFrame.profileGear:Show()
-        -- profileBar stays hidden (its default state — profileGear toggle controls it)
-        -- modeStatusRow visibility is managed by UpdateModeNavigationUI
+        -- Restore titles
+        if savedCol1Title then configFrame.col1:SetTitle(savedCol1Title) end
+        if savedCol3Title then configFrame.col3:SetTitle(savedCol3Title) end
+        if savedPanelTitle then configFrame:SetTitle(savedPanelTitle) end
+
+        -- Show col2 + col4
+        configFrame.col2.frame:Show()
+        configFrame.col4.frame:Show()
+
+        -- Restore column info buttons
+        if not CooldownCompanion.db.profile.hideInfoButtons then
+            if CS.columnInfoButtons[1] then CS.columnInfoButtons[1]:Show() end
+            if CS.columnInfoButtons[3] then CS.columnInfoButtons[3]:Show() end
+        end
+
+        -- Show col1 normal content
+        CS.col1Scroll.frame:Show()
+        CS.col1ButtonBar:Show()
+
+        -- Restore modeStatusRow visibility (SyncModeToggleWithProfileBar is a closure,
+        -- so replicate its visibility logic: row shows when profileBar is hidden)
+        if configFrame.modeStatusRow and configFrame.profileBar then
+            configFrame.modeStatusRow:SetShown(not configFrame.profileBar:IsShown())
+        end
+
+        -- Recompute layout (4-column mode) then refresh
+        configFrame.LayoutColumns()
         if configFrame.UpdateModeNavigationUI then
             configFrame.UpdateModeNavigationUI()
         end
     end
 
+    savedCol1Title = nil
+    savedCol3Title = nil
+    savedPanelTitle = nil
     onSelectCallback = nil
     isRestoring = false
+
+    -- RefreshConfigPanel restores col3 state correctly
+    if configFrame then
+        CooldownCompanion:RefreshConfigPanel()
+    end
 end
 
 ------------------------------------------------------------------------
@@ -522,7 +573,7 @@ local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
                     spellID = primaryEntry.spellID,
                     talentName = primaryEntry.name,
                 }
-                HideOverlay(CS.configFrame)
+                HideTalentPicker()
                 if cb then
                     cb(result)
                 end
@@ -535,10 +586,10 @@ local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
     return btnIndex
 end
 
-local function DrawEdges(scrollChild, allNodes, nodeIDToBtn)
+local function DrawEdgesInPanel(scrollChild, panelNodes, nodeIDToBtn, edgePool)
     local lineIndex = 0
 
-    for _, node in ipairs(allNodes) do
+    for _, node in ipairs(panelNodes) do
         if node.visibleEdges then
             local srcBtn = nodeIDToBtn[node.nodeID]
             if srcBtn then
@@ -546,10 +597,10 @@ local function DrawEdges(scrollChild, allNodes, nodeIDToBtn)
                     local dstBtn = nodeIDToBtn[edge.targetNode]
                     if dstBtn then
                         lineIndex = lineIndex + 1
-                        local line = edgeLines[lineIndex]
+                        local line = edgePool[lineIndex]
                         if not line then
                             line = scrollChild:CreateLine(nil, "BACKGROUND")
-                            edgeLines[lineIndex] = line
+                            edgePool[lineIndex] = line
                         end
 
                         line:ClearAllPoints()
@@ -575,18 +626,17 @@ local function DrawEdges(scrollChild, allNodes, nodeIDToBtn)
 end
 
 PopulateTree = function(currentNodeID, currentEntryID)
-    local scrollChild = overlayFrame.scrollChild
-
     -- Hide all existing buttons and edges
     for _, btn in ipairs(nodeButtons) do btn:Hide() end
     for _, cb in ipairs(choiceButtons) do cb:Hide() end
-    for _, line in ipairs(edgeLines) do line:Hide() end
+    for _, line in ipairs(classEdgeLines) do line:Hide() end
+    for _, line in ipairs(specEdgeLines) do line:Hide() end
     HideChoiceFrame()
 
-    -- Hide panel UI until we know if dual-panel mode applies
-    overlayFrame.classLabel:Hide()
-    overlayFrame.specLabel:Hide()
-    overlayFrame.divider:Hide()
+    -- Hide empty-state text if it exists
+    if specEmptyText then
+        specEmptyText:Hide()
+    end
 
     local configID = C_ClassTalents.GetActiveConfigID()
     if not configID then return end
@@ -668,7 +718,7 @@ PopulateTree = function(currentNodeID, currentEntryID)
                             classNodes[#classNodes + 1] = record
                         end
                     else
-                        -- No cost (granted starting talents) → default to class
+                        -- No cost (granted starting talents) -> default to class
                         classNodes[#classNodes + 1] = record
                     end
                 end
@@ -678,104 +728,93 @@ PopulateTree = function(currentNodeID, currentEntryID)
 
     if #allNodes == 0 then return end
 
-    -- Use live dimensions from overlay scroll frame
-    local availW = overlayFrame.scrollFrame:GetWidth()
-    local availH = overlayFrame.scrollFrame:GetHeight()
-
     local dualPanel = (#classNodes > 0 and #specNodes > 0)
     local nodeIDToBtn = {}
     local btnIndex = 0
 
     if dualPanel then
-        local panelAvailWidth = (availW - PANEL_GAP) / 2
-        local panelAvailHeight = availH - PANEL_HEADER_HEIGHT
-
-        -- Class panel bounds & scale
+        -- Class panel
+        local cFrameW = classTreeFrame:GetWidth()
+        local cFrameH = classTreeFrame:GetHeight()
         local cMinX, cMaxX, cMinY, cMaxY = ComputeBounds(classNodes)
         local cTreeW = cMaxX - cMinX + NODE_SIZE
         local cTreeH = cMaxY - cMinY + NODE_SIZE
-        local cScaleX = cTreeW > 0 and (panelAvailWidth - NODE_PADDING * 2) / cTreeW or 1
-        local cScaleY = cTreeH > 0 and (panelAvailHeight - NODE_PADDING * 2) / cTreeH or 1
+        local cScaleX = cTreeW > 0 and (cFrameW - NODE_PADDING * 2) / cTreeW or 1
+        local cScaleY = cTreeH > 0 and (cFrameH - NODE_PADDING * 2) / cTreeH or 1
         local cScale = math_min(cScaleX, cScaleY, 1.0)
 
-        -- Spec panel bounds & scale
+        local cContentW = cTreeW * cScale + NODE_PADDING * 2
+        local cOffsetX = math_max(0, (cFrameW - cContentW) * 0.5)
+
+        btnIndex = PlaceNodesInPanel(classTreeFrame, classNodes, cOffsetX, 0,
+            cMinX, cMinY, cScale, currentNodeID, currentEntryID, btnIndex, nodeIDToBtn)
+
+        DrawEdgesInPanel(classTreeFrame, classNodes, nodeIDToBtn, classEdgeLines)
+
+        -- Spec panel
+        local sFrameW = specTreeFrame:GetWidth()
+        local sFrameH = specTreeFrame:GetHeight()
         local sMinX, sMaxX, sMinY, sMaxY = ComputeBounds(specNodes)
         local sTreeW = sMaxX - sMinX + NODE_SIZE
         local sTreeH = sMaxY - sMinY + NODE_SIZE
-        local sScaleX = sTreeW > 0 and (panelAvailWidth - NODE_PADDING * 2) / sTreeW or 1
-        local sScaleY = sTreeH > 0 and (panelAvailHeight - NODE_PADDING * 2) / sTreeH or 1
+        local sScaleX = sTreeW > 0 and (sFrameW - NODE_PADDING * 2) / sTreeW or 1
+        local sScaleY = sTreeH > 0 and (sFrameH - NODE_PADDING * 2) / sTreeH or 1
         local sScale = math_min(sScaleX, sScaleY, 1.0)
 
-        local classContentH = cTreeH * cScale + NODE_PADDING * 2 + PANEL_HEADER_HEIGHT
-        local specContentH = sTreeH * sScale + NODE_PADDING * 2 + PANEL_HEADER_HEIGHT
-        local contentHeight = math_max(classContentH, specContentH)
-        local contentWidth = panelAvailWidth * 2 + PANEL_GAP
+        local sContentW = sTreeW * sScale + NODE_PADDING * 2
+        local sOffsetX = math_max(0, (sFrameW - sContentW) * 0.5)
 
-        scrollChild:SetSize(math_max(contentWidth, availW),
-                            math_max(contentHeight, panelAvailHeight))
-
-        -- Place class nodes (left panel)
-        btnIndex = PlaceNodesInPanel(scrollChild, classNodes, 0, PANEL_HEADER_HEIGHT,
-            cMinX, cMinY, cScale, currentNodeID, currentEntryID, btnIndex, nodeIDToBtn)
-
-        -- Place spec nodes (right panel)
-        btnIndex = PlaceNodesInPanel(scrollChild, specNodes,
-            panelAvailWidth + PANEL_GAP, PANEL_HEADER_HEIGHT,
+        btnIndex = PlaceNodesInPanel(specTreeFrame, specNodes, sOffsetX, 0,
             sMinX, sMinY, sScale, currentNodeID, currentEntryID, btnIndex, nodeIDToBtn)
 
-        -- Panel header labels
-        overlayFrame.classLabel:ClearAllPoints()
-        overlayFrame.classLabel:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", NODE_PADDING, 0)
-        overlayFrame.classLabel:Show()
-
-        overlayFrame.specLabel:ClearAllPoints()
-        overlayFrame.specLabel:SetPoint("TOPLEFT", scrollChild, "TOPLEFT",
-            panelAvailWidth + PANEL_GAP + NODE_PADDING, 0)
-        overlayFrame.specLabel:Show()
-
-        -- Vertical divider between panels
-        local dividerX = panelAvailWidth + PANEL_GAP / 2
-        overlayFrame.divider:ClearAllPoints()
-        overlayFrame.divider:SetStartPoint("TOPLEFT", scrollChild, dividerX, 0)
-        overlayFrame.divider:SetEndPoint("BOTTOMLEFT", scrollChild, dividerX, 0)
-        overlayFrame.divider:Show()
+        DrawEdgesInPanel(specTreeFrame, specNodes, nodeIDToBtn, specEdgeLines)
     else
-        -- Single-panel fallback (currency detection failed or all nodes in one category)
+        -- Single-panel fallback: all nodes in left container
+        local cFrameW = classTreeFrame:GetWidth()
+        local cFrameH = classTreeFrame:GetHeight()
         local minX, maxX, minY, maxY = ComputeBounds(allNodes)
-        local treeWidth = maxX - minX + NODE_SIZE
-        local treeHeight = maxY - minY + NODE_SIZE
-
-        local scaleX = treeWidth > 0 and (availW - NODE_PADDING * 2) / treeWidth or 1
-        local scaleY = treeHeight > 0 and (availH - NODE_PADDING * 2) / treeHeight or 1
+        local treeW = maxX - minX + NODE_SIZE
+        local treeH = maxY - minY + NODE_SIZE
+        local scaleX = treeW > 0 and (cFrameW - NODE_PADDING * 2) / treeW or 1
+        local scaleY = treeH > 0 and (cFrameH - NODE_PADDING * 2) / treeH or 1
         local scale = math_min(scaleX, scaleY, 1.0)
 
-        local contentWidth = treeWidth * scale + NODE_PADDING * 2
-        local contentHeight = treeHeight * scale + NODE_PADDING * 2
-        scrollChild:SetSize(math_max(contentWidth, availW),
-                            math_max(contentHeight, availH))
+        local contentW = treeW * scale + NODE_PADDING * 2
+        local offsetX = math_max(0, (cFrameW - contentW) * 0.5)
 
-        btnIndex = PlaceNodesInPanel(scrollChild, allNodes, 0, 0,
+        btnIndex = PlaceNodesInPanel(classTreeFrame, allNodes, offsetX, 0,
             minX, minY, scale, currentNodeID, currentEntryID, btnIndex, nodeIDToBtn)
-    end
 
-    -- Draw edge connector lines
-    DrawEdges(scrollChild, allNodes, nodeIDToBtn)
+        DrawEdgesInPanel(classTreeFrame, allNodes, nodeIDToBtn, classEdgeLines)
+
+        -- Right container: empty message
+        if not specEmptyText then
+            specEmptyText = specTreeFrame:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+            specEmptyText:SetPoint("CENTER", specTreeFrame, "CENTER", 0, 0)
+            specEmptyText:SetText("No spec talents found")
+        end
+        specEmptyText:Show()
+    end
 end
 
 ------------------------------------------------------------------------
 -- PUBLIC API
 ------------------------------------------------------------------------
 
--- Open the talent picker overlay inside the config panel.
+-- Open the talent picker inside the config panel columns.
 -- callback(result): called with { nodeID, entryID, spellID, talentName } or nil (clear).
 -- currentNodeID/currentEntryID: highlight current selection.
 function CooldownCompanion:OpenTalentPicker(callback, currentNodeID, currentEntryID)
     local configFrame = CS.configFrame
     if not configFrame then return end
     onSelectCallback = callback
-    ShowOverlay(configFrame, currentNodeID, currentEntryID)
+    ShowTalentPicker(configFrame, currentNodeID, currentEntryID)
+end
+
+function CooldownCompanion:CloseTalentPicker()
+    HideTalentPicker()
 end
 
 function CooldownCompanion:IsTalentPickerOpen()
-    return overlayFrame and overlayFrame:IsShown()
+    return CS.talentPickerMode
 end
