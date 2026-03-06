@@ -1983,41 +1983,43 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
     end)
     container:AddChild(enableCab)
 
-    local independentCb = AceGUI:Create("CheckBox")
-    independentCb:SetLabel("Independent Anchor & Size")
-    independentCb:SetValue(cab.independentAnchorEnabled == true)
-    independentCb:SetFullWidth(true)
-    independentCb:SetCallback("OnValueChanged", function(widget, event, val)
-        local bars = CooldownCompanion:GetSpecCustomAuraBars()
-        if not bars[capturedIdx] then
-            bars[capturedIdx] = { enabled = false }
-        end
+    if cab.enabled then
+        local independentCb = AceGUI:Create("CheckBox")
+        independentCb:SetLabel("Independent Anchor & Size")
+        independentCb:SetValue(cab.independentAnchorEnabled == true)
+        independentCb:SetFullWidth(true)
+        independentCb:SetCallback("OnValueChanged", function(widget, event, val)
+            local bars = CooldownCompanion:GetSpecCustomAuraBars()
+            if not bars[capturedIdx] then
+                bars[capturedIdx] = { enabled = false }
+            end
 
-        local wasEnabled = bars[capturedIdx].independentAnchorEnabled == true
-        bars[capturedIdx].independentAnchorEnabled = val or nil
-        if val then
-            EnsureCustomAuraIndependentConfig(bars[capturedIdx], settings)
-            if CS.customAuraBarSubTabs then
-                local prior = CS.customAuraBarSubTabs[capturedIdx]
-                if prior ~= "settings" and prior ~= "anchor" then
-                    CS.customAuraBarSubTabs[capturedIdx] = "settings"
+            local wasEnabled = bars[capturedIdx].independentAnchorEnabled == true
+            bars[capturedIdx].independentAnchorEnabled = val or nil
+            if val then
+                EnsureCustomAuraIndependentConfig(bars[capturedIdx], settings)
+                if CS.customAuraBarSubTabs then
+                    local prior = CS.customAuraBarSubTabs[capturedIdx]
+                    if prior ~= "settings" and prior ~= "anchor" then
+                        CS.customAuraBarSubTabs[capturedIdx] = "settings"
+                    end
                 end
+                if not wasEnabled and CooldownCompanion.InitializeCustomAuraIndependentAnchor then
+                    CooldownCompanion:InitializeCustomAuraIndependentAnchor(capturedIdx)
+                end
+            elseif CS.customAuraBarSubTabs then
+                CS.customAuraBarSubTabs[capturedIdx] = nil
             end
-            if not wasEnabled and CooldownCompanion.InitializeCustomAuraIndependentAnchor then
-                CooldownCompanion:InitializeCustomAuraIndependentAnchor(capturedIdx)
-            end
-        elseif CS.customAuraBarSubTabs then
-            CS.customAuraBarSubTabs[capturedIdx] = nil
-        end
 
-        CooldownCompanion:ApplyResourceBars()
-        CooldownCompanion:UpdateAnchorStacking()
-        CooldownCompanion:RefreshConfigPanel()
-    end)
-    container:AddChild(independentCb)
+            CooldownCompanion:ApplyResourceBars()
+            CooldownCompanion:UpdateAnchorStacking()
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(independentCb)
+    end
 
     local independentSubTab = "settings"
-    if cab.independentAnchorEnabled == true then
+    if cab.enabled and cab.independentAnchorEnabled == true then
         independentSubTab = CS.customAuraBarSubTabs and CS.customAuraBarSubTabs[capturedIdx] or "settings"
         if independentSubTab ~= "settings" and independentSubTab ~= "anchor" then
             independentSubTab = "settings"
@@ -2061,7 +2063,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
         local subTabDivider = AceGUI:Create("Heading")
         subTabDivider:SetFullWidth(true)
         container:AddChild(subTabDivider)
-    elseif CS.customAuraBarSubTabs then
+    elseif cab.enabled and CS.customAuraBarSubTabs then
         CS.customAuraBarSubTabs[capturedIdx] = nil
     end
 
@@ -2608,58 +2610,6 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
         BuildCustomAuraBarAnchorSettings(container, customBars, settings, capturedIdx)
     end
 
-    -- "Copy from..." button
-    local _, _, classID = UnitClass("player")
-    local numSpecs = C_SpecializationInfo.GetNumSpecializationsForClassID(classID)
-    local currentSpecID
-    local specIdx = C_SpecializationInfo.GetSpecialization()
-    if specIdx then
-        currentSpecID = C_SpecializationInfo.GetSpecializationInfo(specIdx)
-    end
-    if currentSpecID and numSpecs and numSpecs > 1 then
-        local copySpacer = AceGUI:Create("Label")
-        copySpacer:SetText(" ")
-        copySpacer:SetFullWidth(true)
-        container:AddChild(copySpacer)
-
-        local copyBtn = AceGUI:Create("Button")
-        copyBtn:SetText("Copy from\226\128\166")
-        copyBtn:SetFullWidth(true)
-        copyBtn:SetCallback("OnClick", function()
-            local menuFrame = _G["CDCCopyCABMenu"]
-            if not menuFrame then
-                menuFrame = CreateFrame("Frame", "CDCCopyCABMenu", UIParent, "UIDropDownMenuTemplate")
-            end
-            UIDropDownMenu_Initialize(menuFrame, function(self, level)
-                for i = 1, numSpecs do
-                    local sID, sName, _, sIcon = GetSpecializationInfoForClassID(classID, i)
-                    if sID and sID ~= currentSpecID then
-                        local info = UIDropDownMenu_CreateInfo()
-                        local sourceBars = settings.customAuraBars and settings.customAuraBars[sID]
-                        local hasData = false
-                        if sourceBars then
-                            for _, cab in ipairs(sourceBars) do
-                                if cab.enabled and cab.spellID then hasData = true; break end
-                            end
-                        end
-                        info.text = "|T" .. sIcon .. ":14:14:0:0|t " .. sName
-                        info.disabled = not hasData
-                        info.func = function()
-                            settings.customAuraBars[currentSpecID] = CopyTable(sourceBars)
-                            CooldownCompanion:ApplyResourceBars()
-                            CooldownCompanion:UpdateAnchorStacking()
-                            CooldownCompanion:RefreshConfigPanel()
-                            CloseDropDownMenus()
-                        end
-                        UIDropDownMenu_AddButton(info, level)
-                    end
-                end
-            end, "MENU")
-            menuFrame:SetFrameStrata("FULLSCREEN_DIALOG")
-            ToggleDropDownMenu(1, nil, menuFrame, "cursor", 0, 0)
-        end)
-        container:AddChild(copyBtn)
-    end
 end
 
 ------------------------------------------------------------------------
