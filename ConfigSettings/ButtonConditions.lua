@@ -905,6 +905,12 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         local initialConditions = not isBatch and buttonData.talentConditions or nil
         CooldownCompanion:OpenTalentPicker(function(results)
             if results then
+                local normalized, changed = CooldownCompanion:NormalizeTalentConditions(results)
+                if changed then
+                    results = normalized
+                end
+            end
+            if results then
                 -- Deep-copy each condition for batch mode safety
                 if CS.selectedButtons then
                     local count = 0

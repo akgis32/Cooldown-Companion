@@ -25,6 +25,8 @@ local NODE_SIZE = 32
 local NODE_PADDING = 16
 local CHOICE_ICON_SIZE = 22
 local CHOICE_ICON_GAP = 2
+local HERO_GUTTER_WIDTH = 120
+local HERO_HEADER_HEIGHT = 20
 
 local NORMAL_BORDER_SIZE = 2
 local CHOICE_BORDER_SIZE = 3
@@ -47,6 +49,8 @@ local COLOR_EDGE_INACTIVE          = { 0.35, 0.35, 0.35, 0.5 }
 -- STATE
 ------------------------------------------------------------------------
 local classTreeFrame = nil
+local heroTreeFrame = nil
+local heroTreeTitle = nil
 local specTreeFrame = nil
 local specEmptyText = nil
 local backBtn = nil
@@ -55,6 +59,7 @@ local acceptBtn = nil
 local nodeButtons = {}
 local choiceButtons = {}
 local classEdgeLines = {}
+local heroEdgeLines = {}
 local specEdgeLines = {}
 local onAcceptCallback = nil
 local savedCol1Title = nil
@@ -77,6 +82,18 @@ end
 
 local function GetPendingState(nodeID, entryID)
     return pendingConditions[PendingKey(nodeID, entryID)]
+end
+
+local function ClearPendingStateForNode(nodeID)
+    local directKey = tostring(nodeID)
+    pendingConditions[directKey] = nil
+
+    local prefix = directKey .. ":"
+    for key in pairs(pendingConditions) do
+        if key:sub(1, #prefix) == prefix then
+            pendingConditions[key] = nil
+        end
+    end
 end
 
 local function SetPendingState(nodeID, entryID, spellID, name, show)
@@ -103,6 +120,21 @@ local function CyclePendingState(nodeID, entryID, spellID, name)
     else
         -- not_taken → clear
         SetPendingState(nodeID, entryID, nil, nil, nil)
+    end
+end
+
+local function CycleChoicePendingState(nodeID, entryID, spellID, name)
+    local existing = GetPendingState(nodeID, entryID)
+    local nextShow
+    if not existing then
+        nextShow = "taken"
+    elseif existing.show == "taken" then
+        nextShow = "not_taken"
+    end
+
+    ClearPendingStateForNode(nodeID)
+    if nextShow then
+        SetPendingState(nodeID, entryID, spellID, name, nextShow)
     end
 end
 
@@ -145,6 +177,30 @@ local function SetNodeBorderColor(btn, color)
     end
 end
 
+local function AddPendingTooltipLine(pending, isChoiceNode)
+    if not pending then return end
+
+    local r, g, b = 0.3, 0.7, 1.0
+    if pending.show == "not_taken" then
+        r, g, b = 1.0, 0.3, 0.3
+    end
+
+    local line
+    if isChoiceNode and pending.name then
+        if pending.show == "not_taken" then
+            line = "Condition: Show when " .. pending.name .. " is NOT taken"
+        else
+            line = "Condition: Show when " .. pending.name .. " is taken"
+        end
+    elseif pending.show == "not_taken" then
+        line = "Condition: Show when NOT taken"
+    else
+        line = "Condition: Show when taken"
+    end
+
+    GameTooltip:AddLine(line, r, g, b, true)
+end
+
 -- Determine border color for a node button based on pending state and talent state
 local function GetNodeBorderColor(nodeID, entryID, isTaken, isChoice)
     -- Check pending state: for choice nodes check the specific entry, for regular check the node
@@ -180,6 +236,7 @@ local RefreshPickerBorders
 local function CreateNodeButton(parent, index)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(NODE_SIZE, NODE_SIZE)
+    btn:RegisterForClicks("AnyUp")
 
     -- Icon
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
@@ -222,15 +279,9 @@ local function CreateNodeButton(parent, index)
         local pending = self._entryID
             and GetPendingState(self._nodeID, self._entryID)
             or  GetPendingStateForNode(self._nodeID)
-        if pending then
-            if pending.show == "taken" then
-                GameTooltip:AddLine("Condition: Show when taken", 0.3, 0.7, 1.0)
-            else
-                GameTooltip:AddLine("Condition: Show when NOT taken", 1.0, 0.3, 0.3)
-            end
-        end
+        AddPendingTooltipLine(pending, self._isChoiceNode)
         if self._isChoiceNode then
-            GameTooltip:AddLine("Click to see choices", 0.5, 0.8, 1)
+            GameTooltip:AddLine("Left-click to show or hide choices", 0.5, 0.8, 1)
         else
             GameTooltip:AddLine("Click to cycle condition", 0.5, 0.8, 1)
         end
@@ -244,6 +295,7 @@ end
 local function CreateChoiceButton(parent)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(CHOICE_ICON_SIZE, CHOICE_ICON_SIZE)
+    btn:RegisterForClicks("AnyUp")
 
     btn.icon = btn:CreateTexture(nil, "ARTWORK")
     btn.icon:SetPoint("TOPLEFT", 2, -2)
@@ -276,15 +328,9 @@ local function CreateChoiceButton(parent)
         -- Pending state info
         if self._nodeID then
             local pending = GetPendingState(self._nodeID, self._entryID)
-            if pending then
-                if pending.show == "taken" then
-                    GameTooltip:AddLine("Condition: Show when taken", 0.3, 0.7, 1.0)
-                else
-                    GameTooltip:AddLine("Condition: Show when NOT taken", 1.0, 0.3, 0.3)
-                end
-            end
+            AddPendingTooltipLine(pending, true)
         end
-        GameTooltip:AddLine("Click to cycle condition", 0.5, 0.8, 1)
+        GameTooltip:AddLine("Click to cycle a specific choice", 0.5, 0.8, 1)
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -299,6 +345,7 @@ local choiceFrame = nil
 
 local function HideChoiceFrame()
     if choiceFrame then
+        choiceFrame._nodeID = nil
         choiceFrame:Hide()
     end
 end
@@ -306,6 +353,36 @@ end
 -- Forward declarations
 local HideTalentPicker
 local PopulateTree
+
+local function GetChoiceFrameLevel(parentBtn)
+    local level = 0
+    local configFrame = CS.configFrame
+
+    if configFrame and configFrame.frame then
+        level = math_max(level, configFrame.frame:GetFrameLevel() or 0)
+        if configFrame.col1 and configFrame.col1.frame then
+            level = math_max(level, configFrame.col1.frame:GetFrameLevel() or 0)
+        end
+        if configFrame.col3 and configFrame.col3.frame then
+            level = math_max(level, configFrame.col3.frame:GetFrameLevel() or 0)
+        end
+    end
+
+    if classTreeFrame then
+        level = math_max(level, classTreeFrame:GetFrameLevel() or 0)
+    end
+    if heroTreeFrame then
+        level = math_max(level, heroTreeFrame:GetFrameLevel() or 0)
+    end
+    if specTreeFrame then
+        level = math_max(level, specTreeFrame:GetFrameLevel() or 0)
+    end
+    if parentBtn then
+        level = math_max(level, parentBtn:GetFrameLevel() or 0)
+    end
+
+    return level + 20
+end
 
 local function ShowChoiceFrame(parentBtn, entries, nodeID)
     local configFrame = CS.configFrame
@@ -321,10 +398,12 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID)
         choiceFrame:SetBackdropColor(0.12, 0.12, 0.18, 0.98)
         choiceFrame:SetBackdropBorderColor(0.4, 0.4, 0.5, 1)
         choiceFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+        choiceFrame:SetToplevel(true)
     end
 
     choiceFrame:SetParent(configFrame.frame)
     choiceFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    choiceFrame:SetFrameLevel(GetChoiceFrameLevel(parentBtn))
 
     -- Hide previous choice buttons
     for _, cb in ipairs(choiceButtons) do
@@ -336,7 +415,9 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID)
     choiceFrame:SetSize(totalWidth, CHOICE_ICON_SIZE + 10)
     choiceFrame:ClearAllPoints()
     choiceFrame:SetPoint("TOP", parentBtn, "BOTTOM", 0, -4)
+    choiceFrame._nodeID = nodeID
     choiceFrame:Show()
+    choiceFrame:Raise()
 
     for i, entry in ipairs(entries) do
         local cb = choiceButtons[i]
@@ -346,9 +427,12 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID)
         end
 
         cb:SetParent(choiceFrame)
+        cb:SetFrameStrata(choiceFrame:GetFrameStrata())
+        cb:SetFrameLevel(choiceFrame:GetFrameLevel() + 1)
         cb:ClearAllPoints()
         cb:SetPoint("LEFT", choiceFrame, "LEFT", 6 + (i - 1) * (CHOICE_ICON_SIZE + CHOICE_ICON_GAP), 0)
         cb:Show()
+        cb:Raise()
 
         cb.icon:SetTexture(entry.icon)
         cb.icon:SetDesaturated(not entry.isTaken)
@@ -369,11 +453,20 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID)
         local borderColor = GetNodeBorderColor(nodeID, entry.entryID, entry.isTaken, false)
         SetNodeBorderColor(cb, borderColor)
 
-        cb:SetScript("OnClick", function()
-            CyclePendingState(nodeID, entry.entryID, entry.spellID, entry.name)
+        cb:SetScript("OnClick", function(_, mouseButton)
+            if mouseButton and mouseButton ~= "LeftButton" then return end
+            CycleChoicePendingState(nodeID, entry.entryID, entry.spellID, entry.name)
             RefreshPickerBorders()
         end)
     end
+end
+
+local function ToggleChoiceFrame(parentBtn, entries, nodeID)
+    if choiceFrame and choiceFrame:IsShown() and choiceFrame._nodeID == nodeID then
+        HideChoiceFrame()
+        return
+    end
+    ShowChoiceFrame(parentBtn, entries, nodeID)
 end
 
 ------------------------------------------------------------------------
@@ -385,9 +478,42 @@ local function EnsureTreeFrames()
     if not classTreeFrame then
         classTreeFrame = CreateFrame("Frame", nil, configFrame.col1.content)
     end
+    if not heroTreeFrame then
+        heroTreeFrame = CreateFrame("Frame", nil, configFrame.col3.content)
+        heroTreeTitle = heroTreeFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        heroTreeTitle:SetPoint("TOPLEFT", heroTreeFrame, "TOPLEFT", 4, -2)
+        heroTreeTitle:SetPoint("TOPRIGHT", heroTreeFrame, "TOPRIGHT", -4, -2)
+        heroTreeTitle:SetJustifyH("LEFT")
+        heroTreeTitle:SetJustifyV("TOP")
+    end
     if not specTreeFrame then
         specTreeFrame = CreateFrame("Frame", nil, configFrame.col3.content)
     end
+end
+
+local function LayoutSpecFrames(col3Content, hasHeroChoices)
+    if hasHeroChoices and heroTreeFrame then
+        heroTreeFrame:SetParent(col3Content)
+        heroTreeFrame:ClearAllPoints()
+        heroTreeFrame:SetPoint("TOPLEFT", col3Content, "TOPLEFT", 0, 0)
+        heroTreeFrame:SetPoint("BOTTOMLEFT", col3Content, "BOTTOMLEFT", 0, 0)
+        heroTreeFrame:SetWidth(HERO_GUTTER_WIDTH)
+        heroTreeFrame:SetFrameStrata(specTreeFrame:GetFrameStrata())
+        heroTreeFrame:SetFrameLevel((specTreeFrame:GetFrameLevel() or 0) + 10)
+        heroTreeFrame:Show()
+    else
+        if heroTreeFrame then
+            heroTreeFrame:Hide()
+        end
+        if heroTreeTitle then
+            heroTreeTitle:Hide()
+        end
+
+    end
+
+    specTreeFrame:ClearAllPoints()
+    specTreeFrame:SetPoint("TOPLEFT", col3Content, "TOPLEFT", 0, 0)
+    specTreeFrame:SetPoint("BOTTOMRIGHT", col3Content, "BOTTOMRIGHT", 0, 0)
 end
 
 ------------------------------------------------------------------------
@@ -431,6 +557,10 @@ local function EnsureButtons()
                         name    = cond.name,
                         show    = cond.show,
                     }
+                end
+                local normalized, changed = CooldownCompanion:NormalizeTalentConditions(results)
+                if changed then
+                    results = normalized
                 end
             end
             local cb = onAcceptCallback
@@ -494,7 +624,12 @@ local function ShowTalentPicker(configFrame, initialConditions)
     -- Initialize pending conditions from initial conditions
     wipe(pendingConditions)
     if initialConditions then
-        for _, cond in ipairs(initialConditions) do
+        local source = initialConditions
+        local normalized, changed = CooldownCompanion:NormalizeTalentConditions(initialConditions)
+        if changed then
+            source = normalized
+        end
+        for _, cond in ipairs(source or {}) do
             local key = PendingKey(cond.nodeID, cond.entryID)
             pendingConditions[key] = {
                 nodeID  = cond.nodeID,
@@ -512,6 +647,9 @@ local function ShowTalentPicker(configFrame, initialConditions)
 
     -- Parent tree frames to correct content areas
     classTreeFrame:SetParent(col1.content)
+    if heroTreeFrame then
+        heroTreeFrame:SetParent(col3.content)
+    end
     specTreeFrame:SetParent(col3.content)
 
     -- Position AceGUI buttons in col1.content
@@ -531,10 +669,8 @@ local function ShowTalentPicker(configFrame, initialConditions)
     classTreeFrame:SetPoint("BOTTOMRIGHT", col1.content, "BOTTOMRIGHT", 0, 0)
     classTreeFrame:Show()
 
-    -- Position spec tree (full content area)
-    specTreeFrame:ClearAllPoints()
-    specTreeFrame:SetPoint("TOPLEFT", col3.content, "TOPLEFT", 0, 0)
-    specTreeFrame:SetPoint("BOTTOMRIGHT", col3.content, "BOTTOMRIGHT", 0, 0)
+    -- Position spec content; hero gutter is enabled during PopulateTree when needed
+    LayoutSpecFrames(col3.content, false)
     specTreeFrame:Show()
 
     -- Position accept button at bottom center of main panel (where modeStatusRow normally sits)
@@ -556,6 +692,8 @@ HideTalentPicker = function()
 
     -- Hide talent content
     if classTreeFrame then classTreeFrame:Hide() end
+    if heroTreeFrame then heroTreeFrame:Hide() end
+    if heroTreeTitle then heroTreeTitle:Hide() end
     if specTreeFrame then specTreeFrame:Hide() end
     if specEmptyText then specEmptyText:Hide() end
     if backBtn then backBtn.frame:Hide() end
@@ -567,6 +705,7 @@ HideTalentPicker = function()
     for _, btn in ipairs(nodeButtons) do btn:Hide() end
     for _, cb in ipairs(choiceButtons) do cb:Hide() end
     for _, line in ipairs(classEdgeLines) do line:Hide() end
+    for _, line in ipairs(heroEdgeLines) do line:Hide() end
     for _, line in ipairs(specEdgeLines) do line:Hide() end
 
     if configFrame then
@@ -618,6 +757,21 @@ end
 ------------------------------------------------------------------------
 -- POPULATE TREE
 ------------------------------------------------------------------------
+local function ShouldIncludeBaseTreeNode(nodeInfo)
+    return nodeInfo
+        and nodeInfo.isVisible
+        and not nodeInfo.subTreeID
+        and nodeInfo.type ~= Enum.TraitNodeType.SubTreeSelection
+end
+
+local function ShouldIncludeHeroChoiceNode(nodeInfo, activeHeroSubTreeID)
+    return nodeInfo
+        and activeHeroSubTreeID
+        and nodeInfo.isVisible
+        and nodeInfo.subTreeID == activeHeroSubTreeID
+        and nodeInfo.type == Enum.TraitNodeType.Selection
+end
+
 local function GetEntryDisplayInfo(configID, entryID)
     local entryInfo = C_Traits.GetEntryInfo(configID, entryID)
     if not entryInfo or not entryInfo.definitionID then return nil end
@@ -648,6 +802,39 @@ local function GetEntryDisplayInfo(configID, entryID)
     }
 end
 
+local function BuildNodeRecord(configID, nodeID, nodeInfo)
+    local entries = {}
+    if nodeInfo.entryIDs then
+        for _, eid in ipairs(nodeInfo.entryIDs) do
+            local displayInfo = GetEntryDisplayInfo(configID, eid)
+            if displayInfo then
+                displayInfo.isTaken = (nodeInfo.activeEntry
+                    and nodeInfo.activeEntry.entryID == eid
+                    and nodeInfo.activeRank > 0)
+                entries[#entries + 1] = displayInfo
+            end
+        end
+    end
+
+    if #entries == 0 then
+        return nil
+    end
+
+    return {
+        nodeID = nodeID,
+        px = nodeInfo.posX / 10,
+        py = nodeInfo.posY / 10,
+        activeRank = nodeInfo.activeRank or 0,
+        maxRanks = nodeInfo.maxRanks or 1,
+        activeEntryID = nodeInfo.activeEntry and nodeInfo.activeEntry.entryID or nil,
+        entries = entries,
+        isChoice = (nodeInfo.type == Enum.TraitNodeType.Selection),
+        nodeType = nodeInfo.type,
+        visibleEdges = nodeInfo.visibleEdges,
+        subTreeID = nodeInfo.subTreeID,
+    }
+end
+
 local function ComputeBounds(nodeSet)
     local mnX, mxX, mnY, mxY = math.huge, -math.huge, math.huge, -math.huge
     for _, n in ipairs(nodeSet) do
@@ -674,6 +861,8 @@ local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
         local y = yOffset + (node.py - panelMinY) * panelScale + NODE_PADDING
 
         btn:SetParent(scrollChild)
+        btn:SetFrameStrata(scrollChild:GetFrameStrata())
+        btn:SetFrameLevel((scrollChild:GetFrameLevel() or 0) + 5)
         btn:ClearAllPoints()
         btn:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", x, -y)
         btn:Show()
@@ -720,9 +909,11 @@ local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
 
         -- Click handler
         local nodeRef = node
-        btn:SetScript("OnClick", function(self)
+        btn:SetScript("OnClick", function(self, mouseButton)
             if nodeRef.isChoice and #nodeRef.entries > 1 then
-                ShowChoiceFrame(self, nodeRef.entries, nodeRef.nodeID)
+                if mouseButton == "LeftButton" or mouseButton == nil then
+                    ToggleChoiceFrame(self, nodeRef.entries, nodeRef.nodeID)
+                end
             else
                 HideChoiceFrame()
                 CyclePendingState(nodeRef.nodeID, nil, primaryEntry.spellID, primaryEntry.name)
@@ -738,13 +929,18 @@ end
 
 local function DrawEdgesInPanel(scrollChild, panelNodes, nodeIDToBtn, edgePool)
     local lineIndex = 0
+    local panelNodeIDs = {}
+
+    for _, node in ipairs(panelNodes) do
+        panelNodeIDs[node.nodeID] = true
+    end
 
     for _, node in ipairs(panelNodes) do
         if node.visibleEdges then
             local srcBtn = nodeIDToBtn[node.nodeID]
             if srcBtn then
                 for _, edge in ipairs(node.visibleEdges) do
-                    local dstBtn = nodeIDToBtn[edge.targetNode]
+                    local dstBtn = panelNodeIDs[edge.targetNode] and nodeIDToBtn[edge.targetNode] or nil
                     if dstBtn then
                         lineIndex = lineIndex + 1
                         local line = edgePool[lineIndex]
@@ -773,6 +969,68 @@ local function DrawEdgesInPanel(scrollChild, panelNodes, nodeIDToBtn, edgePool)
             end
         end
     end
+end
+
+local function RenderNodePanel(panelFrame, nodeSet, nodeIDToBtn, edgePool, btnIndex, topPadding)
+    if not panelFrame or #nodeSet == 0 then
+        for _, line in ipairs(edgePool) do
+            line:Hide()
+        end
+        return btnIndex
+    end
+
+    local frameW = panelFrame:GetWidth()
+    local frameH = panelFrame:GetHeight()
+    local panelTopPadding = topPadding or 0
+    local usableW = math_max(frameW - NODE_PADDING * 2, NODE_SIZE)
+    local usableH = math_max(frameH - panelTopPadding - NODE_PADDING * 2, NODE_SIZE)
+    local minX, maxX, minY, maxY = ComputeBounds(nodeSet)
+    local treeW = maxX - minX + NODE_SIZE
+    local treeH = maxY - minY + NODE_SIZE
+    local scaleX = treeW > 0 and usableW / treeW or 1
+    local scaleY = treeH > 0 and usableH / treeH or 1
+    local scale = math_min(scaleX, scaleY, 1.0)
+    local contentW = treeW * scale + NODE_PADDING * 2
+    local offsetX = math_max(0, (frameW - contentW) * 0.5)
+
+    btnIndex = PlaceNodesInPanel(panelFrame, nodeSet, offsetX, panelTopPadding,
+        minX, minY, scale, btnIndex, nodeIDToBtn)
+    DrawEdgesInPanel(panelFrame, nodeSet, nodeIDToBtn, edgePool)
+
+    return btnIndex
+end
+
+local function RenderHeroChoiceList(panelFrame, nodeSet, nodeIDToBtn, btnIndex)
+    for _, line in ipairs(heroEdgeLines) do
+        line:Hide()
+    end
+
+    if not panelFrame or #nodeSet == 0 then
+        return btnIndex
+    end
+
+    local orderedNodes = {}
+    for i, node in ipairs(nodeSet) do
+        orderedNodes[i] = node
+    end
+
+    table.sort(orderedNodes, function(a, b)
+        if a.py == b.py then
+            return a.px < b.px
+        end
+        return a.py < b.py
+    end)
+
+    local centeredX = math_max(NODE_PADDING, math_floor((panelFrame:GetWidth() - NODE_SIZE) * 0.5))
+    local nextY = HERO_HEADER_HEIGHT + 8
+
+    for _, node in ipairs(orderedNodes) do
+        btnIndex = PlaceNodesInPanel(panelFrame, { node }, centeredX - NODE_PADDING, nextY - NODE_PADDING,
+            node.px, node.py, 0, btnIndex, nodeIDToBtn)
+        nextY = nextY + NODE_SIZE + 10
+    end
+
+    return btnIndex
 end
 
 -- Re-apply border colors to all visible node + choice buttons based on pending state
@@ -804,10 +1062,17 @@ PopulateTree = function()
     for _, btn in ipairs(nodeButtons) do btn:Hide() end
     for _, cb in ipairs(choiceButtons) do cb:Hide() end
     for _, line in ipairs(classEdgeLines) do line:Hide() end
+    for _, line in ipairs(heroEdgeLines) do line:Hide() end
     for _, line in ipairs(specEdgeLines) do line:Hide() end
     HideChoiceFrame()
 
     -- Hide empty-state text if it exists
+    if heroTreeFrame then
+        heroTreeFrame:Hide()
+    end
+    if heroTreeTitle then
+        heroTreeTitle:Hide()
+    end
     if specEmptyText then
         specEmptyText:Hide()
     end
@@ -823,6 +1088,8 @@ PopulateTree = function()
 
     local nodeIDs = C_Traits.GetTreeNodes(treeID)
     if not nodeIDs then return end
+    local activeHeroSubTreeID = C_ClassTalents.GetActiveHeroTalentSpec()
+    local activeHeroSubTreeInfo = activeHeroSubTreeID and C_Traits.GetSubTreeInfo(configID, activeHeroSubTreeID) or nil
 
     -- Get tree currencies for class/spec split
     local treeCurrencyInfo = C_Traits.GetTreeCurrencyInfo(configID, treeID, false)
@@ -832,47 +1099,17 @@ PopulateTree = function()
         specCurrencyID = treeCurrencyInfo[2].traitCurrencyID
     end
 
-    -- Gather visible class/spec nodes (exclude hero talent subtrees)
+    -- Gather visible class/spec nodes plus active hero choice nodes.
     local classNodes = {}
+    local heroNodes = {}
     local specNodes = {}
     local allNodes = {}
 
     for _, nodeID in ipairs(nodeIDs) do
         local nodeInfo = C_Traits.GetNodeInfo(configID, nodeID)
-        if nodeInfo and nodeInfo.isVisible and not nodeInfo.subTreeID
-           and nodeInfo.type ~= Enum.TraitNodeType.SubTreeSelection then
-            local px = nodeInfo.posX / 10
-            local py = nodeInfo.posY / 10
-
-            -- Build entry display info
-            local entries = {}
-            if nodeInfo.entryIDs then
-                for _, eid in ipairs(nodeInfo.entryIDs) do
-                    local displayInfo = GetEntryDisplayInfo(configID, eid)
-                    if displayInfo then
-                        displayInfo.isTaken = (nodeInfo.activeEntry
-                            and nodeInfo.activeEntry.entryID == eid
-                            and nodeInfo.activeRank > 0)
-                        entries[#entries + 1] = displayInfo
-                    end
-                end
-            end
-
-            if #entries > 0 then
-                local isChoice = (nodeInfo.type == Enum.TraitNodeType.Selection)
-                local record = {
-                    nodeID = nodeID,
-                    px = px,
-                    py = py,
-                    activeRank = nodeInfo.activeRank or 0,
-                    maxRanks = nodeInfo.maxRanks or 1,
-                    activeEntryID = nodeInfo.activeEntry and nodeInfo.activeEntry.entryID or nil,
-                    entries = entries,
-                    isChoice = isChoice,
-                    nodeType = nodeInfo.type,
-                    visibleEdges = nodeInfo.visibleEdges,
-                }
-
+        if ShouldIncludeBaseTreeNode(nodeInfo) then
+            local record = BuildNodeRecord(configID, nodeID, nodeInfo)
+            if record then
                 allNodes[#allNodes + 1] = record
 
                 -- Classify by currency
@@ -897,69 +1134,33 @@ PopulateTree = function()
                     end
                 end
             end
+        elseif ShouldIncludeHeroChoiceNode(nodeInfo, activeHeroSubTreeID) then
+            local record = BuildNodeRecord(configID, nodeID, nodeInfo)
+            if record then
+                heroNodes[#heroNodes + 1] = record
+            end
         end
     end
 
-    if #allNodes == 0 then return end
+    if #allNodes == 0 and #heroNodes == 0 then return end
+
+    local hasHeroChoices = #heroNodes > 0
+    LayoutSpecFrames(CS.configFrame.col3.content, hasHeroChoices)
+    if hasHeroChoices and heroTreeTitle then
+        heroTreeTitle:SetText((activeHeroSubTreeInfo and activeHeroSubTreeInfo.name) or "Hero Choices")
+        heroTreeTitle:Show()
+    end
 
     local dualPanel = (#classNodes > 0 and #specNodes > 0)
     local nodeIDToBtn = {}
     local btnIndex = 0
 
     if dualPanel then
-        -- Class panel
-        local cFrameW = classTreeFrame:GetWidth()
-        local cFrameH = classTreeFrame:GetHeight()
-        local cMinX, cMaxX, cMinY, cMaxY = ComputeBounds(classNodes)
-        local cTreeW = cMaxX - cMinX + NODE_SIZE
-        local cTreeH = cMaxY - cMinY + NODE_SIZE
-        local cScaleX = cTreeW > 0 and (cFrameW - NODE_PADDING * 2) / cTreeW or 1
-        local cScaleY = cTreeH > 0 and (cFrameH - NODE_PADDING * 2) / cTreeH or 1
-        local cScale = math_min(cScaleX, cScaleY, 1.0)
-
-        local cContentW = cTreeW * cScale + NODE_PADDING * 2
-        local cOffsetX = math_max(0, (cFrameW - cContentW) * 0.5)
-
-        btnIndex = PlaceNodesInPanel(classTreeFrame, classNodes, cOffsetX, 0,
-            cMinX, cMinY, cScale, btnIndex, nodeIDToBtn)
-
-        DrawEdgesInPanel(classTreeFrame, classNodes, nodeIDToBtn, classEdgeLines)
-
-        -- Spec panel
-        local sFrameW = specTreeFrame:GetWidth()
-        local sFrameH = specTreeFrame:GetHeight()
-        local sMinX, sMaxX, sMinY, sMaxY = ComputeBounds(specNodes)
-        local sTreeW = sMaxX - sMinX + NODE_SIZE
-        local sTreeH = sMaxY - sMinY + NODE_SIZE
-        local sScaleX = sTreeW > 0 and (sFrameW - NODE_PADDING * 2) / sTreeW or 1
-        local sScaleY = sTreeH > 0 and (sFrameH - NODE_PADDING * 2) / sTreeH or 1
-        local sScale = math_min(sScaleX, sScaleY, 1.0)
-
-        local sContentW = sTreeW * sScale + NODE_PADDING * 2
-        local sOffsetX = math_max(0, (sFrameW - sContentW) * 0.5)
-
-        btnIndex = PlaceNodesInPanel(specTreeFrame, specNodes, sOffsetX, 0,
-            sMinX, sMinY, sScale, btnIndex, nodeIDToBtn)
-
-        DrawEdgesInPanel(specTreeFrame, specNodes, nodeIDToBtn, specEdgeLines)
+        btnIndex = RenderNodePanel(classTreeFrame, classNodes, nodeIDToBtn, classEdgeLines, btnIndex, 0)
+        btnIndex = RenderNodePanel(specTreeFrame, specNodes, nodeIDToBtn, specEdgeLines, btnIndex, 0)
     else
         -- Single-panel fallback: all nodes in left container
-        local cFrameW = classTreeFrame:GetWidth()
-        local cFrameH = classTreeFrame:GetHeight()
-        local minX, maxX, minY, maxY = ComputeBounds(allNodes)
-        local treeW = maxX - minX + NODE_SIZE
-        local treeH = maxY - minY + NODE_SIZE
-        local scaleX = treeW > 0 and (cFrameW - NODE_PADDING * 2) / treeW or 1
-        local scaleY = treeH > 0 and (cFrameH - NODE_PADDING * 2) / treeH or 1
-        local scale = math_min(scaleX, scaleY, 1.0)
-
-        local contentW = treeW * scale + NODE_PADDING * 2
-        local offsetX = math_max(0, (cFrameW - contentW) * 0.5)
-
-        btnIndex = PlaceNodesInPanel(classTreeFrame, allNodes, offsetX, 0,
-            minX, minY, scale, btnIndex, nodeIDToBtn)
-
-        DrawEdgesInPanel(classTreeFrame, allNodes, nodeIDToBtn, classEdgeLines)
+        btnIndex = RenderNodePanel(classTreeFrame, allNodes, nodeIDToBtn, classEdgeLines, btnIndex, 0)
 
         -- Right container: empty message
         if not specEmptyText then
@@ -968,6 +1169,10 @@ PopulateTree = function()
             specEmptyText:SetText("No spec talents found")
         end
         specEmptyText:Show()
+    end
+
+    if hasHeroChoices then
+        btnIndex = RenderHeroChoiceList(heroTreeFrame, heroNodes, nodeIDToBtn, btnIndex)
     end
 end
 

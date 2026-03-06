@@ -11,6 +11,8 @@ local pairs = pairs
 local ipairs = ipairs
 local wipe = wipe
 local select = select
+local next = next
+local type = type
 local UnitExists = UnitExists
 local UnitCanAttack = UnitCanAttack
 
@@ -63,6 +65,125 @@ function CooldownCompanion:GetEffectiveHeroTalents(group)
         end
     end
     return group.heroTalents, false
+end
+
+local function CopyTalentCondition(cond)
+    return {
+        nodeID = cond.nodeID,
+        entryID = cond.entryID,
+        spellID = cond.spellID,
+        name = cond.name,
+        show = cond.show or "taken",
+    }
+end
+
+local function IsLegacyChoiceRowCondition(cond)
+    return type(cond) == "table"
+        and cond.entryID == nil
+        and cond.spellID == nil
+        and type(cond.name) == "string"
+        and cond.name:sub(1, 12) == "Choice row: "
+end
+
+function CooldownCompanion:NormalizeTalentConditions(conditions)
+    if type(conditions) ~= "table" then return nil, false end
+
+    local grouped = {}
+    local orderedNodeIDs = {}
+    local passthrough = {}
+    local hasDuplicateNode = false
+    local hasLegacyChoiceRow = false
+
+    for _, cond in ipairs(conditions) do
+        if type(cond) == "table" and cond.nodeID then
+            if IsLegacyChoiceRowCondition(cond) then
+                hasLegacyChoiceRow = true
+            end
+            local nodeID = cond.nodeID
+            local group = grouped[nodeID]
+            if not group then
+                group = {}
+                grouped[nodeID] = group
+                orderedNodeIDs[#orderedNodeIDs + 1] = nodeID
+            else
+                hasDuplicateNode = true
+            end
+            group[#group + 1] = cond
+        else
+            passthrough[#passthrough + 1] = cond
+        end
+    end
+
+    if not hasDuplicateNode and not hasLegacyChoiceRow then
+        return conditions, false
+    end
+
+    local normalized = {}
+    for _, cond in ipairs(passthrough) do
+        normalized[#normalized + 1] = cond
+    end
+
+    for _, nodeID in ipairs(orderedNodeIDs) do
+        local group = grouped[nodeID]
+        if group and #group > 0 then
+            local firstCondition = nil
+            local firstSpecific = nil
+            local takenCount = 0
+            local seenEntries = {}
+            local takenCondition = nil
+            local uniqueEntryCount = 0
+            local specificCount = 0
+
+            for _, cond in ipairs(group) do
+                if not firstCondition and not IsLegacyChoiceRowCondition(cond) then
+                    firstCondition = cond
+                end
+
+                if cond.entryID ~= nil then
+                    if not firstSpecific then
+                        firstSpecific = cond
+                    end
+                    specificCount = specificCount + 1
+                    if not seenEntries[cond.entryID] then
+                        seenEntries[cond.entryID] = true
+                        uniqueEntryCount = uniqueEntryCount + 1
+                    end
+
+                    if (cond.show or "taken") == "not_taken" then
+                        -- no-op
+                    else
+                        takenCount = takenCount + 1
+                        takenCondition = cond
+                    end
+                end
+            end
+
+            local resolved
+            if specificCount > 1 and specificCount == uniqueEntryCount and uniqueEntryCount > 1 then
+                if takenCount == 1 then
+                    resolved = CopyTalentCondition(takenCondition)
+                else
+                    resolved = CopyTalentCondition(firstSpecific)
+                end
+            end
+
+            if not resolved then
+                local fallback = firstSpecific or firstCondition
+                if fallback then
+                    resolved = CopyTalentCondition(fallback)
+                end
+            end
+
+            if resolved then
+                normalized[#normalized + 1] = resolved
+            end
+        end
+    end
+
+    if #normalized == 0 then
+        return nil, true
+    end
+    return normalized, true
 end
 
 -- Folder filters are authoritative. When a folder filter is active, all child
@@ -575,11 +696,22 @@ function CooldownCompanion:RebuildTalentNodeCache()
 
     local nodeIDs = C_Traits.GetTreeNodes(treeID)
     if not nodeIDs then return end
+    local activeHeroSubTreeID = self._currentHeroSpecId or C_ClassTalents.GetActiveHeroTalentSpec()
 
     for _, nodeID in ipairs(nodeIDs) do
         local nodeInfo = C_Traits.GetNodeInfo(configID, nodeID)
-        if nodeInfo and nodeInfo.isVisible and not nodeInfo.subTreeID
-           and nodeInfo.type ~= Enum.TraitNodeType.SubTreeSelection then
+        local includeNode = nodeInfo
+            and nodeInfo.isVisible
+            and nodeInfo.type ~= Enum.TraitNodeType.SubTreeSelection
+            and (
+                not nodeInfo.subTreeID
+                or (
+                    activeHeroSubTreeID
+                    and nodeInfo.subTreeID == activeHeroSubTreeID
+                    and nodeInfo.type == Enum.TraitNodeType.Selection
+                )
+            )
+        if includeNode then
             self._talentNodeCache[nodeID] = {
                 activeRank = nodeInfo.activeRank or 0,
                 activeEntryID = nodeInfo.activeEntry and nodeInfo.activeEntry.entryID or nil,
@@ -594,6 +726,16 @@ end
 function CooldownCompanion:IsTalentConditionMet(buttonData)
     local conditions = buttonData.talentConditions
     if not conditions or #conditions == 0 then return true end
+
+    local needsNormalization = #conditions > 1 or IsLegacyChoiceRowCondition(conditions[1])
+    if needsNormalization then
+        local normalized, changed = self:NormalizeTalentConditions(conditions)
+        if changed then
+            buttonData.talentConditions = normalized
+            conditions = normalized
+            if not conditions or #conditions == 0 then return true end
+        end
+    end
 
     local cache = self._talentNodeCache
     if not cache then return true end

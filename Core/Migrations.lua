@@ -39,6 +39,7 @@ function CooldownCompanion:RunAllMigrations()
     self:MigrateResourceBarYOffset()
     self:MigrateMaxStacksGlowStyles()
     self:MigrateTalentConditions()
+    self:MigrateChoiceTalentConditions()
     self:MigrateNewDefaults()
 end
 
@@ -56,6 +57,7 @@ function CooldownCompanion:ClearMigrationSentinels()
     profile.assistedHighlightHostileTargetOnlyMigrated = nil
     profile.addedAsClassificationMigrated = nil
     profile.talentConditionsMigrated = nil
+    profile.choiceTalentConditionsMigrated = nil
     profile.newDefaultsMigrated = nil
 end
 
@@ -1158,6 +1160,24 @@ function CooldownCompanion:MigrateTalentConditions()
     end
 
     profile.talentConditionsMigrated = true
+end
+
+function CooldownCompanion:MigrateChoiceTalentConditions()
+    local profile = self.db.profile
+    if profile.choiceTalentConditionsMigrated then return end
+
+    for _, group in pairs(profile.groups) do
+        if group.buttons then
+            for _, bd in pairs(group.buttons) do
+                local normalized, changed = self:NormalizeTalentConditions(bd.talentConditions)
+                if changed then
+                    bd.talentConditions = normalized
+                end
+            end
+        end
+    end
+
+    profile.choiceTalentConditionsMigrated = true
 end
 
 -- Uses rawget for metatabled tables so we only write when the user never explicitly set
