@@ -793,6 +793,23 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     ------------------------------------------------------------------------
     -- TALENT CONDITIONS (independent section, not nested under Visibility Rules)
     ------------------------------------------------------------------------
+    local function ResolveConditionClassName(cond)
+        if not cond then
+            return nil
+        end
+
+        if cond.className and cond.className ~= "" then
+            return cond.className
+        end
+
+        if cond.classID then
+            local name = GetClassInfo(cond.classID)
+            return name or ("Class " .. cond.classID)
+        end
+
+        return nil
+    end
+
     local function ResolveConditionSpecName(cond)
         if not cond then
             return nil
@@ -828,9 +845,13 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
 
     local function GetConditionContextSuffix(cond)
         local parts = {}
+        local className = ResolveConditionClassName(cond)
         local specName = ResolveConditionSpecName(cond)
         local heroName = ResolveConditionHeroName(cond)
 
+        if className then
+            parts[#parts + 1] = className
+        end
         if specName then
             parts[#parts + 1] = specName
         end
@@ -849,6 +870,9 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         local scope = {}
 
         for _, cond in ipairs(list or {}) do
+            if not scope.className then
+                scope.className = ResolveConditionClassName(cond)
+            end
             if not scope.specName then
                 scope.specName = ResolveConditionSpecName(cond)
             end
@@ -857,11 +881,14 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
             end
         end
 
-        if not scope.specName and not scope.heroName then
+        if not scope.className and not scope.specName and not scope.heroName then
             return ""
         end
 
         local parts = {}
+        if scope.className then
+            parts[#parts + 1] = scope.className
+        end
         if scope.specName then
             parts[#parts + 1] = scope.specName
         end
@@ -1013,6 +1040,8 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
                                         spellID = cond.spellID,
                                         name    = cond.name,
                                         show    = cond.show,
+                                        classID = cond.classID,
+                                        className = cond.className,
                                         specID = cond.specID,
                                         specName = cond.specName,
                                         heroSubTreeID = cond.heroSubTreeID,

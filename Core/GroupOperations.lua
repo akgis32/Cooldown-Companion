@@ -74,6 +74,8 @@ local function CopyTalentCondition(cond)
         spellID = cond.spellID,
         name = cond.name,
         show = cond.show or "taken",
+        classID = cond.classID,
+        className = cond.className,
         specID = cond.specID,
         specName = cond.specName,
         heroSubTreeID = cond.heroSubTreeID,
@@ -108,7 +110,7 @@ function CooldownCompanion:NormalizeTalentConditions(conditions)
             if IsLegacyChoiceRowCondition(cond) then
                 hasLegacyChoiceRow = true
             end
-            if not cond.specID then
+            if not cond.specID and not cond.classID and not cond.className then
                 hasUnscopedNodeCondition = true
             end
             if cond.specID and not scopedSpecIDs[cond.specID] then
@@ -121,6 +123,7 @@ function CooldownCompanion:NormalizeTalentConditions(conditions)
             end
 
             local groupKey = tostring(cond.nodeID)
+                .. "|" .. tostring(cond.classID or 0)
                 .. "|" .. tostring(cond.specID or 0)
                 .. "|" .. tostring(cond.heroSubTreeID or 0)
             local group = grouped[groupKey]
@@ -219,7 +222,7 @@ function CooldownCompanion:NormalizeTalentConditions(conditions)
         local filtered = {}
         for _, cond in ipairs(normalized) do
             if type(cond) == "table" and cond.nodeID then
-                if cond.specID == chosenSpecID then
+                if cond.classID or cond.className or cond.specID == chosenSpecID then
                     filtered[#filtered + 1] = cond
                 end
             else
@@ -814,6 +817,10 @@ function CooldownCompanion:IsTalentConditionMet(buttonData)
     end
 
     for _, cond in ipairs(conditions) do
+        if cond.classID and self._playerClassID and cond.classID ~= self._playerClassID then
+            return false
+        end
+
         if cond.specID and cond.specID ~= self._currentSpecId then
             return false
         end

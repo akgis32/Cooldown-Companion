@@ -90,6 +90,15 @@ local function GetSpecDisplayName(specID)
     return name or ("Spec " .. specID)
 end
 
+local function GetClassDisplayInfo()
+    local className, _, classID = UnitClass("player")
+    if not classID then
+        return nil, nil
+    end
+
+    return classID, className or ("Class " .. classID)
+end
+
 local function GetHeroDisplayName(configID, subTreeID)
     if not subTreeID then
         return nil
@@ -99,7 +108,19 @@ local function GetHeroDisplayName(configID, subTreeID)
     return (subTreeInfo and subTreeInfo.name) or ("Hero " .. subTreeID)
 end
 
-local function BuildConditionContext(heroSubTreeID)
+local function BuildConditionContext(scopeType, heroSubTreeID)
+    if scopeType == "class" then
+        local classID, className = GetClassDisplayInfo()
+        if not classID then
+            return nil
+        end
+
+        return {
+            classID = classID,
+            className = className,
+        }
+    end
+
     local specID = pickerSelectedSpecID
     if not specID then
         return nil
@@ -115,7 +136,9 @@ end
 
 local function ClearConflictingPendingScopes(specID, heroSubTreeID)
     for key, cond in pairs(pendingConditions) do
-        if cond.specID ~= specID then
+        if cond.classID or cond.className then
+            -- Class-tree conditions are valid across specs.
+        elseif cond.specID and cond.specID ~= specID then
             pendingConditions[key] = nil
         elseif heroSubTreeID and cond.heroSubTreeID and cond.heroSubTreeID ~= heroSubTreeID then
             pendingConditions[key] = nil
@@ -149,13 +172,25 @@ end
 local function FillPendingConditionContext()
     local specID = pickerSelectedSpecID
     local specName = GetSpecDisplayName(specID)
+    local classID, className = GetClassDisplayInfo()
 
     for _, cond in pairs(pendingConditions) do
-        if specID and not cond.specID then
+        if cond.classID or cond.className then
+            cond.classID = cond.classID or classID
+            cond.className = cond.className or className
+            cond.specID = nil
+            cond.specName = nil
+            cond.heroSubTreeID = nil
+            cond.heroName = nil
+        elseif specID and not cond.specID then
             cond.specID = specID
             cond.specName = specName
         elseif cond.specID and not cond.specName then
             cond.specName = GetSpecDisplayName(cond.specID)
+        end
+
+        if cond.className and not cond.classID then
+            cond.classID = classID
         end
 
         if cond.heroSubTreeID and not cond.heroName then
@@ -196,6 +231,8 @@ local function SetPendingState(nodeID, entryID, spellID, name, show, context)
             spellID = spellID,
             name    = name,
             show    = show,
+            classID = context and context.classID or nil,
+            className = context and context.className or nil,
             specID = context and context.specID or nil,
             specName = context and context.specName or nil,
             heroSubTreeID = context and context.heroSubTreeID or nil,
@@ -438,6 +475,7 @@ local choiceFrame = nil
 local function HideChoiceFrame()
     if choiceFrame then
         choiceFrame._nodeID = nil
+        choiceFrame._scopeType = nil
         choiceFrame._heroSubTreeID = nil
         choiceFrame:Hide()
     end
@@ -624,7 +662,7 @@ local function GetChoiceFrameLevel(parentBtn)
     return level + 20
 end
 
-local function ShowChoiceFrame(parentBtn, entries, nodeID, heroSubTreeID)
+local function ShowChoiceFrame(parentBtn, entries, nodeID, scopeType, heroSubTreeID)
     local configFrame = CS.configFrame
     if not configFrame then return end
 
@@ -653,6 +691,7 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID, heroSubTreeID)
     choiceFrame:ClearAllPoints()
     choiceFrame:SetPoint("TOP", parentBtn, "BOTTOM", 0, -4)
     choiceFrame._nodeID = nodeID
+    choiceFrame._scopeType = scopeType
     choiceFrame._heroSubTreeID = heroSubTreeID
     choiceFrame:Show()
     choiceFrame:Raise()
@@ -688,18 +727,18 @@ local function ShowChoiceFrame(parentBtn, entries, nodeID, heroSubTreeID)
 
         cb:SetScript("OnClick", function(_, mouseButton)
             if mouseButton and mouseButton ~= "LeftButton" then return end
-            CycleChoicePendingState(nodeID, entry.entryID, entry.spellID, entry.name, BuildConditionContext(choiceFrame._heroSubTreeID))
+            CycleChoicePendingState(nodeID, entry.entryID, entry.spellID, entry.name, BuildConditionContext(choiceFrame._scopeType, choiceFrame._heroSubTreeID))
             RefreshPickerBorders()
         end)
     end
 end
 
-local function ToggleChoiceFrame(parentBtn, entries, nodeID, heroSubTreeID)
+local function ToggleChoiceFrame(parentBtn, entries, nodeID, scopeType, heroSubTreeID)
     if choiceFrame and choiceFrame:IsShown() and choiceFrame._nodeID == nodeID then
         HideChoiceFrame()
         return
     end
-    ShowChoiceFrame(parentBtn, entries, nodeID, heroSubTreeID)
+    ShowChoiceFrame(parentBtn, entries, nodeID, scopeType, heroSubTreeID)
 end
 
 ------------------------------------------------------------------------
@@ -822,6 +861,8 @@ local function EnsureButtons()
                         spellID = cond.spellID,
                         name    = cond.name,
                         show    = cond.show,
+                        classID = cond.classID,
+                        className = cond.className,
                         specID = cond.specID,
                         specName = cond.specName,
                         heroSubTreeID = cond.heroSubTreeID,
@@ -912,6 +953,8 @@ local function ShowTalentPicker(configFrame, initialConditions, group)
                 spellID = cond.spellID,
                 name    = cond.name,
                 show    = cond.show,
+                classID = cond.classID,
+                className = cond.className,
                 specID = cond.specID,
                 specName = cond.specName,
                 heroSubTreeID = cond.heroSubTreeID,
@@ -1123,6 +1166,7 @@ local function BuildNodeRecord(configID, nodeID, nodeInfo)
         nodeType = nodeInfo.type,
         visibleEdges = nodeInfo.visibleEdges,
         subTreeID = nodeInfo.subTreeID,
+        scopeType = nil,
     }
 end
 
@@ -1211,11 +1255,11 @@ local function PlaceNodesInPanel(scrollChild, nodeSet, panelOffsetX, yOffset,
         btn:SetScript("OnClick", function(self, mouseButton)
             if nodeRef.isChoice and #nodeRef.entries > 1 then
                 if mouseButton == "LeftButton" or mouseButton == nil then
-                    ToggleChoiceFrame(self, nodeRef.entries, nodeRef.nodeID, nodeRef.subTreeID)
+                    ToggleChoiceFrame(self, nodeRef.entries, nodeRef.nodeID, nodeRef.scopeType, nodeRef.subTreeID)
                 end
             else
                 HideChoiceFrame()
-                CyclePendingState(nodeRef.nodeID, nil, primaryEntry.spellID, primaryEntry.name, BuildConditionContext(nodeRef.subTreeID))
+                CyclePendingState(nodeRef.nodeID, nil, primaryEntry.spellID, primaryEntry.name, BuildConditionContext(nodeRef.scopeType, nodeRef.subTreeID))
                 RefreshPickerBorders()
             end
         end)
@@ -1446,12 +1490,15 @@ PopulateTree = function()
                             end
                         end
                         if isSpec then
+                            record.scopeType = "spec"
                             specNodes[#specNodes + 1] = record
                         else
+                            record.scopeType = "class"
                             classNodes[#classNodes + 1] = record
                         end
                     else
                         -- No cost (granted starting talents) -> default to class
+                        record.scopeType = "class"
                         classNodes[#classNodes + 1] = record
                     end
                 end
@@ -1459,6 +1506,7 @@ PopulateTree = function()
         elseif ShouldIncludeHeroChoiceNode(nodeInfo, selectedHeroSubTreeID) then
             local record = BuildNodeRecord(configID, nodeID, nodeInfo)
             if record then
+                record.scopeType = "hero"
                 heroNodes[#heroNodes + 1] = record
             end
         end
