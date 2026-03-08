@@ -351,7 +351,16 @@ local function SanitizeAnchorGroupID(groupId)
     if not numericGroupID then
         return nil
     end
-    if not CooldownCompanion:IsGroupAvailableForAnchoring(numericGroupID) then
+    local profile = CooldownCompanion.db and CooldownCompanion.db.profile
+    local groups = profile and profile.groups
+    local group = groups and groups[numericGroupID]
+    if type(group) ~= "table" then
+        return nil
+    end
+    if group.displayMode ~= "icons" or group.isGlobal then
+        return nil
+    end
+    if not CooldownCompanion:IsGroupVisibleToCurrentChar(numericGroupID) then
         return nil
     end
     return numericGroupID
@@ -578,8 +587,6 @@ function CooldownCompanion:GetCharacterScopedSettings(systemKey)
         NormalizeScopedBarSettings(systemKey, settings)
         SanitizeCopiedOrSeededScopedBarSettings(systemKey, settings)
         store[charKey] = settings
-    else
-        NormalizeScopedBarSettings(systemKey, settings)
     end
 
     return settings
