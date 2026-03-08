@@ -28,45 +28,6 @@ local function IsBuffViewerChild(frame)
     return BUFF_VIEWER_SET[parentName] == true
 end
 
-local function DoesViewerChildMatchSpellID(child, spellID)
-    if not child or not spellID or not IsBuffViewerChild(child) then
-        return false
-    end
-
-    local cooldownInfo = child.cooldownInfo
-    if type(cooldownInfo) ~= "table" then
-        return false
-    end
-
-    local cooldownID = child.cooldownID
-    if cooldownID == nil and child.GetCooldownID then
-        cooldownID = child:GetCooldownID()
-    end
-    if cooldownID == nil then
-        return false
-    end
-
-    if child.SpellIDMatchesAnyAssociatedSpellIDs then
-        return child:SpellIDMatchesAnyAssociatedSpellIDs(spellID)
-    end
-
-    if cooldownInfo.spellID == spellID
-        or cooldownInfo.overrideSpellID == spellID
-        or cooldownInfo.overrideTooltipSpellID == spellID then
-        return true
-    end
-
-    if cooldownInfo.linkedSpellIDs then
-        for _, linkedSpellID in ipairs(cooldownInfo.linkedSpellIDs) do
-            if linkedSpellID == spellID then
-                return true
-            end
-        end
-    end
-
-    return false
-end
-
 function CooldownCompanion:OnUnitAura(event, unit, updateInfo)
     self._cooldownsDirty = true
     if unit == "player" and self._isDracthyr then
@@ -257,18 +218,14 @@ function CooldownCompanion:ResolveBuffViewerFrameForSpell(spellID)
     end
 
     local child = self.viewerAuraFrames and self.viewerAuraFrames[spellID]
-    if DoesViewerChildMatchSpellID(child, spellID) then
+    if IsBuffViewerChild(child) and type(child.cooldownInfo) == "table" then
         return child
     end
 
     child = FindChildInViewers(VIEWER_NAMES, spellID, true)
-    if DoesViewerChildMatchSpellID(child, spellID) then
+    if child then
         self.viewerAuraFrames[spellID] = child
         return child
-    end
-
-    if self.viewerAuraFrames then
-        self.viewerAuraFrames[spellID] = nil
     end
     return nil
 end
