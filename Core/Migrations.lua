@@ -37,10 +37,12 @@ function CooldownCompanion:RunAllMigrations()
     self:MigrateBarOrdering()
     self:MigrateRemoveAuraDurationCache()
     self:MigrateResourceBarYOffset()
+    self:MigrateResourceAuraOverlayEntries()
     self:MigrateMaxStacksGlowStyles()
     self:MigrateTalentConditions()
     self:MigrateChoiceTalentConditions()
     self:MigrateNewDefaults()
+    self:MigrateCharacterScopedBarSettings()
 end
 
 -- Clear all migration sentinel flags so migrations re-evaluate the actual data.
@@ -1098,6 +1100,61 @@ function CooldownCompanion:MigrateResourceBarYOffset()
     end
 end
 
+local function HasResourceAuraOverlayEntries(resource)
+    if type(resource) ~= "table" or type(resource.auraOverlayEntries) ~= "table" then
+        return false
+    end
+    return next(resource.auraOverlayEntries) ~= nil
+end
+
+local function HasLegacyResourceAuraOverlayData(resource)
+    if type(resource) ~= "table" then
+        return false
+    end
+    return resource.auraColorSpellID ~= nil
+        or resource.auraActiveColor ~= nil
+        or resource.auraColorTrackingMode ~= nil
+        or resource.auraColorMaxStacks ~= nil
+end
+
+local function GetEffectiveResourceAuraOverlayEnabled(resource)
+    if type(resource) ~= "table" then
+        return false
+    end
+    if type(resource.auraOverlayEnabled) == "boolean" then
+        return resource.auraOverlayEnabled
+    end
+    if HasResourceAuraOverlayEntries(resource) then
+        return true
+    end
+    local auraSpellID = tonumber(resource.auraColorSpellID)
+    return auraSpellID and auraSpellID > 0 or false
+end
+
+local function CopyResourceAuraOverlayColor(color)
+    if type(color) ~= "table" or color[1] == nil or color[2] == nil or color[3] == nil then
+        return nil
+    end
+    return { color[1], color[2], color[3] }
+end
+
+local function ClearLegacyResourceAuraOverlayFields(resource)
+    if type(resource) ~= "table" then
+        return
+    end
+    resource.auraColorSpellID = nil
+    resource.auraActiveColor = nil
+    resource.auraColorTrackingMode = nil
+    resource.auraColorMaxStacks = nil
+end
+
+function CooldownCompanion:MigrateResourceAuraOverlayEntries()
+    -- Resource aura overlay legacy conversion now happens when the current
+    -- character's resource bar settings bucket is materialized from the shared
+    -- seed, so the data can be filtered by character/class before becoming
+    -- persistent per-character state.
+end
+
 -- Migrate old frame-based glow styles to new StatusBar indicator styles.
 local OLD_GLOW_STYLE_MAP = {
     solid = "solidBorder",
@@ -1226,4 +1283,10 @@ function CooldownCompanion:MigrateNewDefaults()
     end
 
     profile.newDefaultsMigrated = true
+end
+
+function CooldownCompanion:MigrateCharacterScopedBarSettings()
+    self:CaptureLegacyScopedBarSettingsSeeds()
+    self:EnsureLegacyScopedBarSeenCharacters()
+    self:EnsureCurrentCharacterScopedBarSettings()
 end

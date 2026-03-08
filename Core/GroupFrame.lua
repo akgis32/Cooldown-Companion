@@ -52,13 +52,10 @@ end
 
 local function GetCompactAnchorFixedPoint(orientation, compactGrowthDirection)
     if compactGrowthDirection == "start" then
-        return "TOPLEFT"
+        return (orientation == "horizontal") and "TOPLEFT" or "TOPLEFT"
     end
     if compactGrowthDirection == "end" then
-        if orientation == "horizontal" then
-            return "TOPRIGHT"
-        end
-        return "BOTTOMLEFT"
+        return (orientation == "horizontal") and "TOPRIGHT" or "BOTTOMLEFT"
     end
     return nil
 end
@@ -665,14 +662,6 @@ function CooldownCompanion:ResizeGroupFrame(groupId)
         local deltaY = (oldFixedY - oldAnchorY) - (newFixedY - newAnchorY)
         if deltaX ~= 0 or deltaY ~= 0 then
             frame:AdjustPointsOffset(deltaX, deltaY)
-            if group.anchor then
-                local _, _, _, x, y = frame:GetPoint(1)
-                if x and y then
-                    group.anchor.x = x
-                    group.anchor.y = y
-                    UpdateCoordLabel(frame, x, y)
-                end
-            end
         end
     end
 
