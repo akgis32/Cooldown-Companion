@@ -24,9 +24,10 @@ local UNIT_FRAME_OPTIONS = {
     blizzard     = "Blizzard Default",
     uuf          = "UnhaltedUnitFrames",
     elvui        = "ElvUI",
+    msuf         = "Midnight Simple Unit Frames",
     custom       = "Custom",
 }
-local UNIT_FRAME_ORDER = { "", "blizzard", "uuf", "elvui", "custom" }
+local UNIT_FRAME_ORDER = { "", "blizzard", "uuf", "elvui", "msuf", "custom" }
 
 local function BuildFrameAnchoringPlayerPanel(container)
     local db = CooldownCompanion.db.profile
