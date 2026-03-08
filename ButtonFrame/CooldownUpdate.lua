@@ -355,6 +355,20 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                 end
             end
         end
+        -- Cached instance ID fallback: when the viewer and GetPlayerAuraBySpellID
+        -- both fail (restricted combat + form-variant spells), the previously-cached
+        -- _auraInstanceID may still be valid.  GetAuraDuration works in restricted
+        -- combat and the instance ID persists until OnUnitAura removal clears it.
+        if not auraOverrideActive and button._auraInstanceID then
+            local durationObj = C_UnitAuras.GetAuraDuration(auraUnit, button._auraInstanceID)
+            if durationObj then
+                button._durationObj = durationObj
+                button._viewerBar = nil
+                button.cooldown:SetCooldownFromDurationObject(durationObj)
+                auraOverrideActive = true
+                fetchOk = true
+            end
+        end
         -- Grace period: if aura data is momentarily unavailable (target switch,
         -- ~250-430ms) but we had an active aura DurationObject last tick, keep
         -- aura state alive.  Restoring _durationObj preserves bar fill, color,
