@@ -761,7 +761,7 @@ local function BuildEffectsTab(container)
     -- ================================================================
     local readyEnableCb = AceGUI:Create("CheckBox")
     readyEnableCb:SetLabel("Show Ready Glow")
-    readyEnableCb:SetValue(style.readyGlowStyle ~= "none")
+    readyEnableCb:SetValue(style.readyGlowStyle and style.readyGlowStyle ~= "none")
     readyEnableCb:SetFullWidth(true)
     readyEnableCb:SetCallback("OnValueChanged", function(widget, event, val)
         style.readyGlowStyle = val and "solid" or "none"
@@ -770,10 +770,10 @@ local function BuildEffectsTab(container)
     end)
     container:AddChild(readyEnableCb)
 
-    local readyAdvExpanded, readyAdvBtn = AddAdvancedToggle(readyEnableCb, "readyGlow", tabInfoButtons, style.readyGlowStyle ~= "none")
+    local readyAdvExpanded, readyAdvBtn = AddAdvancedToggle(readyEnableCb, "readyGlow", tabInfoButtons, style.readyGlowStyle and style.readyGlowStyle ~= "none")
     CreateCheckboxPromoteButton(readyEnableCb, readyAdvBtn, "readyGlow", group, style)
 
-    if readyAdvExpanded and style.readyGlowStyle ~= "none" then
+    if readyAdvExpanded and style.readyGlowStyle and style.readyGlowStyle ~= "none" then
     local readyCombatCb = AceGUI:Create("CheckBox")
     readyCombatCb:SetLabel("Show Only In Combat")
     readyCombatCb:SetValue(style.readyGlowCombatOnly or false)

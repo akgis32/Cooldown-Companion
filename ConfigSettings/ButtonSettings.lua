@@ -952,8 +952,19 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
         barActiveAura = BuildBarActiveAuraControls,
     }
 
+    -- Detect no-cooldown spells to skip irrelevant override sections
+    local isNoCooldownSpell = false
+    if buttonData.type == "spell" and not buttonData.isPassive and not buttonData.hasCharges then
+        local baseCd = GetSpellBaseCooldown(buttonData.id)
+        isNoCooldownSpell = (not baseCd or baseCd == 0)
+    end
+
     for _, sectionId in ipairs(sectionOrder) do
         if buttonData.overrideSections[sectionId] then
+            -- Skip readyGlow/desaturation for no-CD spells (meaningless — never triggers)
+            if isNoCooldownSpell and (sectionId == "readyGlow" or sectionId == "desaturation") then
+                -- skip
+            else
             local sectionDef = ST.OVERRIDE_SECTIONS[sectionId]
             -- Skip sections not applicable to current display mode
             if sectionDef and sectionDef.modes[displayMode] then
@@ -1070,7 +1081,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                             end
                         end)
                         scroll:AddChild(pandemicPreviewBtn)
-                    elseif sectionId == "readyGlow" and overrides.readyGlowStyle ~= "none" then
+                    elseif sectionId == "readyGlow" and overrides.readyGlowStyle and overrides.readyGlowStyle ~= "none" then
                         local readyPreviewBtn = AceGUI:Create("Button")
                         readyPreviewBtn:SetText("Preview Ready Glow (3s)")
                         readyPreviewBtn:SetFullWidth(true)
@@ -1085,6 +1096,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
                 end
                 end
             end
+            end -- isNoCooldownSpell gate
         end
     end
 end
