@@ -33,6 +33,7 @@ local FRAME_PAIRS = {
     blizzard = { player = "PlayerFrame",  target = "TargetFrame" },
     uuf      = { player = "UUF_Player",   target = "UUF_Target" },
     elvui    = { player = "ElvUF_Player",  target = "ElvUF_Target" },
+    msuf     = { player = "MSUF_player",  target = "MSUF_target" },
 }
 
 local MIRROR_POINTS = {
@@ -70,6 +71,7 @@ end
 local function AutoDetectUnitFrameAddon()
     if _G["ElvUF_Player"] then return "elvui" end
     if _G["UUF_Player"] then return "uuf" end
+    if _G["MSUF_player"] then return "msuf" end
     return "blizzard"
 end
 
@@ -91,6 +93,10 @@ local function GetUnitFrames(settings)
         if tName and tName ~= "" then
             targetFrame = _G[tName]
         end
+    elseif addon == "msuf" then
+        local unitFrames = _G["MSUF_UnitFrames"]
+        playerFrame = _G["MSUF_player"] or (unitFrames and unitFrames.player)
+        targetFrame = _G["MSUF_target"] or (unitFrames and unitFrames.target)
     else
         local pair = FRAME_PAIRS[addon]
         if pair then
