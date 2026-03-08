@@ -313,8 +313,10 @@ function CooldownCompanion:UpdateButtonIcon(button)
     local buttonData = button.buttonData
     local icon
     local displayId = buttonData.id
+    local overrideId = nil
 
     if buttonData.type == "spell" then
+        overrideId = C_Spell.GetOverrideSpell(buttonData.id)
         -- Look up viewer child for current override info (icon, display name).
         -- For override spells (ability→buff mapping), viewerAuraFrames may point
         -- to a BuffIcon/BuffBar child whose spellID is the buff, not the ability.
@@ -341,6 +343,9 @@ function CooldownCompanion:UpdateButtonIcon(button)
             if child.cooldownInfo.overrideSpellID then
                 displayId = child.cooldownInfo.overrideSpellID
             end
+            if overrideId then
+                displayId = overrideId
+            end
             -- For multi-slot buttons, read the CDM's already-rendered icon texture
             -- directly from the viewer child's Icon widget. This avoids secret
             -- values (child.auraSpellID is secret in combat) and guarantees the
@@ -360,7 +365,8 @@ function CooldownCompanion:UpdateButtonIcon(button)
                     icon = iconTexture:GetTextureFileID()
                 else
                     -- No icon widget found — use spell API fallback
-                    local fallbackId = child.cooldownInfo.overrideSpellID
+                    local fallbackId = displayId
+                        or child.cooldownInfo.overrideSpellID
                         or child.cooldownInfo.spellID
                     if fallbackId then
                         icon = C_Spell.GetSpellTexture(fallbackId)
@@ -386,20 +392,17 @@ function CooldownCompanion:UpdateButtonIcon(button)
                 end
                 if not hasViewerIcon then
                     -- Fallback: static spell texture (viewer hidden or unavailable)
-                    local baseSpellId = child.cooldownInfo.spellID
-                    if baseSpellId then
-                        icon = C_Spell.GetSpellTexture(baseSpellId)
+                    local fallbackId = displayId or child.cooldownInfo.spellID
+                    if fallbackId then
+                        icon = C_Spell.GetSpellTexture(fallbackId)
                     end
                 end
             end
         end
         -- Always validate displayId against the Spell API — the viewer child may
         -- have a stale override that hasn't caught up to the current transform yet.
-        if buttonData.type == "spell" then
-            local overrideId = C_Spell.GetOverrideSpell(buttonData.id)
-            if overrideId then
-                displayId = overrideId
-            end
+        if overrideId then
+            displayId = overrideId
         end
         if not icon then
             icon = C_Spell.GetSpellTexture(displayId)

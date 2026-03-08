@@ -503,6 +503,22 @@ function CooldownCompanion:GroupHasPetSpells(groupId)
     return false
 end
 
+local function SpellIDsMatchCanonicalForm(storedSpellID, resolvedSpellID)
+    if not storedSpellID or not resolvedSpellID then
+        return false
+    end
+    if storedSpellID == resolvedSpellID then
+        return true
+    end
+
+    local storedBaseSpellID = C_Spell.GetBaseSpell(storedSpellID)
+    local resolvedBaseSpellID = C_Spell.GetBaseSpell(resolvedSpellID)
+
+    return storedBaseSpellID ~= nil
+        and resolvedBaseSpellID ~= nil
+        and storedBaseSpellID == resolvedBaseSpellID
+end
+
 function CooldownCompanion:IsButtonUsable(buttonData)
     -- Per-button talent condition: gate visibility on a specific talent node.
     if not self:IsTalentConditionMet(buttonData) then return false end
@@ -541,7 +557,7 @@ function CooldownCompanion:IsButtonUsable(buttonData)
             if spellID
                 and not C_SpellBook.IsSpellBookItemOffSpec(slot, slotBank)
                 and itemType ~= Enum.SpellBookItemType.FutureSpell
-                and spellID == buttonData.id
+                and SpellIDsMatchCanonicalForm(buttonData.id, spellID)
             then
                 return true
             end
