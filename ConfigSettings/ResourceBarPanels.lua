@@ -51,6 +51,65 @@ local function BuildAuraBarAutocompleteCache()
 end
 
 ------------------------------------------------------------------------
+-- CDM Aura Readiness Warning (shared by Resource Aura Overlays & Custom Aura Bars)
+------------------------------------------------------------------------
+local function AddCdmAuraReadinessWarning(container, spellID)
+    if not spellID then return end
+
+    local cdmEnabled = GetCVarBool("cooldownViewerEnabled")
+    local hasViewerFrame = false
+    if cdmEnabled then
+        local viewerFrame = CooldownCompanion:ResolveBuffViewerFrameForSpell(spellID)
+        if viewerFrame then
+            local parent = viewerFrame:GetParent()
+            local parentName = parent and parent:GetName()
+            hasViewerFrame = parentName == "BuffIconCooldownViewer" or parentName == "BuffBarCooldownViewer"
+        end
+    end
+
+    if hasViewerFrame then return end
+
+    local statusLabel = AceGUI:Create("Label")
+    statusLabel:SetText("|cffff0000Aura tracking is not ready.|r")
+    statusLabel:SetFullWidth(true)
+    statusLabel:SetJustifyH("CENTER")
+    container:AddChild(statusLabel)
+
+    local explainLabel = AceGUI:Create("Label")
+    if not cdmEnabled then
+        explainLabel:SetText("|cff888888The Cooldown Manager (CDM) is currently disabled. Enable it in Options > Gameplay > Combat > Cooldown Manager to allow reliable aura tracking in combat.|r")
+    else
+        local canTrack = false
+        for _, cat in ipairs({Enum.CooldownViewerCategory.TrackedBuff, Enum.CooldownViewerCategory.TrackedBar}) do
+            local ids = C_CooldownViewer.GetCooldownViewerCategorySet(cat, true)
+            if ids then
+                for _, cdID in ipairs(ids) do
+                    local info = C_CooldownViewer.GetCooldownViewerCooldownInfo(cdID)
+                    if info and (info.spellID == spellID or info.overrideSpellID == spellID or info.overrideTooltipSpellID == spellID) then
+                        canTrack = true
+                        break
+                    end
+                end
+            end
+            if canTrack then break end
+        end
+
+        if canTrack then
+            explainLabel:SetText("|cff888888This spell has a trackable aura in the Cooldown Manager, but it has not been added as a tracked buff or debuff yet. Add it in the CDM to enable aura tracking.|r")
+        else
+            explainLabel:SetText("|cff888888This spell was not found in the Cooldown Manager's tracked buff or tracked bar categories. Without CDM tracking, aura data may be unreliable during combat.|r")
+        end
+    end
+    explainLabel:SetFullWidth(true)
+    container:AddChild(explainLabel)
+
+    local spacer = AceGUI:Create("Label")
+    spacer:SetText(" ")
+    spacer:SetFullWidth(true)
+    container:AddChild(spacer)
+end
+
+------------------------------------------------------------------------
 -- RESOURCE BAR: Anchoring Panel
 ------------------------------------------------------------------------
 
@@ -558,6 +617,8 @@ local function AddResourceAuraEntryFields(container, powerType, resourceName, en
             container:AddChild(auraLabel)
         end
     end
+
+    AddCdmAuraReadinessWarning(container, spellID)
 
     local auraColorPicker = AceGUI:Create("ColorPicker")
     auraColorPicker:SetLabel(resourceName .. " Aura Active Color")
@@ -2886,6 +2947,8 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
             end
 
             container:AddChild(spellEdit)
+
+            AddCdmAuraReadinessWarning(container, cab.spellID)
 
             -- Tracking Mode dropdown
             local trackDrop = AceGUI:Create("Dropdown")
