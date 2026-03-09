@@ -24,6 +24,9 @@ local GetViewerAuraStackText = ST._GetViewerAuraStackText
 -- Imports from Visibility
 local EvaluateButtonVisibility = ST._EvaluateButtonVisibility
 
+-- Imports from Utils
+local IsActiveSpellBookSpell = ST.IsActiveSpellBookSpell
+
 -- Imports from Tracking
 local UpdateChargeTracking = ST._UpdateChargeTracking
 local UpdateItemChargeTracking = ST._UpdateItemChargeTracking
@@ -153,7 +156,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
     if button._noCooldown == nil then
         if buttonData.type == "spell" and not buttonData.isPassive and not buttonData.hasCharges then
             local baseCd = GetSpellBaseCooldown(buttonData.id)
-            button._noCooldown = (not baseCd or baseCd == 0)
+            button._noCooldown = (not baseCd or baseCd == 0) and not IsActiveSpellBookSpell(buttonData.id)
         else
             button._noCooldown = false
         end

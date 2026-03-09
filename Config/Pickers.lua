@@ -871,36 +871,7 @@ end
 ------------------------------------------------------------------------
 -- Helper: Detect passive or proc spells (zero-cooldown CDM-tracked spells)
 ------------------------------------------------------------------------
-local function IsActiveSpellBookSpell(spellId)
-    if not spellId then return false end
-
-    local function IsActiveFromSpellIdentifier(spellIdentifier)
-        local slotIdx, spellBank = C_SpellBook.FindSpellBookSlotForSpell(
-            spellIdentifier,
-            false, -- includeHidden
-            true,  -- includeFlyouts
-            false, -- includeFutureSpells
-            true   -- includeOffSpec
-        )
-        if not slotIdx then
-            return false
-        end
-        return not C_SpellBook.IsSpellBookItemPassive(slotIdx, spellBank)
-    end
-
-    if IsActiveFromSpellIdentifier(spellId) then
-        return true
-    end
-
-    local baseSpellID = C_Spell.GetBaseSpell(spellId)
-    if baseSpellID and baseSpellID ~= spellId then
-        if IsActiveFromSpellIdentifier(baseSpellID) then
-            return true
-        end
-    end
-
-    return false
-end
+local IsActiveSpellBookSpell = ST.IsActiveSpellBookSpell
 
 local function IsPassiveOrProc(spellId)
     if C_Spell.IsSpellPassive(spellId) then return true end

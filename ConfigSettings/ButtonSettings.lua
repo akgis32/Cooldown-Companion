@@ -12,6 +12,7 @@ local CreateRevertButton = ST._CreateRevertButton
 local CreateCheckboxPromoteButton = ST._CreateCheckboxPromoteButton
 local CreateInfoButton = ST._CreateInfoButton
 local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
+local IsActiveSpellBookSpell = ST.IsActiveSpellBookSpell
 
 -- Imports from SectionBuilders.lua (used by BuildOverridesTab)
 local BuildCooldownTextControls = ST._BuildCooldownTextControls
@@ -1033,7 +1034,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
     local isNoCooldownSpell = false
     if buttonData.type == "spell" and not buttonData.isPassive and not buttonData.hasCharges then
         local baseCd = GetSpellBaseCooldown(buttonData.id)
-        isNoCooldownSpell = (not baseCd or baseCd == 0)
+        isNoCooldownSpell = (not baseCd or baseCd == 0) and not IsActiveSpellBookSpell(buttonData.id)
     end
 
     for _, sectionId in ipairs(sectionOrder) do

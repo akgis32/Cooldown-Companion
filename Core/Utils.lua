@@ -126,6 +126,45 @@ function ST.SetFrameClickThroughRecursive(frame, disableClicks, disableMotion)
 end
 
 --------------------------------------------------------------------------------
+-- Spellbook Helpers
+--------------------------------------------------------------------------------
+
+-- Returns true if spellId (or its base spell) is an active (non-passive) entry
+-- in the player's spellbook. Used to guard against classifying real castable
+-- spells as "no cooldown" when GetSpellBaseCooldown returns 0 (cooldown applied
+-- by class aura / talent passive rather than base spell data).
+function ST.IsActiveSpellBookSpell(spellId)
+    if not spellId then return false end
+
+    local function IsActiveFromSpellIdentifier(spellIdentifier)
+        local slotIdx, spellBank = C_SpellBook.FindSpellBookSlotForSpell(
+            spellIdentifier,
+            false, -- includeHidden
+            true,  -- includeFlyouts
+            false, -- includeFutureSpells
+            true   -- includeOffSpec
+        )
+        if not slotIdx then
+            return false
+        end
+        return not C_SpellBook.IsSpellBookItemPassive(slotIdx, spellBank)
+    end
+
+    if IsActiveFromSpellIdentifier(spellId) then
+        return true
+    end
+
+    local baseSpellID = C_Spell.GetBaseSpell(spellId)
+    if baseSpellID and baseSpellID ~= spellId then
+        if IsActiveFromSpellIdentifier(baseSpellID) then
+            return true
+        end
+    end
+
+    return false
+end
+
+--------------------------------------------------------------------------------
 -- Border Helpers
 --------------------------------------------------------------------------------
 
