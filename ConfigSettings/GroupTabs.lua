@@ -771,7 +771,11 @@ local function BuildEffectsTab(container)
     container:AddChild(readyEnableCb)
 
     local readyAdvExpanded, readyAdvBtn = AddAdvancedToggle(readyEnableCb, "readyGlow", tabInfoButtons, style.readyGlowStyle and style.readyGlowStyle ~= "none")
-    CreateCheckboxPromoteButton(readyEnableCb, readyAdvBtn, "readyGlow", group, style)
+    local readyPromoteBtn = CreateCheckboxPromoteButton(readyEnableCb, readyAdvBtn, "readyGlow", group, style)
+    CreateInfoButton(readyEnableCb.frame, readyPromoteBtn, "LEFT", "RIGHT", 4, 0, {
+        "Ready Glow",
+        {"Adds a glow effect around buttons whose spells or items are off cooldown and ready to use.", 1, 1, 1, true},
+    }, tabInfoButtons)
 
     if readyAdvExpanded and style.readyGlowStyle and style.readyGlowStyle ~= "none" then
     local readyCombatCb = AceGUI:Create("CheckBox")
