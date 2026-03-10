@@ -35,11 +35,34 @@ local COLOR_TOKEN        = "ff00ff00"  -- green
 local COLOR_UNKNOWN      = "ffff4444"  -- red
 local COLOR_COND_PRESENT = "ffffff00"  -- yellow:  {?token} "show if present"
 local COLOR_COND_NEGATED = "ffff8844"  -- orange:  {!token} "show if empty"
-local COLOR_COND_CLOSE   = "ffaaaa00"  -- dim yellow: {/token} close tags
 
 local function BuildSyntaxString(segments)
+    -- Pass 1: pair cond_start with cond_end using a stack
+    local stack = {}       -- { {index, value, negated}, ... }
+    local openMatched = {} -- openMatched[i] = true if cond_start at index i is paired
+    local closeInfo = {}   -- closeInfo[i] = negated (bool) of matched opener, or nil if orphan
+
+    for i, seg in ipairs(segments) do
+        if seg.type == "cond_start" then
+            stack[#stack + 1] = { index = i, value = seg.value, negated = seg.negated }
+        elseif seg.type == "cond_end" then
+            -- Find matching opener on stack (same token name, search top-down)
+            for j = #stack, 1, -1 do
+                if stack[j].value == seg.value then
+                    openMatched[stack[j].index] = true
+                    closeInfo[i] = stack[j].negated
+                    table.remove(stack, j)
+                    break
+                end
+            end
+            -- If no match found, closeInfo[i] remains nil (orphan close tag)
+        end
+    end
+    -- Any cond_start remaining on the stack is unmatched
+
+    -- Pass 2: build colorized string using pairing info
     local parts = {}
-    for _, seg in ipairs(segments) do
+    for i, seg in ipairs(segments) do
         if seg.type == "literal" then
             parts[#parts + 1] = "|c" .. COLOR_LITERAL .. seg.value .. "|r"
         elseif seg.type == "token" then
@@ -47,13 +70,76 @@ local function BuildSyntaxString(segments)
             parts[#parts + 1] = "|c" .. color .. "{" .. seg.value .. "}|r"
         elseif seg.type == "cond_start" then
             local prefix = seg.negated and "!" or "?"
-            local color = seg.negated and COLOR_COND_NEGATED or COLOR_COND_PRESENT
+            local color
+            if openMatched[i] then
+                color = seg.negated and COLOR_COND_NEGATED or COLOR_COND_PRESENT
+            else
+                color = COLOR_UNKNOWN  -- red: missing closing bracket
+            end
             parts[#parts + 1] = "|c" .. color .. "{" .. prefix .. seg.value .. "}|r"
         elseif seg.type == "cond_end" then
-            parts[#parts + 1] = "|c" .. COLOR_COND_CLOSE .. "{/" .. seg.value .. "}|r"
+            local color
+            if closeInfo[i] ~= nil then
+                color = closeInfo[i] and COLOR_COND_NEGATED or COLOR_COND_PRESENT
+            else
+                color = COLOR_UNKNOWN  -- red: orphan close tag
+            end
+            parts[#parts + 1] = "|c" .. color .. "{/" .. seg.value .. "}|r"
         end
     end
     return table.concat(parts)
+end
+
+------------------------------------------------------------------------
+-- FORMAT VALIDATION
+-- Analyzes parsed segments for structural errors (unclosed conditionals,
+-- orphan close tags, unknown tokens) and returns a list of warning strings.
+------------------------------------------------------------------------
+local function ValidateFormat(segments)
+    local warnings = {}
+
+    -- Unknown tokens
+    for _, seg in ipairs(segments) do
+        if seg.type == "token" and seg.unknown then
+            warnings[#warnings + 1] = "{" .. seg.value .. "} is not a recognized token"
+        end
+    end
+
+    -- Pair conditionals with a stack (same logic as BuildSyntaxString)
+    -- Also track segment index to detect empty conditionals.
+    local stack = {}
+    for i, seg in ipairs(segments) do
+        if seg.type == "cond_start" then
+            stack[#stack + 1] = { value = seg.value, negated = seg.negated, index = i }
+        elseif seg.type == "cond_end" then
+            local found = false
+            for j = #stack, 1, -1 do
+                if stack[j].value == seg.value then
+                    -- Empty conditional: opener immediately followed by its closer
+                    if stack[j].index == i - 1 then
+                        local prefix = stack[j].negated and "!" or "?"
+                        if stack[j].negated then
+                            warnings[#warnings + 1] = "Empty {!" .. seg.value .. "}: add text to show when " .. seg.value .. " is empty"
+                        else
+                            warnings[#warnings + 1] = "Empty {?" .. seg.value .. "}: add text to show when " .. seg.value .. " has a value"
+                        end
+                    end
+                    table.remove(stack, j)
+                    found = true
+                    break
+                end
+            end
+            if not found then
+                warnings[#warnings + 1] = "{/" .. seg.value .. "} has no matching opener"
+            end
+        end
+    end
+    for _, entry in ipairs(stack) do
+        local prefix = entry.negated and "!" or "?"
+        warnings[#warnings + 1] = "{" .. prefix .. entry.value .. "} is never closed"
+    end
+
+    return warnings
 end
 
 ------------------------------------------------------------------------
@@ -355,6 +441,16 @@ local function OpenFormatEditor(style, groupId)
     ApplyColorized(currentRawText, #currentRawText)
 
     -- ================================================================
+    -- WARNING LABEL (below editbox, shows validation errors)
+    -- ================================================================
+    local warningLabel = AceGUI:Create("Label")
+    warningLabel:SetFullWidth(true)
+    warningLabel:SetFontObject(GameFontNormalSmall)
+    warningLabel:SetColor(1, 0.4, 0.4)
+    warningLabel:SetText("")
+    window:AddChild(warningLabel)
+
+    -- ================================================================
     -- PREVIEW SECTION (directly beneath edit box)
     -- ================================================================
     local previewHeading = AceGUI:Create("Heading")
@@ -383,6 +479,13 @@ local function OpenFormatEditor(style, groupId)
         for i, mock in ipairs(mockStates) do
             local preview = PreviewSubstitute(segments, currentStyle, mock.state)
             previewLabels[i]:SetText(mock.label .. "  " .. preview)
+        end
+
+        local warnings = ValidateFormat(segments)
+        if #warnings > 0 then
+            warningLabel:SetText(table.concat(warnings, "\n"))
+        else
+            warningLabel:SetText("")
         end
     end
 
