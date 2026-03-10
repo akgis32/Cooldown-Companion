@@ -16,6 +16,7 @@ local CreateInfoButton = ST._CreateInfoButton
 local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 
 local HasTooltipCooldown = ST.HasTooltipCooldown
+local HasUsageRequirement = ST.HasUsageRequirement
 
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
@@ -113,6 +114,27 @@ local function AllSelectedNoCooldown(group)
     for idx in pairs(CS.selectedButtons) do
         local bd = group.buttons[idx]
         if bd and not IsNoCooldownSpell(bd) then return false end
+    end
+    return true
+end
+
+-- Returns true if a button would never be affected by unusable dimming.
+-- Items can always be unusable (level, class, etc.), so only spells are checked.
+-- A spell is "never unusable" only if it has no resource cost AND no usage
+-- requirements (form/stance/etc). Spells like Mangle (zero cost, requires
+-- Bear Form) correctly return false here — their toggle remains visible.
+local function IsNeverUnusableButton(bd)
+    if not bd or bd.type ~= "spell" then return false end
+    local costs = C_Spell.GetSpellPowerCost(bd.id)
+    if costs and #costs > 0 then return false end
+    return not HasUsageRequirement(bd.id)
+end
+
+-- Returns true if all selected buttons would never be affected by unusable dimming
+local function AllSelectedNeverUnusable(group)
+    for idx in pairs(CS.selectedButtons) do
+        local bd = group.buttons[idx]
+        if bd and not IsNeverUnusableButton(bd) then return false end
     end
     return true
 end
@@ -340,6 +362,9 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     local allNoCooldown
     if isBatch then allNoCooldown = AllSelectedNoCooldown(group)
     else allNoCooldown = IsNoCooldownSpell(buttonData) end
+    local allNeverUnusable
+    if isBatch then allNeverUnusable = AllSelectedNeverUnusable(group)
+    else allNeverUnusable = IsNeverUnusableButton(buttonData) end
     if not allPassive and not allNoCooldown then
     local hideCDCb = AceGUI:Create("CheckBox")
     hideCDCb:SetLabel("Hide While On Cooldown")
@@ -368,6 +393,10 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     end)
     scroll:AddChild(hideNotCDCb)
 
+    end -- not allPassive and not allNoCooldown
+
+    if not allPassive then
+    if not allNeverUnusable then
     -- Hide While Unusable
     local hideUnusableCb = AceGUI:Create("CheckBox")
     hideUnusableCb:SetLabel("Hide While Unusable")
@@ -384,6 +413,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         "Hide While Unusable",
         {"Uses the same logic as unusable dimming, but completely hides the button instead of dimming it.", 1, 1, 1, true},
     }, infoButtons)
+    end -- not allNeverUnusable
 
     -- Hide While No Proc (spell entries only, not aura entries)
     local showNoProcToggle
@@ -403,7 +433,7 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
         scroll:AddChild(hideNoProcCb)
     end
 
-    end -- not allPassive
+    end -- not allPassive (unusable + no proc)
 
     -- Charge-based visibility toggles (spells + non-equippable items with charges)
     -- Batch: show if any selected button is charge-capable
