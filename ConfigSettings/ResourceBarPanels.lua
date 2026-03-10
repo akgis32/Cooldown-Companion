@@ -150,6 +150,11 @@ local SEGMENTED_TYPES_CONFIG = {
     [12] = true, [16] = true, [19] = true,
 }
 
+local HIDE_AT_ZERO_ELIGIBLE = {
+    [4]  = true, [7]  = true, [9]  = true,
+    [12] = true, [16] = true, [100] = true,
+}
+
 local function SupportsResourceAuraStackModeConfig(powerType)
     return powerType == 100 or SEGMENTED_TYPES_CONFIG[powerType] == true
 end
@@ -1803,6 +1808,19 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                     CooldownCompanion:ApplyResourceBars()
                 end)
                 container:AddChild(textColorPicker)
+
+                if HIDE_AT_ZERO_ELIGIBLE[capturedPt] then
+                    local hideAtZeroCb = AceGUI:Create("CheckBox")
+                    hideAtZeroCb:SetLabel("Hide at 0")
+                    hideAtZeroCb:SetValue(resSettings.hideTextAtZero == true)
+                    hideAtZeroCb:SetFullWidth(true)
+                    hideAtZeroCb:SetCallback("OnValueChanged", function(widget, event, val)
+                        if not settings.resources[capturedPt] then settings.resources[capturedPt] = {} end
+                        settings.resources[capturedPt].hideTextAtZero = val and true or nil
+                        CooldownCompanion:ApplyResourceBars()
+                    end)
+                    container:AddChild(hideAtZeroCb)
+                end
             end
         end
     end

@@ -2011,6 +2011,11 @@ local function SetSegmentedText(holder, currentValue, maxValue)
         return
     end
 
+    if holder._hideTextAtZero and currentValue == 0 then
+        holder.text:SetText("")
+        return
+    end
+
     local textFormat = holder._textFormat
     if textFormat == "current_max" then
         if type(maxValue) ~= "number" then
@@ -3265,6 +3270,7 @@ local function StyleSegmentedText(holder, powerType, settings)
     local showText = resourceConfig and resourceConfig.showText == true
     holder.text:SetShown(showText)
     holder._textFormat = textFormat
+    holder._hideTextAtZero = resourceConfig and resourceConfig.hideTextAtZero or false
     if not showText then
         ClearSegmentedText(holder)
     end
