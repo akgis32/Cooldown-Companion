@@ -12,6 +12,8 @@ local pairs = pairs
 local ipairs = ipairs
 local unpack = unpack
 local math_floor = math.floor
+local math_sin = math.sin
+local math_pi = math.pi
 local string_format = string.format
 local table_concat = table.concat
 local issecretvalue = issecretvalue
@@ -43,6 +45,10 @@ local KNOWN_TOKENS = {
     keybind = true,
     status = true,
     icon = true,
+}
+
+local KNOWN_EFFECTS = {
+    pulse = true,
 }
 
 local function ParseFormatString(fmt)
@@ -82,16 +88,20 @@ local function ParseFormatString(fmt)
                 -- Unknown conditional token — treat as literal
                 segments[#segments + 1] = { type = "literal", value = fmt:sub(openBrace, closeBrace) }
             end
-        -- Conditional end: {/token}
+        -- Conditional / effect end: {/token} or {/effect}
         elseif condPrefix == "/" then
             local condToken = inner:sub(2)
             if KNOWN_TOKENS[condToken] then
                 segments[#segments + 1] = { type = "cond_end", value = condToken }
+            elseif KNOWN_EFFECTS[condToken] then
+                segments[#segments + 1] = { type = "effect_end", value = condToken }
             else
                 segments[#segments + 1] = { type = "literal", value = fmt:sub(openBrace, closeBrace) }
             end
         elseif KNOWN_TOKENS[inner] then
             segments[#segments + 1] = { type = "token", value = inner }
+        elseif KNOWN_EFFECTS[inner] then
+            segments[#segments + 1] = { type = "effect_start", value = inner }
         else
             -- Unknown token — render as empty
             segments[#segments + 1] = { type = "token", value = inner, unknown = true }
@@ -99,6 +109,20 @@ local function ParseFormatString(fmt)
         pos = closeBrace + 1
     end
     return segments
+end
+
+------------------------------------------------------------------------
+-- EFFECT HELPERS
+------------------------------------------------------------------------
+local function HasAnyEffects(segments)
+    for _, seg in ipairs(segments) do
+        if seg.type == "effect_start" then return true end
+    end
+    return false
+end
+
+local function ComputePulse(now)
+    return 0.7 + 0.3 * math_sin(now * 2 * math_pi)
 end
 
 ------------------------------------------------------------------------
@@ -167,7 +191,7 @@ end
 -- Builds the final display string from pre-parsed segments.
 -- Returns: displayText, secretValue (if one token resolved to a secret)
 ------------------------------------------------------------------------
-local function SubstituteTokens(button, segments, style)
+local function SubstituteTokens(button, segments, style, effectState)
     local buttonData = button.buttonData
     local parts = {}
     local secretValue = nil
@@ -226,6 +250,9 @@ local function SubstituteTokens(button, segments, style)
     -- Conditional skip state for {?token}...{/token} and {!token}...{/token}
     local skipDepth = 0
 
+    -- Pulse effect depth counter for {pulse}...{/pulse} wrapper tags
+    local pulseDepth = 0
+
     for _, seg in ipairs(segments) do
         -- Conditional section handling
         if seg.type == "cond_start" then
@@ -244,11 +271,27 @@ local function SubstituteTokens(button, segments, style)
             end
         elseif skipDepth > 0 then
             -- Inside a false conditional — skip this segment
+
+        elseif seg.type == "effect_start" then
+            if effectState and seg.value == "pulse" then
+                pulseDepth = pulseDepth + 1
+            end
+
+        elseif seg.type == "effect_end" then
+            if effectState and seg.value == "pulse" and pulseDepth > 0 then
+                pulseDepth = pulseDepth - 1
+            end
+
         elseif seg.type == "literal" then
             parts[#parts + 1] = seg.value
+            if pulseDepth > 0 and effectState then
+                effectState.pulseActive = true
+            end
+
         elseif seg.unknown then
             -- Unknown tokens render as empty
         else
+            local prevPartCount = #parts
             local token = seg.value
             if token == "name" then
                 local name = buttonData.customName or buttonData.name or ""
@@ -346,6 +389,11 @@ local function SubstituteTokens(button, segments, style)
                     parts[#parts + 1] = string_format("|T%s:0|t", tostring(iconTex))
                 end
             end
+
+            -- Mark pulse active when a token emitted content inside pulse region
+            if pulseDepth > 0 and effectState and #parts > prevPartCount then
+                effectState.pulseActive = true
+            end
         end
     end
 
@@ -360,7 +408,13 @@ local function UpdateTextDisplay(button)
     local style = button.style
     if not style or not button._textSegments then return end
 
-    local text, secretValue, secretColorToken = SubstituteTokens(button, button._textSegments, style)
+    -- Reset pulse content flag before substitution
+    local es = button._effectState
+    if es then
+        es.pulseActive = false
+    end
+
+    local text, secretValue, secretColorToken = SubstituteTokens(button, button._textSegments, style, es)
 
     if secretValue then
         -- Secret value pass-through: use SetFormattedText with the secret value
@@ -404,6 +458,50 @@ local function UpdateTextDisplay(button)
         button.textString:SetText(text)
     end
 
+    -- Apply pulse alpha effect to the FontString
+    if es then
+        if es.pulseActive then
+            button.textString:SetAlpha(es.pulseAlpha)
+        else
+            button.textString:SetAlpha(1.0)
+        end
+    end
+
+end
+
+------------------------------------------------------------------------
+-- EFFECT ANIMATION ONUPDATE (30Hz)
+------------------------------------------------------------------------
+local EFFECT_INTERVAL = 1 / 30
+
+local function EffectOnUpdate(self, elapsed)
+    self._effectElapsed = (self._effectElapsed or 0) + elapsed
+    if self._effectElapsed < EFFECT_INTERVAL then return end
+    self._effectElapsed = self._effectElapsed - EFFECT_INTERVAL
+
+    local now = GetTime()
+    local es = self._effectState
+    es.pulseAlpha = ComputePulse(now)
+
+    UpdateTextDisplay(self)
+end
+
+local function InstallEffectOnUpdate(button)
+    if HasAnyEffects(button._textSegments) then
+        if not button._effectState then
+            button._effectState = {}
+        end
+        local es = button._effectState
+        es.pulseAlpha = 1.0
+        es.pulseActive = false
+        button._effectElapsed = 0
+        button:SetScript("OnUpdate", EffectOnUpdate)
+    elseif button._effectState then
+        button._effectState = nil
+        button._effectElapsed = nil
+        button:SetScript("OnUpdate", nil)
+        button.textString:SetAlpha(1.0)
+    end
 end
 
 ------------------------------------------------------------------------
@@ -457,6 +555,9 @@ local function UpdateTextStyle(button, newStyle)
     -- Re-parse format string
     local fmt = button.buttonData.textFormat or newStyle.textFormat or "{name}  {status}"
     button._textSegments = ParseFormatString(fmt)
+
+    -- Install or remove effect animation OnUpdate
+    InstallEffectOnUpdate(button)
 
 end
 
@@ -556,6 +657,9 @@ function CooldownCompanion:CreateTextFrame(parent, index, buttonData, style)
     local fmt = buttonData.textFormat or style.textFormat or "{name}  {status}"
     button._textSegments = ParseFormatString(fmt)
 
+    -- Install effect animation if format uses effect tags
+    InstallEffectOnUpdate(button)
+
     -- Aura tracking runtime state
     button._auraSpellID = CooldownCompanion:ResolveAuraSpellID(buttonData)
     button._auraUnit = buttonData.auraUnit or "player"
@@ -598,3 +702,4 @@ end
 ST._UpdateTextDisplay = UpdateTextDisplay
 ST._UpdateTextStyle = UpdateTextStyle
 ST._ParseFormatString = ParseFormatString
+ST._HasAnyEffects = HasAnyEffects

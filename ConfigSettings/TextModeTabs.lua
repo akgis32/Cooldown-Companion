@@ -168,6 +168,10 @@ local function BuildTextAppearanceTab(container, group, style)
         " ",
         {"Example:", 0.7, 0.7, 0.7, true},
         {"{name} {?time}(CD: {time}){/time}", 0.7, 0.7, 0.7, true},
+        " ",
+        {"Visual Effects", 1, 0.82, 0, true},
+        " ",
+        {"|cffcc44ff{pulse}...{/pulse}|r  Smooth alpha oscillation", 0.6, 1, 0.6, true},
     }, tabInfoButtons)
     fmtHeading.right:ClearAllPoints()
     fmtHeading.right:SetPoint("RIGHT", fmtHeading.frame, "RIGHT", -3, 0)
@@ -350,12 +354,32 @@ local function BuildTextAppearanceTab(container, group, style)
     BuildCompactModeControls(container, group, tabInfoButtons)
 end
 
--- Text mode has no effects tab — state is communicated via text color only
+-- Text mode effects tab — documents effect tags available in the format string
 local function BuildTextEffectsTab(container, group, style)
     local label = AceGUI:Create("Label")
-    label:SetText("|cff888888Text mode uses per-token coloring to indicate state.\nNo glow or animation effects are available.|r")
+    label:SetText("|cff888888Text mode supports visual effect tags in the format string.\nUse the Format String Editor to add them.|r")
     label:SetFullWidth(true)
     container:AddChild(label)
+
+    local spacer = AceGUI:Create("Label")
+    spacer:SetText(" ")
+    spacer:SetFullWidth(true)
+    container:AddChild(spacer)
+
+    local effectsLabel = AceGUI:Create("Label")
+    effectsLabel:SetText(table.concat({
+        "|cffffffffAvailable Effects:|r",
+        "",
+        "|cffcc44ff{pulse}...{/pulse}|r  Smooth alpha oscillation (~1Hz)",
+        "",
+        "Composes with conditionals:",
+        "|cff777777{?charges}{pulse}{charges}{/pulse}{/charges}|r",
+        "  Pulse only when charges exist.",
+        "",
+        "Pulse affects the whole line's alpha.",
+    }, "\n"))
+    effectsLabel:SetFullWidth(true)
+    container:AddChild(effectsLabel)
 end
 
 -- Exports

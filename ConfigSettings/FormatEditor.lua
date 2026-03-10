@@ -9,6 +9,7 @@ local AceGUI = LibStub("AceGUI-3.0")
 local CS = ST._configState
 
 local ParseFormatString = ST._ParseFormatString
+local HasAnyEffects = ST._HasAnyEffects
 local CreateInfoButton = ST._CreateInfoButton
 
 -- Module-level reference for lifecycle management
@@ -35,18 +36,22 @@ local COLOR_TOKEN        = "ff00ff00"  -- green
 local COLOR_UNKNOWN      = "ffff4444"  -- red
 local COLOR_COND_PRESENT = "ffffff00"  -- yellow:  {?token} "show if present"
 local COLOR_COND_NEGATED = "ffff8844"  -- orange:  {!token} "show if empty"
+local COLOR_EFFECT       = "ffcc44ff"  -- purple:  {flash}, {pulse}, {glow}
 
 local function BuildSyntaxString(segments)
-    -- Pass 1: pair cond_start with cond_end using a stack
+    -- Pass 1: pair cond_start with cond_end, and effect_start with effect_end
     local stack = {}       -- { {index, value, negated}, ... }
     local openMatched = {} -- openMatched[i] = true if cond_start at index i is paired
     local closeInfo = {}   -- closeInfo[i] = negated (bool) of matched opener, or nil if orphan
+
+    local effectStack = {}
+    local effectOpenMatched = {}
+    local effectCloseMatched = {}
 
     for i, seg in ipairs(segments) do
         if seg.type == "cond_start" then
             stack[#stack + 1] = { index = i, value = seg.value, negated = seg.negated }
         elseif seg.type == "cond_end" then
-            -- Find matching opener on stack (same token name, search top-down)
             for j = #stack, 1, -1 do
                 if stack[j].value == seg.value then
                     openMatched[stack[j].index] = true
@@ -55,10 +60,19 @@ local function BuildSyntaxString(segments)
                     break
                 end
             end
-            -- If no match found, closeInfo[i] remains nil (orphan close tag)
+        elseif seg.type == "effect_start" then
+            effectStack[#effectStack + 1] = { index = i, value = seg.value }
+        elseif seg.type == "effect_end" then
+            for j = #effectStack, 1, -1 do
+                if effectStack[j].value == seg.value then
+                    effectOpenMatched[effectStack[j].index] = true
+                    effectCloseMatched[i] = true
+                    table.remove(effectStack, j)
+                    break
+                end
+            end
         end
     end
-    -- Any cond_start remaining on the stack is unmatched
 
     -- Pass 2: build colorized string using pairing info
     local parts = {}
@@ -74,7 +88,7 @@ local function BuildSyntaxString(segments)
             if openMatched[i] then
                 color = seg.negated and COLOR_COND_NEGATED or COLOR_COND_PRESENT
             else
-                color = COLOR_UNKNOWN  -- red: missing closing bracket
+                color = COLOR_UNKNOWN
             end
             parts[#parts + 1] = "|c" .. color .. "{" .. prefix .. seg.value .. "}|r"
         elseif seg.type == "cond_end" then
@@ -82,8 +96,14 @@ local function BuildSyntaxString(segments)
             if closeInfo[i] ~= nil then
                 color = closeInfo[i] and COLOR_COND_NEGATED or COLOR_COND_PRESENT
             else
-                color = COLOR_UNKNOWN  -- red: orphan close tag
+                color = COLOR_UNKNOWN
             end
+            parts[#parts + 1] = "|c" .. color .. "{/" .. seg.value .. "}|r"
+        elseif seg.type == "effect_start" then
+            local color = effectOpenMatched[i] and COLOR_EFFECT or COLOR_UNKNOWN
+            parts[#parts + 1] = "|c" .. color .. "{" .. seg.value .. "}|r"
+        elseif seg.type == "effect_end" then
+            local color = effectCloseMatched[i] and COLOR_EFFECT or COLOR_UNKNOWN
             parts[#parts + 1] = "|c" .. color .. "{/" .. seg.value .. "}|r"
         end
     end
@@ -137,6 +157,32 @@ local function ValidateFormat(segments)
     for _, entry in ipairs(stack) do
         local prefix = entry.negated and "!" or "?"
         warnings[#warnings + 1] = "{" .. prefix .. entry.value .. "} is never closed"
+    end
+
+    -- Effect pairing
+    local effectStack = {}
+    for i, seg in ipairs(segments) do
+        if seg.type == "effect_start" then
+            effectStack[#effectStack + 1] = { value = seg.value, index = i }
+        elseif seg.type == "effect_end" then
+            local found = false
+            for j = #effectStack, 1, -1 do
+                if effectStack[j].value == seg.value then
+                    if effectStack[j].index == i - 1 then
+                        warnings[#warnings + 1] = "Empty {" .. seg.value .. "}: add content between {" .. seg.value .. "} and {/" .. seg.value .. "}"
+                    end
+                    table.remove(effectStack, j)
+                    found = true
+                    break
+                end
+            end
+            if not found then
+                warnings[#warnings + 1] = "{/" .. seg.value .. "} has no matching opener"
+            end
+        end
+    end
+    for _, entry in ipairs(effectStack) do
+        warnings[#warnings + 1] = "{" .. entry.value .. "} is never closed"
     end
 
     return warnings
@@ -240,6 +286,8 @@ local function PreviewSubstitute(segments, style, mockState)
     local chargeZero = style.chargeFontColorZero or {1, 1, 1, 1}
 
     local skipDepth = 0
+    local pulseDepth = 0
+    local pulseActive = false
     local auraActive = mockState.auraTime and mockState.auraTime > 0
     local timeVal = mockState.time
     local auraVal = mockState.auraTime
@@ -261,11 +309,17 @@ local function PreviewSubstitute(segments, style, mockState)
             end
         elseif skipDepth > 0 then
             -- inside false conditional
+        elseif seg.type == "effect_start" then
+            if seg.value == "pulse" then pulseDepth = pulseDepth + 1 end
+        elseif seg.type == "effect_end" then
+            if seg.value == "pulse" and pulseDepth > 0 then pulseDepth = pulseDepth - 1 end
         elseif seg.type == "literal" then
             parts[#parts + 1] = seg.value
+            if pulseDepth > 0 then pulseActive = true end
         elseif seg.unknown then
             -- unknown tokens render empty
         else
+            local prevPartCount = #parts
             local token = seg.value
             if token == "name" then
                 parts[#parts + 1] = WrapPreviewColor(mockState.name or "Fireball", baseColor)
@@ -314,10 +368,13 @@ local function PreviewSubstitute(segments, style, mockState)
                     parts[#parts + 1] = string.format("|T%s:0|t", tostring(mockState.icon))
                 end
             end
+            if pulseDepth > 0 and #parts > prevPartCount then
+                pulseActive = true
+            end
         end
     end
 
-    return table.concat(parts)
+    return table.concat(parts), pulseActive
 end
 
 ------------------------------------------------------------------------
@@ -399,7 +456,7 @@ local function OpenFormatEditor(style, groupId)
     local window = AceGUI:Create("Window")
     window:SetTitle("Format String Editor")
     window:SetWidth(400)
-    window:SetHeight(520)
+    window:SetHeight(560)
     window:SetLayout("List")
     window:EnableResize(false)
     formatEditorFrame = window
@@ -458,13 +515,25 @@ local function OpenFormatEditor(style, groupId)
     previewHeading:SetFullWidth(true)
     window:AddChild(previewHeading)
 
-    local previewLabels = {}
+    local previewPrefixes = {}
+    local previewContents = {}
     for i = 1, 3 do
-        local row = AceGUI:Create("Label")
-        row:SetFullWidth(true)
-        row:SetFontObject(GameFontHighlight)
-        window:AddChild(row)
-        previewLabels[i] = row
+        local rowGroup = AceGUI:Create("SimpleGroup")
+        rowGroup:SetFullWidth(true)
+        rowGroup:SetLayout("Flow")
+        window:AddChild(rowGroup)
+
+        local prefix = AceGUI:Create("Label")
+        prefix:SetRelativeWidth(0.25)
+        prefix:SetFontObject(GameFontHighlight)
+        rowGroup:AddChild(prefix)
+        previewPrefixes[i] = prefix
+
+        local content = AceGUI:Create("Label")
+        content:SetRelativeWidth(0.75)
+        content:SetFontObject(GameFontHighlight)
+        rowGroup:AddChild(content)
+        previewContents[i] = content
     end
 
     -- ================================================================
@@ -473,12 +542,43 @@ local function OpenFormatEditor(style, groupId)
     local currentStyle = style
     local currentGroupId = groupId
 
+    -- Per-row pulse state: previewPulse[i] = true if that row has active pulse content
+    local previewPulse = {}
+
     local function UpdateDisplay()
         local segments = ParseFormatString(currentRawText)
         local mockStates = BuildMockStates(currentStyle)
+        local anyPulse = false
         for i, mock in ipairs(mockStates) do
-            local preview = PreviewSubstitute(segments, currentStyle, mock.state)
-            previewLabels[i]:SetText(mock.label .. "  " .. preview)
+            local preview, hasPulse = PreviewSubstitute(segments, currentStyle, mock.state)
+            previewPrefixes[i]:SetText(mock.label)
+            previewContents[i]:SetText(preview)
+            previewPulse[i] = hasPulse
+            if hasPulse then anyPulse = true end
+        end
+
+        -- Install or remove pulse animation OnUpdate
+        if anyPulse then
+            local wf = window.frame
+            wf._pulseElapsed = 0
+            wf:SetScript("OnUpdate", function(self, elapsed)
+                self._pulseElapsed = (self._pulseElapsed or 0) + elapsed
+                if self._pulseElapsed < (1 / 30) then return end
+                self._pulseElapsed = self._pulseElapsed - (1 / 30)
+                local alpha = 0.7 + 0.3 * math.sin(GetTime() * 2 * math.pi)
+                for idx = 1, 3 do
+                    if previewPulse[idx] then
+                        previewContents[idx].label:SetAlpha(alpha)
+                    else
+                        previewContents[idx].label:SetAlpha(1.0)
+                    end
+                end
+            end)
+        else
+            window.frame:SetScript("OnUpdate", nil)
+            for idx = 1, 3 do
+                previewContents[idx].label:SetAlpha(1.0)
+            end
         end
 
         local warnings = ValidateFormat(segments)
@@ -529,6 +629,10 @@ local function OpenFormatEditor(style, groupId)
         {"|cff99ff99{keybind}|r  Keybind text", 1, 1, 1},
         {"|cff99ff99{status}|r  Shows ready, cooldown, or aura automatically", 1, 1, 1},
         {"|cff99ff99{icon}|r  Inline spell icon", 1, 1, 1},
+        " ",
+        {"Visual Effects", 1, 0.82, 0},
+        " ",
+        {"|cffcc44ff{pulse}...{/pulse}|r  Smooth alpha oscillation", 1, 1, 1},
     }, tokenHeading)
     tokenHeading.right:ClearAllPoints()
     tokenHeading.right:SetPoint("RIGHT", tokenHeading.frame, "RIGHT", -3, 0)
@@ -609,6 +713,45 @@ local function OpenFormatEditor(style, groupId)
     condGroup:AddChild(hideBtn)
 
     -- ================================================================
+    -- EFFECT INSERT BUTTONS
+    -- ================================================================
+    local effectHeading = AceGUI:Create("Heading")
+    effectHeading:SetText("Insert Effect")
+    effectHeading:SetFullWidth(true)
+    window:AddChild(effectHeading)
+
+    local effectInfo = CreateInfoButton(effectHeading.frame, effectHeading.label, "LEFT", "RIGHT", 4, 0, {
+        {"Visual Effects", 1, 0.82, 0, true},
+        " ",
+        {"Wrap tokens or text in effect tags to add", 1, 1, 1, true},
+        {"animated visual indicators.", 1, 1, 1, true},
+        " ",
+        {"|cffcc44ff{pulse}|r  Smooth sine alpha oscillation (~1Hz)", 1, 1, 1, true},
+        " ",
+        {"Composes with conditionals:", 0.7, 0.7, 0.7, true},
+        {"{?charges}{pulse}{charges}{/pulse}{/charges}", 0.7, 0.7, 0.7, true},
+        {"Pulse only when charges exist.", 0.7, 0.7, 0.7, true},
+        " ",
+        {"Pulse affects the whole line's alpha.", 0.7, 0.7, 0.7, true},
+    }, effectHeading)
+    effectHeading.right:ClearAllPoints()
+    effectHeading.right:SetPoint("RIGHT", effectHeading.frame, "RIGHT", -3, 0)
+    effectHeading.right:SetPoint("LEFT", effectInfo, "RIGHT", 4, 0)
+
+    local effectGroup = AceGUI:Create("SimpleGroup")
+    effectGroup:SetFullWidth(true)
+    effectGroup:SetLayout("Flow")
+    window:AddChild(effectGroup)
+
+    local pulseBtn = AceGUI:Create("Button")
+    pulseBtn:SetText("{pulse}")
+    pulseBtn:SetAutoWidth(true)
+    pulseBtn:SetCallback("OnClick", function()
+        InsertAtCursor("{pulse}{/pulse}", 7)
+    end)
+    effectGroup:AddChild(pulseBtn)
+
+    -- ================================================================
     -- SAVE BUTTON
     -- ================================================================
     local saveBtn = AceGUI:Create("Button")
@@ -663,6 +806,8 @@ local function OpenFormatEditor(style, groupId)
     -- LIFECYCLE
     -- ================================================================
     window:SetCallback("OnClose", function(widget)
+        -- Stop pulse animation
+        widget.frame:SetScript("OnUpdate", nil)
         -- Auto-save on close
         if currentRawText and currentRawText ~= "" and currentRawText ~= (currentStyle.textFormat or "{name}  {status}") then
             currentStyle.textFormat = currentRawText
