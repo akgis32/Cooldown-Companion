@@ -165,6 +165,8 @@ local function BuildTextAppearanceTab(container, group, style)
         " ",
         {"|cffffff00{?token}|r...|cffffff00{/token}|r  Show when token has a value", 1, 1, 1, true},
         {"|cffff8844{!token}|r...|cffff8844{/token}|r  Show when token is empty", 1, 1, 1, true},
+        {"(Applies to: time, charges, maxcharges,", 0.5, 0.5, 0.5, true},
+        {"stacks, aura, keybind)", 0.5, 0.5, 0.5, true},
         " ",
         {"Example:", 0.7, 0.7, 0.7, true},
         {"|cff00ff00{name}|r |cffffff00{?time}|r(CD: |cff00ff00{time}|r)|cffffff00{/time}|r", 0.7, 0.7, 0.7, true},

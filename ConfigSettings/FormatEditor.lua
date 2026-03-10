@@ -18,12 +18,11 @@ local formatEditorFrame = nil
 -- Token list for insert buttons
 local TOKEN_LIST = {"name", "time", "charges", "maxcharges", "stacks", "aura", "keybind", "status", "icon"}
 
--- Token display names for conditional dropdown (reuses TOKEN_LIST order)
+-- Tokens available as conditional targets (excludes always-present tokens: name, status, icon)
 local COND_TOKEN_LIST = {}
-local COND_TOKEN_ORDER = {}
-for _, t in ipairs(TOKEN_LIST) do
+local COND_TOKEN_ORDER = {"time", "charges", "maxcharges", "stacks", "aura", "keybind"}
+for _, t in ipairs(COND_TOKEN_ORDER) do
     COND_TOKEN_LIST[t] = t
-    COND_TOKEN_ORDER[#COND_TOKEN_ORDER + 1] = t
 end
 
 ------------------------------------------------------------------------
@@ -144,6 +143,18 @@ local function ValidateFormat(segments)
     for _, seg in ipairs(segments) do
         if seg.type == "token" and seg.unknown then
             warnings[#warnings + 1] = "{" .. seg.value .. "} is not a recognized token"
+        end
+    end
+
+    -- Always-present conditional warnings
+    local ALWAYS_PRESENT = { name = true, status = true, icon = true }
+    for _, seg in ipairs(segments) do
+        if seg.type == "cond_start" and ALWAYS_PRESENT[seg.value] then
+            if seg.negated then
+                warnings[#warnings + 1] = "{!" .. seg.value .. "} is always false \xe2\x80\x94 " .. seg.value .. " is always available"
+            else
+                warnings[#warnings + 1] = "{?" .. seg.value .. "} is always true \xe2\x80\x94 " .. seg.value .. " is always available"
+            end
         end
     end
 
@@ -733,65 +744,6 @@ local function OpenFormatEditor(style, groupId)
     end
 
     -- ================================================================
-    -- CONDITIONAL INSERT BUTTONS
-    -- ================================================================
-    local condHeading = AceGUI:Create("Heading")
-    condHeading:SetText("Insert Conditional")
-    condHeading:SetFullWidth(true)
-    window:AddChild(condHeading)
-
-    local condInfo = CreateInfoButton(condHeading.frame, condHeading.label, "LEFT", "RIGHT", 4, 0, {
-        {"Conditional Sections", 1, 0.82, 0, true},
-        " ",
-        {"Conditionals let you show or hide parts of the", 1, 1, 1, true},
-        {"format string based on whether a value exists.", 1, 1, 1, true},
-        " ",
-        {"|cffffff00{?token}|r...|cffffff00{/token}|r", 1, 1, 1, true},
-        {"  Show the ... text only when the token has a value.", 1, 1, 1, true},
-        {"  Example: |cffffff00{?time}|rCD: |cff00ff00{time}|r|cffffff00{/time}|r", 0.7, 0.7, 0.7, true},
-        {"  Shows 'CD: 1:23' on cooldown, nothing when ready.", 0.7, 0.7, 0.7, true},
-        " ",
-        {"|cffff8844{!token}|r...|cffff8844{/token}|r", 1, 1, 1, true},
-        {"  Show the ... text only when the token is empty.", 1, 1, 1, true},
-        {"  Example: |cffff8844{!time}|rReady!|cffff8844{/time}|r", 0.7, 0.7, 0.7, true},
-        {"  Shows 'Ready!' only when not on cooldown.", 0.7, 0.7, 0.7, true},
-    }, condHeading)
-    condHeading.right:ClearAllPoints()
-    condHeading.right:SetPoint("RIGHT", condHeading.frame, "RIGHT", -3, 0)
-    condHeading.right:SetPoint("LEFT", condInfo, "RIGHT", 4, 0)
-
-    local condGroup = AceGUI:Create("SimpleGroup")
-    condGroup:SetFullWidth(true)
-    condGroup:SetLayout("Flow")
-    window:AddChild(condGroup)
-
-    local condDropdown = AceGUI:Create("Dropdown")
-    condDropdown:SetLabel("")
-    condDropdown:SetWidth(150)
-    condDropdown:SetList(COND_TOKEN_LIST, COND_TOKEN_ORDER)
-    condDropdown:SetValue("time")
-    condGroup:AddChild(condDropdown)
-
-    local function InsertConditional(prefix)
-        local token = condDropdown:GetValue()
-        local open = "{" .. prefix .. token .. "}"
-        local close = "{/" .. token .. "}"
-        InsertAtCursor(open .. close, #open)
-    end
-
-    local showBtn = AceGUI:Create("Button")
-    showBtn:SetText("Show if present")
-    showBtn:SetAutoWidth(true)
-    showBtn:SetCallback("OnClick", function() InsertConditional("?") end)
-    condGroup:AddChild(showBtn)
-
-    local hideBtn = AceGUI:Create("Button")
-    hideBtn:SetText("Show if empty")
-    hideBtn:SetAutoWidth(true)
-    hideBtn:SetCallback("OnClick", function() InsertConditional("!") end)
-    condGroup:AddChild(hideBtn)
-
-    -- ================================================================
     -- EFFECT INSERT BUTTONS
     -- ================================================================
     local effectHeading = AceGUI:Create("Heading")
@@ -894,11 +846,72 @@ local function OpenFormatEditor(style, groupId)
     window:AddChild(customColorPicker)
 
     -- ================================================================
-    -- SAVE BUTTON
+    -- CONDITIONAL INSERT BUTTONS
+    -- ================================================================
+    local condHeading = AceGUI:Create("Heading")
+    condHeading:SetText("Insert Conditional")
+    condHeading:SetFullWidth(true)
+    window:AddChild(condHeading)
+
+    local condInfo = CreateInfoButton(condHeading.frame, condHeading.label, "LEFT", "RIGHT", 4, 0, {
+        {"Conditional Sections", 1, 0.82, 0, true},
+        " ",
+        {"Conditionals let you show or hide parts of the", 1, 1, 1, true},
+        {"format string based on whether a value exists.", 1, 1, 1, true},
+        " ",
+        {"|cffffff00{?token}|r...|cffffff00{/token}|r", 1, 1, 1, true},
+        {"  Show the ... text only when the token has a value.", 1, 1, 1, true},
+        {"  Example: |cffffff00{?time}|rCD: |cff00ff00{time}|r|cffffff00{/time}|r", 0.7, 0.7, 0.7, true},
+        {"  Shows 'CD: 1:23' on cooldown, nothing when ready.", 0.7, 0.7, 0.7, true},
+        " ",
+        {"|cffff8844{!token}|r...|cffff8844{/token}|r", 1, 1, 1, true},
+        {"  Show the ... text only when the token is empty.", 1, 1, 1, true},
+        {"  Example: |cffff8844{!time}|rReady!|cffff8844{/time}|r", 0.7, 0.7, 0.7, true},
+        {"  Shows 'Ready!' only when not on cooldown.", 0.7, 0.7, 0.7, true},
+        " ",
+        {"Supported: time, charges, maxcharges,", 0.5, 0.5, 0.5, true},
+        {"stacks, aura, keybind", 0.5, 0.5, 0.5, true},
+    }, condHeading)
+    condHeading.right:ClearAllPoints()
+    condHeading.right:SetPoint("RIGHT", condHeading.frame, "RIGHT", -3, 0)
+    condHeading.right:SetPoint("LEFT", condInfo, "RIGHT", 4, 0)
+
+    local condGroup = AceGUI:Create("SimpleGroup")
+    condGroup:SetFullWidth(true)
+    condGroup:SetLayout("Flow")
+    window:AddChild(condGroup)
+
+    local condDropdown = AceGUI:Create("Dropdown")
+    condDropdown:SetLabel("")
+    condDropdown:SetWidth(105)
+    condDropdown:SetList(COND_TOKEN_LIST, COND_TOKEN_ORDER)
+    condDropdown:SetValue("time")
+    condGroup:AddChild(condDropdown)
+
+    local function InsertConditional(prefix)
+        local token = condDropdown:GetValue()
+        local open = "{" .. prefix .. token .. "}"
+        local close = "{/" .. token .. "}"
+        InsertAtCursor(open .. close, #open)
+    end
+
+    local showBtn = AceGUI:Create("Button")
+    showBtn:SetText("Show if present")
+    showBtn:SetAutoWidth(true)
+    showBtn:SetCallback("OnClick", function() InsertConditional("?") end)
+    condGroup:AddChild(showBtn)
+
+    local hideBtn = AceGUI:Create("Button")
+    hideBtn:SetText("Show if empty")
+    hideBtn:SetAutoWidth(true)
+    hideBtn:SetCallback("OnClick", function() InsertConditional("!") end)
+    condGroup:AddChild(hideBtn)
+
+    -- ================================================================
+    -- SAVE BUTTON (clamped to window bottom)
     -- ================================================================
     local saveBtn = AceGUI:Create("Button")
     saveBtn:SetText("Save & Close")
-    saveBtn:SetFullWidth(true)
     saveBtn:SetCallback("OnClick", function()
         if currentRawText and currentRawText ~= "" then
             style.textFormat = currentRawText
@@ -907,7 +920,14 @@ local function OpenFormatEditor(style, groupId)
         end
         window:Hide()
     end)
-    window:AddChild(saveBtn)
+    -- Position outside AceGUI layout, clamped to window bottom
+    saveBtn.frame:SetParent(window.frame)
+    saveBtn.frame:ClearAllPoints()
+    saveBtn.frame:SetPoint("BOTTOMLEFT", window.frame, "BOTTOMLEFT", 15, 15)
+    saveBtn.frame:SetPoint("BOTTOMRIGHT", window.frame, "BOTTOMRIGHT", -15, 15)
+    saveBtn.frame:SetHeight(24)
+    saveBtn.frame:Show()
+    window._saveBtn = saveBtn
 
     -- ================================================================
     -- LIVE EDIT CALLBACKS
@@ -950,6 +970,11 @@ local function OpenFormatEditor(style, groupId)
     window:SetCallback("OnClose", function(widget)
         -- Stop pulse animation
         widget.frame:SetScript("OnUpdate", nil)
+        -- Release save button (not part of AceGUI layout)
+        if widget._saveBtn then
+            AceGUI:Release(widget._saveBtn)
+            widget._saveBtn = nil
+        end
         -- Auto-save on close
         if currentRawText and currentRawText ~= "" and currentRawText ~= (currentStyle.textFormat or "{name}  {status}") then
             currentStyle.textFormat = currentRawText
