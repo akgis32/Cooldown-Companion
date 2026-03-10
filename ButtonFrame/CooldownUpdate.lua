@@ -39,6 +39,9 @@ local UpdateIconModeGlows = ST._UpdateIconModeGlows
 local UpdateBarDisplay = ST._UpdateBarDisplay
 local IsConfigButtonForceVisible = ST.IsConfigButtonForceVisible
 
+-- Imports from TextMode
+local UpdateTextDisplay = ST._UpdateTextDisplay
+
 -- IsItemEquippable from Helpers (exported on CooldownCompanion)
 local IsItemEquippable = CooldownCompanion.IsItemEquippable
 local TARGET_SWITCH_SAFETY_CAP = 0.60
@@ -861,7 +864,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
             local slotShown = ProbeActionSlotCooldownForSpell(buttonData.id, cooldownSpellId)
             if slotShown ~= nil then
                 button._mainCDShown = slotShown and not isGCDOnly
-            elseif not auraOverrideActive and button._isBar then
+            elseif not auraOverrideActive and (button._isBar or button._isText) then
                 button._mainCDShown = button.cooldown:IsShown() and not isGCDOnly
             elseif not auraOverrideActive then
                 -- Icon mode: no action bar slot, fall back to scratchCooldown.
@@ -931,16 +934,16 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         button._readyGlowStartTime = nil
     end
 
-    if not button._isBar then
+    if not button._isBar and not button._isText then
         UpdateIconModeVisuals(button, buttonData, style, fetchOk, isOnGCD, isGCDOnly)
     end
 
     if buttonData.hasCharges then
       if buttonData.type == "spell" then
-        -- Bar mode: charge bars are driven by the recharge DurationObject, not
+        -- Bar/text mode: charge bars are driven by the recharge DurationObject, not
         -- the main spell CD or GCD. Save and clear the main CD so recharge
         -- timing fully controls bar fill for charge spells.
-        if button._isBar and not auraOverrideActive and button._chargeDurationObj then
+        if (button._isBar or button._isText) and not auraOverrideActive and button._chargeDurationObj then
             button._durationObj = nil
         end
 
@@ -973,7 +976,7 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         end
 
         if not auraOverrideActive and button._chargeDurationObj then
-            if not button._isBar then
+            if not button._isBar and not button._isText then
                 -- Icon mode: always set _durationObj, show recharge radial
                 button._durationObj = button._chargeDurationObj
                 if not button._chargeDurationObj:HasSecretValues() then
@@ -983,10 +986,10 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                     button.cooldown:SetCooldown(charges.cooldownStartTime, charges.cooldownDuration)
                 end
             elseif button._chargeRecharging then
-                -- Bar mode: only set _durationObj if actually recharging
+                -- Bar/text mode: only set _durationObj if actually recharging
                 button._durationObj = button._chargeDurationObj
             end
-        elseif not button._isBar and not auraOverrideActive and charges then
+        elseif not button._isBar and not button._isText and not auraOverrideActive and charges then
             -- Icon mode fallback
             button.cooldown:SetCooldown(charges.cooldownStartTime, charges.cooldownDuration)
         end
@@ -1200,12 +1203,12 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         end
     end
 
-    -- Bar mode: update bar display after charges are resolved
-    if button._isBar then
+    -- Mode-specific visual dispatch
+    if button._isText then
+        UpdateTextDisplay(button)
+    elseif button._isBar then
         UpdateBarDisplay(button)
-    end
-
-    if not button._isBar then
+    else
         UpdateIconModeGlows(button, buttonData, style, procOverlayActive)
     end
 end

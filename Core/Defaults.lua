@@ -302,6 +302,22 @@ local defaults = {
             barReadyFontOutline = "OUTLINE",
             barUpdateInterval = 0.025,  -- seconds between bar fill updates (~40Hz default)
             barTexture = "Solid",
+            -- Text display mode defaults
+            textWidth = 200,
+            textHeight = 20,
+            textFormat = "{name}  {status}",
+            textFont = "Friz Quadrata TT",
+            textFontSize = 12,
+            textFontOutline = "OUTLINE",
+            textFontColor = {1, 1, 1, 1},
+            textAlignment = "LEFT",
+            textCooldownColor = {1, 0.3, 0.3, 1},
+            textReadyColor = {0.2, 1.0, 0.2, 1},
+            textAuraColor = {0, 0.925, 1, 1},
+            textBgColor = {0, 0, 0, 0},
+            textBorderSize = 0,
+            textBorderColor = {0, 0, 0, 1},
+            showTextTooltips = false,
         },
         locked = false,
         cdmHidden = false,
@@ -549,5 +565,36 @@ ST.OVERRIDE_SECTIONS = {
         label = "Ready Text",
         keys = {"showBarReadyText", "barReadyText", "barReadyTextColor", "barReadyFontSize", "barReadyFont", "barReadyFontOutline"},
         modes = {bars = true},
+    },
+    -- Text Mode
+    textDimensions = {
+        label = "Text Dimensions",
+        keys = {"textWidth", "textHeight"},
+        modes = {text = true},
+    },
+    textFormat = {
+        label = "Format String",
+        keys = {"textFormat"},
+        modes = {text = true},
+    },
+    textFont = {
+        label = "Text Font",
+        keys = {"textFont", "textFontSize", "textFontOutline", "textAlignment"},
+        modes = {text = true},
+    },
+    textColors = {
+        label = "Text Colors",
+        keys = {"textFontColor", "textCooldownColor", "textReadyColor", "textAuraColor"},
+        modes = {text = true},
+    },
+    textBackground = {
+        label = "Text Background",
+        keys = {"textBgColor", "textBorderSize", "textBorderColor"},
+        modes = {text = true},
+    },
+    textTooltips = {
+        label = "Text Tooltips",
+        keys = {"showTextTooltips"},
+        modes = {text = true},
     },
 }

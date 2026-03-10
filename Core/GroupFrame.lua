@@ -505,8 +505,11 @@ end
 local function GetButtonDimensions(group)
     local style = group.style or {}
     local isBarMode = group.displayMode == "bars"
+    local isTextMode = group.displayMode == "text"
     local w, h
-    if isBarMode then
+    if isTextMode then
+        w, h = style.textWidth or 200, style.textHeight or 20
+    elseif isBarMode then
         w, h = style.barLength or 180, style.barHeight or 20
         if style.barFillVertical then w, h = h, w end
     elseif style.maintainAspectRatio then
@@ -548,7 +551,9 @@ function CooldownCompanion:PopulateGroupButtons(groupId)
             visibleIndex = visibleIndex + 1
             local effectiveStyle = self:GetEffectiveStyle(style, buttonData)
             local button
-            if isBarMode then
+            if group.displayMode == "text" then
+                button = self:CreateTextFrame(frame, i, buttonData, effectiveStyle)
+            elseif isBarMode then
                 button = self:CreateBarFrame(frame, i, buttonData, effectiveStyle)
             else
                 button = self:CreateButtonFrame(frame, i, buttonData, effectiveStyle)
@@ -570,7 +575,7 @@ function CooldownCompanion:PopulateGroupButtons(groupId)
             table_insert(frame.buttons, button)
 
             -- Add to Masque if enabled (after button is shown and in the list, icons only)
-            if not isBarMode and group.masqueEnabled then
+            if not isBarMode and group.displayMode ~= "text" and group.masqueEnabled then
                 self:AddButtonToMasque(groupId, button)
             end
         end

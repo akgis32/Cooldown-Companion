@@ -236,6 +236,8 @@ local function RefreshColumn1(preserveDrag)
         modeBadge:SetSize(14, 14)
         if group.displayMode == "bars" then
             modeBadge:SetAtlas("CreditsScreen-Assets-Buttons-Pause")
+        elseif group.displayMode == "text" then
+            modeBadge:SetAtlas("communities-icon-chat")
         else
             modeBadge:SetAtlas("UI-QuestPoi-QuestNumber-SuperTracked")
         end
@@ -433,24 +435,33 @@ local function RefreshColumn1(preserveDrag)
                         end
                         UIDropDownMenu_AddButton(info, level)
 
-                        -- Switch display mode
-                        info = UIDropDownMenu_CreateInfo()
-                        info.text = group.displayMode == "bars" and "Switch to Icons" or "Switch to Bars"
-                        info.notCheckable = true
-                        info.func = function()
-                            CloseDropDownMenus()
-                            local wasBars = group.displayMode == "bars"
-                            group.displayMode = wasBars and "icons" or "bars"
-                            if not wasBars then
-                                group.style.orientation = "vertical"
+                        -- Switch display mode (3-way: Icons / Bars / Text)
+                        local switchModes = {
+                            {mode = "icons", label = "Icons"},
+                            {mode = "bars", label = "Bars"},
+                            {mode = "text", label = "Text"},
+                        }
+                        for _, entry in ipairs(switchModes) do
+                            if group.displayMode ~= entry.mode then
+                                info = UIDropDownMenu_CreateInfo()
+                                info.text = "Switch to " .. entry.label
+                                info.notCheckable = true
+                                local targetMode = entry.mode
+                                info.func = function()
+                                    CloseDropDownMenus()
+                                    group.displayMode = targetMode
+                                    if targetMode == "bars" or targetMode == "text" then
+                                        group.style.orientation = "vertical"
+                                    end
+                                    if targetMode ~= "icons" and group.masqueEnabled then
+                                        CooldownCompanion:ToggleGroupMasque(groupId, false)
+                                    end
+                                    CooldownCompanion:RefreshGroupFrame(groupId)
+                                    CooldownCompanion:RefreshConfigPanel()
+                                end
+                                UIDropDownMenu_AddButton(info, level)
                             end
-                            if group.displayMode == "bars" and group.masqueEnabled then
-                                CooldownCompanion:ToggleGroupMasque(groupId, false)
-                            end
-                            CooldownCompanion:RefreshGroupFrame(groupId)
-                            CooldownCompanion:RefreshConfigPanel()
                         end
-                        UIDropDownMenu_AddButton(info, level)
 
                         -- Delete
                         info = UIDropDownMenu_CreateInfo()
@@ -1156,9 +1167,12 @@ local function RefreshColumn1(preserveDrag)
             return name
         end
 
-        -- Top row: "New Icon Group" (left) | "New Bar Group" (right)
+        -- Top row: "New Icon Group" | "New Bar Group" | "New Text Group" (thirds)
+        local barW = CS.col1ButtonBar:GetWidth() or 300
+        local thirdW = barW / 3
+
         local newIconBtn = AceGUI:Create("Button")
-        newIconBtn:SetText("New Icon Group")
+        newIconBtn:SetText("Icon Group")
         newIconBtn:SetCallback("OnClick", function()
             local groupId = CooldownCompanion:CreateGroup(GenerateGroupName("New Group"))
             CS.selectedGroup = groupId
@@ -1169,13 +1183,13 @@ local function RefreshColumn1(preserveDrag)
         newIconBtn.frame:SetParent(CS.col1ButtonBar)
         newIconBtn.frame:ClearAllPoints()
         newIconBtn.frame:SetPoint("TOPLEFT", CS.col1ButtonBar, "TOPLEFT", 0, -1)
-        newIconBtn.frame:SetPoint("RIGHT", CS.col1ButtonBar, "CENTER", -2, 0)
+        newIconBtn.frame:SetWidth(thirdW - 2)
         newIconBtn.frame:SetHeight(28)
         newIconBtn.frame:Show()
         table.insert(CS.col1BarWidgets, newIconBtn)
 
         local newBarBtn = AceGUI:Create("Button")
-        newBarBtn:SetText("New Bar Group")
+        newBarBtn:SetText("Bar Group")
         newBarBtn:SetCallback("OnClick", function()
             local groupId = CooldownCompanion:CreateGroup(GenerateGroupName("New Group"))
             local group = CooldownCompanion.db.profile.groups[groupId]
@@ -1192,11 +1206,35 @@ local function RefreshColumn1(preserveDrag)
         end)
         newBarBtn.frame:SetParent(CS.col1ButtonBar)
         newBarBtn.frame:ClearAllPoints()
-        newBarBtn.frame:SetPoint("TOPLEFT", CS.col1ButtonBar, "TOP", 2, -1)
-        newBarBtn.frame:SetPoint("TOPRIGHT", CS.col1ButtonBar, "TOPRIGHT", 0, 0)
+        newBarBtn.frame:SetPoint("LEFT", newIconBtn.frame, "RIGHT", 2, 0)
+        newBarBtn.frame:SetWidth(thirdW - 2)
         newBarBtn.frame:SetHeight(28)
         newBarBtn.frame:Show()
         table.insert(CS.col1BarWidgets, newBarBtn)
+
+        local newTextBtn = AceGUI:Create("Button")
+        newTextBtn:SetText("Text Group")
+        newTextBtn:SetCallback("OnClick", function()
+            local groupId = CooldownCompanion:CreateGroup(GenerateGroupName("New Group"))
+            local group = CooldownCompanion.db.profile.groups[groupId]
+            group.displayMode = "text"
+            group.style.orientation = "vertical"
+            if group.masqueEnabled then
+                CooldownCompanion:ToggleGroupMasque(groupId, false)
+            end
+            CooldownCompanion:RefreshGroupFrame(groupId)
+            CS.selectedGroup = groupId
+            CS.selectedButton = nil
+            wipe(CS.selectedButtons)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        newTextBtn.frame:SetParent(CS.col1ButtonBar)
+        newTextBtn.frame:ClearAllPoints()
+        newTextBtn.frame:SetPoint("LEFT", newBarBtn.frame, "RIGHT", 2, 0)
+        newTextBtn.frame:SetPoint("TOPRIGHT", CS.col1ButtonBar, "TOPRIGHT", 0, -1)
+        newTextBtn.frame:SetHeight(28)
+        newTextBtn.frame:Show()
+        table.insert(CS.col1BarWidgets, newTextBtn)
 
         -- Bottom row: "New Folder" (left) | "Import Group" (right)
         local newFolderBtn = AceGUI:Create("Button")
