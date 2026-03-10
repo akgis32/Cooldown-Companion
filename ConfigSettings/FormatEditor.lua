@@ -20,7 +20,7 @@ local TOKEN_LIST = {"name", "time", "charges", "maxcharges", "stacks", "aura", "
 
 -- Tokens available as conditional targets (excludes always-present tokens: name, status, icon)
 local COND_TOKEN_LIST = {}
-local COND_TOKEN_ORDER = {"time", "charges", "maxcharges", "stacks", "aura", "keybind"}
+local COND_TOKEN_ORDER = {"time", "available", "charges", "maxcharges", "stacks", "aura", "keybind", "pandemic", "proc", "unusable", "oor"}
 for _, t in ipairs(COND_TOKEN_ORDER) do
     COND_TOKEN_LIST[t] = t
 end
@@ -706,7 +706,7 @@ local function OpenFormatEditor(style, groupId, opts)
         {"Available Tokens", 1, 0.82, 0},
         " ",
         {"|cff00ff00{name}|r  Spell/item display name", 1, 1, 1},
-        {"|cff00ff00{time}|r  Cooldown remaining", 1, 1, 1},
+        {"|cff00ff00{time}|r  Cooldown time remaining", 1, 1, 1},
         {"|cff00ff00{charges}|r  Current charges", 1, 1, 1},
         {"|cff00ff00{maxcharges}|r  Maximum charges", 1, 1, 1},
         {"|cff00ff00{stacks}|r  Aura stacks / item count", 1, 1, 1},
@@ -714,6 +714,11 @@ local function OpenFormatEditor(style, groupId, opts)
         {"|cff00ff00{keybind}|r  Keybind text", 1, 1, 1},
         {"|cff00ff00{status}|r  Shows ready, cooldown, or aura automatically", 1, 1, 1},
         {"|cff00ff00{icon}|r  Inline spell icon", 1, 1, 1},
+        {"|cff00ff00{pandemic}|r  |cff888888(conditional only)|r Aura in pandemic window", 1, 1, 1},
+        {"|cff00ff00{proc}|r  |cff888888(conditional only)|r Spell proc overlay active", 1, 1, 1},
+        {"|cff00ff00{available}|r  |cff888888(conditional only)|r Off cooldown / has charges", 1, 1, 1},
+        {"|cff00ff00{unusable}|r  |cff888888(conditional only)|r Spell/item not usable", 1, 1, 1},
+        {"|cff00ff00{oor}|r  |cff888888(conditional only)|r Target out of range", 1, 1, 1},
         " ",
         {"Visual Effects", 1, 0.82, 0},
         " ",
@@ -856,23 +861,31 @@ local function OpenFormatEditor(style, groupId, opts)
     window:AddChild(condHeading)
 
     local condInfo = CreateInfoButton(condHeading.frame, condHeading.label, "LEFT", "RIGHT", 4, 0, {
-        {"Conditional Sections", 1, 0.82, 0, true},
+        {"Available Conditionals", 1, 0.82, 0, true},
         " ",
-        {"Conditionals let you show or hide parts of the", 1, 1, 1, true},
-        {"format string based on whether a value exists.", 1, 1, 1, true},
+        {"Show or hide parts of the format string based", 1, 1, 1, true},
+        {"on whether a condition is true.", 1, 1, 1, true},
         " ",
-        {"|cffffff00{?token}|r...|cffffff00{/token}|r", 1, 1, 1, true},
-        {"  Show the ... text only when the token has a value.", 1, 1, 1, true},
-        {"  Example: |cffffff00{?time}|rCD: |cff00ff00{time}|r|cffffff00{/time}|r", 0.7, 0.7, 0.7, true},
-        {"  Shows 'CD: 1:23' on cooldown, nothing when ready.", 0.7, 0.7, 0.7, true},
+        {"|cffffff00{time}|r  Cooldown time remaining", 1, 1, 1, true},
+        {"|cffffff00{available}|r  Off cooldown / has charges", 1, 1, 1, true},
+        {"|cffffff00{charges}|r  Current charges", 1, 1, 1, true},
+        {"|cffffff00{maxcharges}|r  Maximum charges", 1, 1, 1, true},
+        {"|cffffff00{stacks}|r  Aura stacks / item count", 1, 1, 1, true},
+        {"|cffffff00{aura}|r  Aura duration remaining", 1, 1, 1, true},
+        {"|cffffff00{keybind}|r  Keybind text", 1, 1, 1, true},
+        {"|cffffff00{pandemic}|r  Aura in pandemic window", 1, 1, 1, true},
+        {"|cffffff00{proc}|r  Spell proc overlay active", 1, 1, 1, true},
+        {"|cffffff00{unusable}|r  Spell/item not usable", 1, 1, 1, true},
+        {"|cffffff00{oor}|r  Target out of range", 1, 1, 1, true},
         " ",
-        {"|cffff8844{!token}|r...|cffff8844{/token}|r", 1, 1, 1, true},
-        {"  Show the ... text only when the token is empty.", 1, 1, 1, true},
-        {"  Example: |cffff8844{!time}|rReady!|cffff8844{/time}|r", 0.7, 0.7, 0.7, true},
-        {"  Shows 'Ready!' only when not on cooldown.", 0.7, 0.7, 0.7, true},
+        {"Syntax", 1, 0.82, 0, true},
         " ",
-        {"Supported: time, charges, maxcharges,", 0.5, 0.5, 0.5, true},
-        {"stacks, aura, keybind", 0.5, 0.5, 0.5, true},
+        {"|cffffff00{?token}|r...|cffffff00{/token}|r  Show when true", 1, 1, 1, true},
+        {"|cffff8844{!token}|r...|cffff8844{/token}|r  Show when false", 1, 1, 1, true},
+        " ",
+        {"Example:", 0.7, 0.7, 0.7, true},
+        {"|cffffff00{?time}|rCD: |cff00ff00{time}|r|cffffff00{/time}|r", 0.7, 0.7, 0.7, true},
+        {"Shows 'CD: 1:23' on cooldown, nothing when ready.", 0.7, 0.7, 0.7, true},
     }, condHeading)
     condHeading.right:ClearAllPoints()
     condHeading.right:SetPoint("RIGHT", condHeading.frame, "RIGHT", -3, 0)

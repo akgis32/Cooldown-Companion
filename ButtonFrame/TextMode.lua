@@ -42,6 +42,11 @@ local KNOWN_TOKENS = {
     maxcharges = true,
     stacks = true,
     aura = true,
+    pandemic = true,
+    proc = true,
+    unusable = true,
+    oor = true,
+    available = true,
     keybind = true,
     status = true,
     icon = true,
@@ -193,6 +198,16 @@ local function EvaluateTokenPresence(button, tokenName, timeRemaining, timeIsSec
         return true  -- always resolves to Ready/time/Active
     elseif tokenName == "icon" then
         return button.icon and button.icon:GetTexture() ~= nil
+    elseif tokenName == "pandemic" then
+        return button._inPandemic == true
+    elseif tokenName == "proc" then
+        return button._procOverlayActive == true
+    elseif tokenName == "unusable" then
+        return button._isUnusable == true
+    elseif tokenName == "oor" then
+        return button._isOutOfRange == true
+    elseif tokenName == "available" then
+        return button._desatCooldownActive ~= true
     end
     return false
 end
@@ -265,6 +280,8 @@ local function SubstituteTokens(button, segments, style, effectState)
     if auraActive then
         auraRemaining = durationRemaining
         auraIsSecret = durationIsSecret
+    elseif button._isGCDOnly then
+        -- Suppress GCD-only cooldowns in text mode (not useful information)
     else
         timeRemaining = durationRemaining
         timeIsSecret = durationIsSecret
