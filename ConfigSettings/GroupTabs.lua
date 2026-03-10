@@ -1362,7 +1362,7 @@ local function BuildAppearanceTab(container)
 
     local auraPosInfo = CreateInfoButton(auraTextCb.frame, auraTextPromoteBtn, "LEFT", "RIGHT", 4, 0, {
         "Shared Position",
-        {"Position is shared with Cooldown Text by default. Enable 'Separate Text Positions' below to use independent positions.", 1, 1, 1, true},
+        {"Position is shared with Cooldown Text by default. Enable 'Separate Text Positions' in advanced settings to use independent positions.", 1, 1, 1, true},
     }, auraTextCb)
     if style.showAuraText == false then
         auraPosInfo:Hide()
@@ -1431,7 +1431,7 @@ local function BuildAppearanceTab(container)
 
         CreateInfoButton(sepPosCb.frame, sepPosCb.checkbg, "LEFT", "RIGHT", sepPosCb.text:GetStringWidth() + 4, 0, {
             "Separate Text Positions",
-            {"When enabled, aura duration text and cooldown text use independent positions. Aura text position is controlled below; cooldown text position is in the Cooldown Text section above.", 1, 1, 1, true},
+            {"When enabled, aura duration text and cooldown text use independent positions. Aura text position controls appear below when toggled on; cooldown text position is in the Cooldown Text section.", 1, 1, 1, true},
         }, sepPosCb)
 
         if style.separateTextPositions then
