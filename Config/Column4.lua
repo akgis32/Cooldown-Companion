@@ -126,14 +126,18 @@ local function RefreshColumn4(container)
         container.tabGroup = tabGroup
     end
 
-    -- Update tabs every refresh so the effects tab label reflects current group mode
-    local effectsLabel = "Indicators"
-    container.tabGroup:SetTabs({
+    -- Update tabs every refresh — hide Indicators for text mode (info lives in format editor)
+    local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
+    local isTextMode = group and group.displayMode == "text"
+    local tabs = {
         { value = "appearance",      text = "Appearance" },
-        { value = "effects",         text = effectsLabel },
-        { value = "layout",          text = "Layout" },
-        { value = "loadconditions",  text = "Load Conditions" },
-    })
+    }
+    if not isTextMode then
+        tabs[#tabs + 1] = { value = "effects", text = "Indicators" }
+    end
+    tabs[#tabs + 1] = { value = "layout",          text = "Layout" }
+    tabs[#tabs + 1] = { value = "loadconditions",  text = "Load Conditions" }
+    container.tabGroup:SetTabs(tabs)
 
     -- Save AceGUI scroll state before tab re-select (old col4Scroll will be released)
     local savedOffset, savedScrollvalue
@@ -148,6 +152,8 @@ local function RefreshColumn4(container)
     -- Migrate stale tab keys from previous layout
     if CS.selectedTab == "extras" then CS.selectedTab = "effects" end
     if CS.selectedTab == "positioning" then CS.selectedTab = "layout" end
+    -- Text mode has no Indicators tab — redirect to Appearance
+    if isTextMode and CS.selectedTab == "effects" then CS.selectedTab = "appearance" end
 
     -- Show and refresh the tab content (SelectTab fires callback synchronously,
     -- which releases old col4Scroll and creates a new one)

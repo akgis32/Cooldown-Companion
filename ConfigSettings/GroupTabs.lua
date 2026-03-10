@@ -49,7 +49,6 @@ local BuildBarEffectsTab = ST._BuildBarEffectsTab
 
 -- Imports from TextModeTabs.lua
 local BuildTextAppearanceTab = ST._BuildTextAppearanceTab
-local BuildTextEffectsTab = ST._BuildTextEffectsTab
 
 local function BuildLayoutTab(container)
     for _, elem in ipairs(appearanceTabElements) do
@@ -630,16 +629,6 @@ local function BuildEffectsTab(container)
     local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
     if not group then return end
     local style = group.style
-
-    -- Branch for text mode (no effects — state communicated via text color)
-    if group.displayMode == "text" then
-        CooldownCompanion:SetGroupProcGlowPreview(CS.selectedGroup, false)
-        CooldownCompanion:SetGroupAuraGlowPreview(CS.selectedGroup, false)
-        CooldownCompanion:SetGroupPandemicPreview(CS.selectedGroup, false)
-        CooldownCompanion:SetGroupReadyGlowPreview(CS.selectedGroup, false)
-        BuildTextEffectsTab(container, group, style)
-        return
-    end
 
     -- Branch for bar mode
     if group.displayMode == "bars" then

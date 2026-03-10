@@ -428,54 +428,6 @@ local function BuildTextAppearanceTab(container, group, style)
     BuildCompactModeControls(container, group, tabInfoButtons)
 end
 
--- Text mode effects tab — documents effect tags available in the format string
-local function BuildTextEffectsTab(container, group, style)
-    local label = AceGUI:Create("Label")
-    label:SetText("|cff888888Text mode supports visual effect tags in the format string.\nUse the Format String Editor to add them.|r")
-    label:SetFullWidth(true)
-    container:AddChild(label)
-
-    local spacer = AceGUI:Create("Label")
-    spacer:SetText(" ")
-    spacer:SetFullWidth(true)
-    container:AddChild(spacer)
-
-    local effectsLabel = AceGUI:Create("Label")
-    effectsLabel:SetText(table.concat({
-        "|cffffffffAvailable Effects:|r",
-        "",
-        "|cffcc44ff{pulse}...{/pulse}|r  Smooth alpha oscillation (~1Hz)",
-        "",
-        "Composes with conditionals:",
-        "|cffffff00{?charges}|r|cffcc44ff{pulse}|r|cff00ff00{charges}|r|cffcc44ff{/pulse}|r|cffffff00{/charges}|r",
-        "  Pulse only when charges exist.",
-        "",
-        "Pulse affects the whole line's alpha.",
-        "",
-        "",
-        "|cffffffffColor Overrides:|r",
-        "",
-        "|cff44bbff{cooldown}...{/cooldown}|r  Force cooldown color",
-        "|cff44bbff{ready}...{/ready}|r  Force ready color",
-        "|cff44bbff{active}...{/active}|r  Force aura active color",
-        "|cff44bbff{custom}...{/custom}|r  Force custom color (configurable)",
-        "",
-        "Overrides a token's default color:",
-        "|cff44bbff{cooldown}|r|cff00ff00{name}|r|cff44bbff{/cooldown}|r",
-        "  Shows the spell name in the cooldown color.",
-        "",
-        "Also colors literal text:",
-        "|cff44bbff{ready}|r|cffffffffReady!|r|cff44bbff{/ready}|r",
-        "  Shows 'Ready!' in the ready color.",
-        "",
-        "Nestable (inner overrides outer) and",
-        "composes with conditionals and effects.",
-    }, "\n"))
-    effectsLabel:SetFullWidth(true)
-    container:AddChild(effectsLabel)
-end
-
 -- Exports
 ST._BuildTextAppearanceTab = BuildTextAppearanceTab
-ST._BuildTextEffectsTab = BuildTextEffectsTab
 ST._BuildFormatSummary = BuildFormatSummary
