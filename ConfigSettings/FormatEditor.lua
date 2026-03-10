@@ -323,10 +323,11 @@ local function EvaluateMockPresence(tokenName, mockState)
     return false
 end
 
-local function ResolvePreviewColor(name, cdColor, readyColor, auraColor)
+local function ResolvePreviewColor(name, cdColor, readyColor, auraColor, customColor)
     if name == "cooldown" then return cdColor
     elseif name == "ready" then return readyColor
     elseif name == "active" then return auraColor
+    elseif name == "custom" then return customColor
     end
 end
 
@@ -336,6 +337,7 @@ local function PreviewSubstitute(segments, style, mockState)
     local cdColor = style.textCooldownColor or {1, 0.3, 0.3, 1}
     local readyColor = style.textReadyColor or {0.2, 1.0, 0.2, 1}
     local auraColor = style.textAuraColor or {0, 0.925, 1, 1}
+    local customColor = style.textCustomColor or {1, 0.82, 0, 1}
     local chargeFull = style.chargeFontColor or {1, 1, 1, 1}
     local chargeMissing = style.chargeFontColorMissing or {1, 1, 1, 1}
     local chargeZero = style.chargeFontColorZero or {1, 1, 1, 1}
@@ -373,7 +375,7 @@ local function PreviewSubstitute(segments, style, mockState)
             if seg.value == "pulse" and pulseDepth > 0 then pulseDepth = pulseDepth - 1 end
         elseif seg.type == "color_start" then
             colorStack[#colorStack + 1] = colorOverride
-            colorOverride = ResolvePreviewColor(seg.value, cdColor, readyColor, auraColor)
+            colorOverride = ResolvePreviewColor(seg.value, cdColor, readyColor, auraColor, customColor)
         elseif seg.type == "color_end" then
             colorOverride = colorStack[#colorStack]
             colorStack[#colorStack] = nil
@@ -524,7 +526,7 @@ local function OpenFormatEditor(style, groupId)
     local window = AceGUI:Create("Window")
     window:SetTitle("Format String Editor")
     window:SetWidth(400)
-    window:SetHeight(620)
+    window:SetHeight(660)
     window:SetLayout("List")
     window:EnableResize(false)
     formatEditorFrame = window
@@ -709,6 +711,7 @@ local function OpenFormatEditor(style, groupId)
         {"|cff44bbff{cooldown}...{/cooldown}|r  Force cooldown color", 1, 1, 1},
         {"|cff44bbff{ready}...{/ready}|r  Force ready color", 1, 1, 1},
         {"|cff44bbff{active}...{/active}|r  Force aura active color", 1, 1, 1},
+        {"|cff44bbff{custom}...{/custom}|r  User-defined custom color", 1, 1, 1},
     }, tokenHeading)
     tokenHeading.right:ClearAllPoints()
     tokenHeading.right:SetPoint("RIGHT", tokenHeading.frame, "RIGHT", -3, 0)
@@ -844,6 +847,7 @@ local function OpenFormatEditor(style, groupId)
         {"|cff44bbff{cooldown}|r  Cooldown color (red by default)", 1, 1, 1, true},
         {"|cff44bbff{ready}|r  Ready color (green by default)", 1, 1, 1, true},
         {"|cff44bbff{active}|r  Aura active color (cyan by default)", 1, 1, 1, true},
+        {"|cff44bbff{custom}|r  User-defined custom color (gold by default)", 1, 1, 1, true},
         " ",
         {"Example:", 0.7, 0.7, 0.7, true},
         {"{cooldown}{name}{/cooldown}", 0.7, 0.7, 0.7, true},
@@ -861,7 +865,7 @@ local function OpenFormatEditor(style, groupId)
     colorGroup:SetLayout("Flow")
     window:AddChild(colorGroup)
 
-    for _, colorName in ipairs({"cooldown", "ready", "active"}) do
+    for _, colorName in ipairs({"cooldown", "ready", "active", "custom"}) do
         local colorBtn = AceGUI:Create("Button")
         colorBtn:SetText("{" .. colorName .. "}")
         colorBtn:SetAutoWidth(true)
@@ -872,6 +876,22 @@ local function OpenFormatEditor(style, groupId)
         end)
         colorGroup:AddChild(colorBtn)
     end
+
+    local customColorPicker = AceGUI:Create("ColorPicker")
+    customColorPicker:SetLabel("Custom Color")
+    customColorPicker:SetHasAlpha(true)
+    local cc = style.textCustomColor or {1, 0.82, 0, 1}
+    customColorPicker:SetColor(cc[1], cc[2], cc[3], cc[4])
+    customColorPicker:SetFullWidth(true)
+    customColorPicker:SetCallback("OnValueChanged", function(widget, event, r, g, b, a)
+        style.textCustomColor = {r, g, b, a}
+        UpdateDisplay()
+    end)
+    customColorPicker:SetCallback("OnValueConfirmed", function(widget, event, r, g, b, a)
+        style.textCustomColor = {r, g, b, a}
+        UpdateDisplay()
+    end)
+    window:AddChild(customColorPicker)
 
     -- ================================================================
     -- SAVE BUTTON

@@ -178,6 +178,7 @@ local function BuildTextAppearanceTab(container, group, style)
         {"|cff44bbff{cooldown}...{/cooldown}|r  Force cooldown color", 0.6, 1, 0.6, true},
         {"|cff44bbff{ready}...{/ready}|r  Force ready color", 0.6, 1, 0.6, true},
         {"|cff44bbff{active}...{/active}|r  Force aura active color", 0.6, 1, 0.6, true},
+        {"|cff44bbff{custom}...{/custom}|r  Force custom color", 0.6, 1, 0.6, true},
     }, tabInfoButtons)
     fmtHeading.right:ClearAllPoints()
     fmtHeading.right:SetPoint("RIGHT", fmtHeading.frame, "RIGHT", -3, 0)
@@ -390,6 +391,7 @@ local function BuildTextEffectsTab(container, group, style)
         "|cff44bbff{cooldown}...{/cooldown}|r  Force cooldown color",
         "|cff44bbff{ready}...{/ready}|r  Force ready color",
         "|cff44bbff{active}...{/active}|r  Force aura active color",
+        "|cff44bbff{custom}...{/custom}|r  Force custom color (configurable)",
         "",
         "Overrides a token's default color:",
         "|cff777777{cooldown}{name}{/cooldown}|r",

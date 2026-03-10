@@ -55,6 +55,7 @@ local KNOWN_COLORS = {
     cooldown = true,
     ready = true,
     active = true,
+    custom = true,
 }
 
 local function ParseFormatString(fmt)
@@ -199,10 +200,11 @@ end
 ------------------------------------------------------------------------
 -- COLOR TAG RESOLUTION
 ------------------------------------------------------------------------
-local function ResolveColorName(name, cdColor, readyColor, auraColor)
+local function ResolveColorName(name, cdColor, readyColor, auraColor, customColor)
     if name == "cooldown" then return cdColor
     elseif name == "ready" then return readyColor
     elseif name == "active" then return auraColor
+    elseif name == "custom" then return customColor
     end
 end
 
@@ -221,6 +223,7 @@ local function SubstituteTokens(button, segments, style, effectState)
     local cdColor = style.textCooldownColor or {1, 0.3, 0.3, 1}
     local readyColor = style.textReadyColor or {0.2, 1.0, 0.2, 1}
     local auraColor = style.textAuraColor or {0, 0.925, 1, 1}
+    local customColor = style.textCustomColor or {1, 0.82, 0, 1}
 
     -- Charge color resolution
     local chargeFull = style.chargeFontColor or {1, 1, 1, 1}
@@ -308,7 +311,7 @@ local function SubstituteTokens(button, segments, style, effectState)
 
         elseif seg.type == "color_start" then
             colorStack[#colorStack + 1] = colorOverride
-            colorOverride = ResolveColorName(seg.value, cdColor, readyColor, auraColor)
+            colorOverride = ResolveColorName(seg.value, cdColor, readyColor, auraColor, customColor)
 
         elseif seg.type == "color_end" then
             colorOverride = colorStack[#colorStack]
