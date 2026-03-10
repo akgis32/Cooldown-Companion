@@ -28,11 +28,14 @@ end
 ------------------------------------------------------------------------
 -- SYNTAX COLORING
 -- Builds a color-escaped string from parsed segments for display.
+-- The output is set directly as EditBox text; WoW renders |c...|r natively.
 ------------------------------------------------------------------------
-local COLOR_LITERAL   = "ffbbbbbb"  -- dim gray
-local COLOR_TOKEN     = "ff00ff00"  -- green
-local COLOR_UNKNOWN   = "ffff4444"  -- red
-local COLOR_COND      = "ffffff00"  -- yellow
+local COLOR_LITERAL      = "ffbbbbbb"  -- dim gray
+local COLOR_TOKEN        = "ff00ff00"  -- green
+local COLOR_UNKNOWN      = "ffff4444"  -- red
+local COLOR_COND_PRESENT = "ffffff00"  -- yellow:  {?token} "show if present"
+local COLOR_COND_NEGATED = "ffff8844"  -- orange:  {!token} "show if empty"
+local COLOR_COND_CLOSE   = "ffaaaa00"  -- dim yellow: {/token} close tags
 
 local function BuildSyntaxString(segments)
     local parts = {}
@@ -44,12 +47,60 @@ local function BuildSyntaxString(segments)
             parts[#parts + 1] = "|c" .. color .. "{" .. seg.value .. "}|r"
         elseif seg.type == "cond_start" then
             local prefix = seg.negated and "!" or "?"
-            parts[#parts + 1] = "|c" .. COLOR_COND .. "{" .. prefix .. seg.value .. "}|r"
+            local color = seg.negated and COLOR_COND_NEGATED or COLOR_COND_PRESENT
+            parts[#parts + 1] = "|c" .. color .. "{" .. prefix .. seg.value .. "}|r"
         elseif seg.type == "cond_end" then
-            parts[#parts + 1] = "|c" .. COLOR_COND .. "{/" .. seg.value .. "}|r"
+            parts[#parts + 1] = "|c" .. COLOR_COND_CLOSE .. "{/" .. seg.value .. "}|r"
         end
     end
     return table.concat(parts)
+end
+
+------------------------------------------------------------------------
+-- COLOR CODE CURSOR MAPPING
+-- Maps cursor positions between raw text and colorized text that has
+-- |cXXXXXXXX...|r escape sequences injected by BuildSyntaxString.
+------------------------------------------------------------------------
+local function StripColorCodes(text)
+    return text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+end
+
+-- Convert byte position in colorized text to raw (uncolored) character count.
+-- bytePos is 0-based (from GetCursorPosition): 0 = before first char.
+local function ColorizedToRawPos(bytePos, text)
+    local raw = 0
+    local i = 1
+    while i <= bytePos do
+        if text:sub(i, i + 1) == "|c" and i + 9 <= #text then
+            i = i + 10  -- skip |cXXXXXXXX
+        elseif text:sub(i, i + 1) == "|r" then
+            i = i + 2   -- skip |r
+        else
+            i = i + 1
+            raw = raw + 1
+        end
+    end
+    return raw
+end
+
+-- Convert raw character position to byte position in colorized text.
+-- Returns 0-based position suitable for SetCursorPosition.
+local function RawToColorizedPos(rawPos, colorizedText)
+    if rawPos <= 0 then return 0 end
+    local raw = 0
+    local i = 1
+    while raw < rawPos and i <= #colorizedText do
+        if colorizedText:sub(i, i + 1) == "|c" and i + 9 <= #colorizedText then
+            i = i + 10
+        elseif colorizedText:sub(i, i + 1) == "|r" then
+            i = i + 2
+        else
+            i = i + 1
+            raw = raw + 1
+        end
+    end
+    -- i is now 1-based position AFTER the rawPos'th visible char; convert to 0-based
+    return i - 1
 end
 
 ------------------------------------------------------------------------
@@ -276,7 +327,7 @@ local function OpenFormatEditor(style, groupId)
     end
 
     -- ================================================================
-    -- EDIT BOX (MultiLineEditBox)
+    -- EDIT BOX (MultiLineEditBox) with inline syntax coloring
     -- ================================================================
     local editGroup = AceGUI:Create("MultiLineEditBox")
     editGroup:SetLabel("Format String")
@@ -284,15 +335,76 @@ local function OpenFormatEditor(style, groupId)
     editGroup:SetNumLines(3)
     editGroup.button:Hide()  -- hide "Accept" button, we save on change
     window:AddChild(editGroup)
-    editGroup:SetText(style.textFormat or "{name}  {status}")
+
+    local eb = editGroup.editBox
+
+    -- Track the raw (uncolored) format string separately.
+    -- The EditBox text contains |c...|r color codes for native rendering;
+    -- currentRawText is the actual format string the user is editing.
+    local currentRawText = style.textFormat or "{name}  {status}"
+
+    -- Helper: colorize raw text and set into EditBox, preserving cursor position.
+    local function ApplyColorized(rawText, rawCursorPos)
+        local colorized = BuildSyntaxString(ParseFormatString(rawText))
+        local colorizedCursor = RawToColorizedPos(rawCursorPos, colorized)
+        eb:SetText(colorized)
+        eb:SetCursorPosition(colorizedCursor)
+    end
+
+    -- Set initial colorized text
+    ApplyColorized(currentRawText, #currentRawText)
 
     -- ================================================================
-    -- SYNTAX DISPLAY (inline, directly below edit box)
+    -- PREVIEW SECTION (directly beneath edit box)
     -- ================================================================
-    local syntaxLabel = AceGUI:Create("Label")
-    syntaxLabel:SetFullWidth(true)
-    syntaxLabel:SetFontObject(GameFontHighlight)
-    window:AddChild(syntaxLabel)
+    local previewHeading = AceGUI:Create("Heading")
+    previewHeading:SetText("Preview")
+    previewHeading:SetFullWidth(true)
+    window:AddChild(previewHeading)
+
+    local previewLabels = {}
+    for i = 1, 3 do
+        local row = AceGUI:Create("Label")
+        row:SetFullWidth(true)
+        row:SetFontObject(GameFontHighlight)
+        window:AddChild(row)
+        previewLabels[i] = row
+    end
+
+    -- ================================================================
+    -- UPDATE FUNCTION (refreshes preview from currentRawText)
+    -- ================================================================
+    local currentStyle = style
+    local currentGroupId = groupId
+
+    local function UpdateDisplay()
+        local segments = ParseFormatString(currentRawText)
+        local mockStates = BuildMockStates(currentStyle)
+        for i, mock in ipairs(mockStates) do
+            local preview = PreviewSubstitute(segments, currentStyle, mock.state)
+            previewLabels[i]:SetText(mock.label .. "  " .. preview)
+        end
+    end
+
+    -- Initial preview
+    UpdateDisplay()
+
+    -- ================================================================
+    -- INSERT HELPER (shared by token + conditional buttons)
+    -- ================================================================
+    local function InsertAtCursor(insertText, cursorOffset)
+        cursorOffset = cursorOffset or #insertText
+        local colorized = eb:GetText() or ""
+        local colorizedCursor = eb:GetCursorPosition()
+        local rawCursor = ColorizedToRawPos(colorizedCursor, colorized)
+
+        local newRaw = currentRawText:sub(1, rawCursor) .. insertText .. currentRawText:sub(rawCursor + 1)
+        currentRawText = newRaw
+
+        ApplyColorized(newRaw, rawCursor + cursorOffset)
+        eb:SetFocus()
+        UpdateDisplay()
+    end
 
     -- ================================================================
     -- TOKEN INSERT BUTTONS
@@ -312,14 +424,7 @@ local function OpenFormatEditor(style, groupId)
         btn:SetText("{" .. tokenName .. "}")
         btn:SetAutoWidth(true)
         btn:SetCallback("OnClick", function()
-            local eb = editGroup.editBox
-            local text = eb:GetText() or ""
-            local cursor = eb:GetCursorPosition()
-            local insert = "{" .. tokenName .. "}"
-            local newText = text:sub(1, cursor) .. insert .. text:sub(cursor + 1)
-            eb:SetText(newText)
-            eb:SetCursorPosition(cursor + #insert)
-            eb:SetFocus()
+            InsertAtCursor("{" .. tokenName .. "}")
         end)
         tokenGroup:AddChild(btn)
     end
@@ -366,15 +471,9 @@ local function OpenFormatEditor(style, groupId)
 
     local function InsertConditional(prefix)
         local token = condDropdown:GetValue()
-        local eb = editGroup.editBox
-        local text = eb:GetText() or ""
-        local cursor = eb:GetCursorPosition()
         local open = "{" .. prefix .. token .. "}"
         local close = "{/" .. token .. "}"
-        local newText = text:sub(1, cursor) .. open .. close .. text:sub(cursor + 1)
-        eb:SetText(newText)
-        eb:SetCursorPosition(cursor + #open)
-        eb:SetFocus()
+        InsertAtCursor(open .. close, #open)
     end
 
     local showBtn = AceGUI:Create("Button")
@@ -390,32 +489,14 @@ local function OpenFormatEditor(style, groupId)
     condGroup:AddChild(hideBtn)
 
     -- ================================================================
-    -- PREVIEW SECTION
-    -- ================================================================
-    local previewHeading = AceGUI:Create("Heading")
-    previewHeading:SetText("Preview")
-    previewHeading:SetFullWidth(true)
-    window:AddChild(previewHeading)
-
-    local previewLabels = {}
-    for i = 1, 3 do
-        local row = AceGUI:Create("Label")
-        row:SetFullWidth(true)
-        row:SetFontObject(GameFontHighlight)
-        window:AddChild(row)
-        previewLabels[i] = row
-    end
-
-    -- ================================================================
     -- SAVE BUTTON
     -- ================================================================
     local saveBtn = AceGUI:Create("Button")
     saveBtn:SetText("Save & Close")
     saveBtn:SetFullWidth(true)
     saveBtn:SetCallback("OnClick", function()
-        local text = editGroup:GetText()
-        if text and text ~= "" then
-            style.textFormat = text
+        if currentRawText and currentRawText ~= "" then
+            style.textFormat = currentRawText
             CooldownCompanion:RefreshGroupFrame(groupId)
             CooldownCompanion:RefreshConfigPanel()
         end
@@ -424,35 +505,27 @@ local function OpenFormatEditor(style, groupId)
     window:AddChild(saveBtn)
 
     -- ================================================================
-    -- UPDATE FUNCTION (refreshes syntax + preview on every keystroke)
+    -- LIVE EDIT CALLBACKS
     -- ================================================================
-    local currentStyle = style
-    local currentGroupId = groupId
 
-    local function UpdateDisplay()
-        local text = editGroup:GetText() or ""
-        local segments = ParseFormatString(text)
-
-        -- Syntax coloring
-        syntaxLabel:SetText(BuildSyntaxString(segments))
-
-        -- Preview rows
-        local mockStates = BuildMockStates(currentStyle)
-        for i, mock in ipairs(mockStates) do
-            local preview = PreviewSubstitute(segments, currentStyle, mock.state)
-            previewLabels[i]:SetText(mock.label .. "  " .. preview)
-        end
-    end
-
-    -- Wire up live updates on text change
+    -- OnTextChanged fires only on user input (AceGUI checks userInput flag).
+    -- Strip color codes from edited text, re-colorize, and restore cursor.
     editGroup:SetCallback("OnTextChanged", function(widget, event, text)
+        local newRaw = StripColorCodes(text)
+        if newRaw == currentRawText then return end
+
+        local colorizedCursor = eb:GetCursorPosition()
+        local rawCursor = ColorizedToRawPos(colorizedCursor, text)
+        currentRawText = newRaw
+
+        ApplyColorized(newRaw, rawCursor)
         UpdateDisplay()
     end)
 
-    -- Also save on Enter (Ctrl+Enter in multiline)
+    -- Save on Enter (Ctrl+Enter in multiline)
     editGroup:SetCallback("OnEnterPressed", function(widget, event, text)
-        if text and text ~= "" then
-            currentStyle.textFormat = text
+        if currentRawText and currentRawText ~= "" then
+            currentStyle.textFormat = currentRawText
             CooldownCompanion:RefreshGroupFrame(currentGroupId)
         end
     end)
@@ -461,21 +534,18 @@ local function OpenFormatEditor(style, groupId)
     window._refresh = function(newStyle, newGroupId)
         currentStyle = newStyle
         currentGroupId = newGroupId
-        editGroup:SetText(newStyle.textFormat or "{name}  {status}")
+        currentRawText = newStyle.textFormat or "{name}  {status}"
+        ApplyColorized(currentRawText, #currentRawText)
         UpdateDisplay()
     end
-
-    -- Initial display
-    UpdateDisplay()
 
     -- ================================================================
     -- LIFECYCLE
     -- ================================================================
     window:SetCallback("OnClose", function(widget)
         -- Auto-save on close
-        local text = editGroup:GetText()
-        if text and text ~= "" and text ~= (currentStyle.textFormat or "{name}  {status}") then
-            currentStyle.textFormat = text
+        if currentRawText and currentRawText ~= "" and currentRawText ~= (currentStyle.textFormat or "{name}  {status}") then
+            currentStyle.textFormat = currentRawText
             CooldownCompanion:RefreshGroupFrame(currentGroupId)
             CooldownCompanion:RefreshConfigPanel()
         end
