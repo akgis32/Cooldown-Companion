@@ -20,7 +20,7 @@ local TOKEN_LIST = {"name", "time", "charges", "maxcharges", "stacks", "aura", "
 
 -- Tokens available as conditional targets (excludes always-present tokens: name, status, icon)
 local COND_TOKEN_LIST = {}
-local COND_TOKEN_ORDER = {"time", "available", "charges", "maxcharges", "stacks", "aura", "keybind", "pandemic", "proc", "unusable", "oor"}
+local COND_TOKEN_ORDER = {"time", "available", "charges", "maxcharges", "missingcharges", "zerocharges", "stacks", "aura", "keybind", "pandemic", "proc", "unusable", "oor"}
 for _, t in ipairs(COND_TOKEN_ORDER) do
     COND_TOKEN_LIST[t] = t
 end
@@ -707,8 +707,8 @@ local function OpenFormatEditor(style, groupId, opts)
         " ",
         {"|cff00ff00{name}|r  Spell/item display name", 1, 1, 1},
         {"|cff00ff00{time}|r  Cooldown time remaining", 1, 1, 1},
-        {"|cff00ff00{charges}|r  Current charges", 1, 1, 1},
-        {"|cff00ff00{maxcharges}|r  Maximum charges", 1, 1, 1},
+        {"|cff00ff00{charges}|r  Current charges (if spell has charges)", 1, 1, 1},
+        {"|cff00ff00{maxcharges}|r  Maximum charges (if spell has charges)", 1, 1, 1},
         {"|cff00ff00{stacks}|r  Aura stacks / item count", 1, 1, 1},
         {"|cff00ff00{aura}|r  Aura duration remaining", 1, 1, 1},
         {"|cff00ff00{keybind}|r  Keybind text", 1, 1, 1},
@@ -852,8 +852,10 @@ local function OpenFormatEditor(style, groupId, opts)
         " ",
         {"|cffffff00{time}|r  Cooldown time remaining", 1, 1, 1, true},
         {"|cffffff00{available}|r  Off cooldown / has charges", 1, 1, 1, true},
-        {"|cffffff00{charges}|r  Current charges", 1, 1, 1, true},
-        {"|cffffff00{maxcharges}|r  Maximum charges", 1, 1, 1, true},
+        {"|cffffff00{charges}|r  Spell has charges", 1, 1, 1, true},
+        {"|cffffff00{maxcharges}|r  At max charges", 1, 1, 1, true},
+        {"|cffffff00{missingcharges}|r  Recharging with charges left", 1, 1, 1, true},
+        {"|cffffff00{zerocharges}|r  All charges spent", 1, 1, 1, true},
         {"|cffffff00{stacks}|r  Aura stacks / item count", 1, 1, 1, true},
         {"|cffffff00{aura}|r  Aura duration remaining", 1, 1, 1, true},
         {"|cffffff00{keybind}|r  Keybind text", 1, 1, 1, true},
@@ -882,7 +884,7 @@ local function OpenFormatEditor(style, groupId, opts)
 
     local condDropdown = AceGUI:Create("Dropdown")
     condDropdown:SetLabel("")
-    condDropdown:SetWidth(105)
+    condDropdown:SetWidth(130)
     condDropdown:SetList(COND_TOKEN_LIST, COND_TOKEN_ORDER)
     condDropdown:SetValue("time")
     condGroup:AddChild(condDropdown)

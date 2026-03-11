@@ -40,6 +40,8 @@ local KNOWN_TOKENS = {
     time = true,
     charges = true,
     maxcharges = true,
+    missingcharges = true,
+    zerocharges = true,
     stacks = true,
     aura = true,
     pandemic = true,
@@ -181,10 +183,33 @@ local function EvaluateTokenPresence(button, tokenName, timeRemaining, timeIsSec
     elseif tokenName == "time" then
         return timeIsSecret or (timeRemaining and timeRemaining > 0)
     elseif tokenName == "charges" then
-        return button._currentReadableCharges ~= nil
+        return button.buttonData.hasCharges == true
     elseif tokenName == "maxcharges" then
-        local mc = button.buttonData.maxCharges
-        return mc and mc > 1
+        if not button.buttonData.hasCharges then return false end
+        if button._chargeCountReadable == true then
+            local cur = button._currentReadableCharges
+            local mc = button.buttonData.maxCharges
+            return cur ~= nil and mc ~= nil and cur == mc
+        else
+            return not button._chargeRecharging
+        end
+    elseif tokenName == "missingcharges" then
+        if not button.buttonData.hasCharges then return false end
+        if button._chargeCountReadable == true then
+            local cur = button._currentReadableCharges
+            local mc = button.buttonData.maxCharges
+            return cur ~= nil and mc ~= nil and cur > 0 and cur < mc
+        else
+            return button._chargeRecharging == true and not button._zeroChargesConfirmed
+        end
+    elseif tokenName == "zerocharges" then
+        if not button.buttonData.hasCharges then return false end
+        if button._chargeCountReadable == true then
+            local cur = button._currentReadableCharges
+            return cur ~= nil and cur == 0
+        else
+            return button._zeroChargesConfirmed == true
+        end
     elseif tokenName == "stacks" then
         local stackText = button._auraStackText
         if stackText and stackText ~= "" then return true end
