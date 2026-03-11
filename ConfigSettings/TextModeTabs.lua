@@ -96,8 +96,8 @@ local function BuildFormatSummary(formatString)
         parts[#parts + 1] = "|c" .. SUM_GRAY .. "Effects:|r " .. table.concat(effects, ", ")
     end
 
-    if #parts == 0 then return "" end
-    return table.concat(parts, SUM_SEP)
+    if #parts == 0 then return {} end
+    return parts
 end
 
 local function BuildTextAppearanceTab(container, group, style)
@@ -233,20 +233,36 @@ local function BuildTextAppearanceTab(container, group, style)
     if not fmtCollapsed then
     local fmt = style.textFormat or "{name}  {status}"
 
+    local preSpacer = AceGUI:Create("Label")
+    preSpacer:SetText(" ")
+    preSpacer:SetFullWidth(true)
+    container:AddChild(preSpacer)
+
     local fmtPreview = AceGUI:Create("Label")
     fmtPreview:SetText(RenderFormatPreview(fmt, style))
     fmtPreview:SetFullWidth(true)
     fmtPreview:SetFontObject(GameFontHighlight)
+    fmtPreview:SetJustifyH("CENTER")
     container:AddChild(fmtPreview)
 
-    local summary = BuildFormatSummary(fmt)
-    if summary ~= "" then
+    local postSpacer = AceGUI:Create("Label")
+    postSpacer:SetText(" ")
+    postSpacer:SetFullWidth(true)
+    container:AddChild(postSpacer)
+
+    local summaryParts = BuildFormatSummary(fmt)
+    for _, line in ipairs(summaryParts) do
         local fmtSummary = AceGUI:Create("Label")
-        fmtSummary:SetText(summary)
+        fmtSummary:SetText(line)
         fmtSummary:SetFullWidth(true)
         fmtSummary:SetFontObject(GameFontHighlightSmall)
         container:AddChild(fmtSummary)
     end
+
+    local btnSpacer = AceGUI:Create("Label")
+    btnSpacer:SetText(" ")
+    btnSpacer:SetFullWidth(true)
+    container:AddChild(btnSpacer)
 
     local editBtn = AceGUI:Create("Button")
     editBtn:SetText("Edit Format")

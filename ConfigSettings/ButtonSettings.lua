@@ -1005,10 +1005,10 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
             defaultNote:SetFontObject(GameFontHighlightSmall)
             scroll:AddChild(defaultNote)
         else
-            local summary = ST._BuildFormatSummary(effectiveFmt)
-            if summary ~= "" then
+            local summaryParts = ST._BuildFormatSummary(effectiveFmt)
+            for _, line in ipairs(summaryParts) do
                 local fmtSummary = AceGUI:Create("Label")
-                fmtSummary:SetText(summary)
+                fmtSummary:SetText(line)
                 fmtSummary:SetFullWidth(true)
                 fmtSummary:SetFontObject(GameFontHighlightSmall)
                 scroll:AddChild(fmtSummary)
