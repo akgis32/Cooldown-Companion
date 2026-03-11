@@ -1236,6 +1236,17 @@ local function RefreshColumn1(preserveDrag)
         newTextBtn.frame:Show()
         table.insert(CS.col1BarWidgets, newTextBtn)
 
+        -- Dynamic equal-width resize for the top row
+        CS.col1ButtonBar._topRowBtns = {newIconBtn.frame, newBarBtn.frame}
+        CS.col1ButtonBar:SetScript("OnSizeChanged", function(self, w)
+            if self._topRowBtns then
+                local tw = w / 3
+                for _, f in ipairs(self._topRowBtns) do
+                    f:SetWidth(tw - 2)
+                end
+            end
+        end)
+
         -- Bottom row: "New Folder" (left) | "Import Group" (right)
         local newFolderBtn = AceGUI:Create("Button")
         newFolderBtn:SetText("New Folder")
