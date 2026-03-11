@@ -1212,28 +1212,31 @@ function CooldownCompanion:UpdateButtonCooldown(button)
 
     button._procOverlayActive = procOverlayActive
 
-    -- Unusable state for text mode {unusable} conditional
-    if buttonData.isPassive then
-        button._isUnusable = false
-    elseif buttonData.type == "spell" then
-        button._isUnusable = not C_Spell_IsSpellUsable(buttonData.id)
-    elseif buttonData.type == "item" or buttonData.type == "equipitem" then
-        local usable = IsUsableItem(buttonData.id)
-        button._isUnusable = not usable
-    else
-        button._isUnusable = false
-    end
-
-    -- Out-of-range state for text mode {oor} conditional
-    if buttonData.type == "spell" then
-        button._isOutOfRange = button._spellOutOfRange or false
-    elseif buttonData.type == "item" or buttonData.type == "equipitem" then
-        if not InCombatLockdown() then
-            local inRange = IsItemInRange(buttonData.id, "target")
-            button._isOutOfRange = (inRange == false)
+    -- Unusable/out-of-range state for text mode {unusable}/{oor} conditionals
+    if button._isText then
+        if buttonData.isPassive then
+            button._isUnusable = false
+        elseif buttonData.type == "spell" then
+            button._isUnusable = not C_Spell_IsSpellUsable(buttonData.id)
+        elseif buttonData.type == "item" or buttonData.type == "equipitem" then
+            local usable = IsUsableItem(buttonData.id)
+            button._isUnusable = not usable
+        else
+            button._isUnusable = false
         end
-        -- In combat: keep last known value (stale but matches icon tint behavior)
+
+        if buttonData.type == "spell" then
+            button._isOutOfRange = button._spellOutOfRange or false
+        elseif buttonData.type == "item" or buttonData.type == "equipitem" then
+            if not InCombatLockdown() then
+                local inRange = IsItemInRange(buttonData.id, "target")
+                button._isOutOfRange = (inRange == false)
+            end
+        else
+            button._isOutOfRange = false
+        end
     else
+        button._isUnusable = false
         button._isOutOfRange = false
     end
 

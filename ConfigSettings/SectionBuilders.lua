@@ -1524,6 +1524,17 @@ local function BuildTextFontControls(container, styleTable, refreshCallback)
     end)
     container:AddChild(fontDrop)
 
+    local fontSizeSlider = AceGUI:Create("Slider")
+    fontSizeSlider:SetLabel("Font Size")
+    fontSizeSlider:SetSliderValues(6, 72, 1)
+    fontSizeSlider:SetValue(styleTable.textFontSize or 12)
+    fontSizeSlider:SetFullWidth(true)
+    fontSizeSlider:SetCallback("OnValueChanged", function(widget, event, val)
+        styleTable.textFontSize = val
+        refreshCallback()
+    end)
+    container:AddChild(fontSizeSlider)
+
     local outlineDrop = AceGUI:Create("Dropdown")
     outlineDrop:SetLabel("Font Outline")
     outlineDrop:SetList(CS.outlineOptions)
