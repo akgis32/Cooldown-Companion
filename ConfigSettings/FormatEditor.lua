@@ -20,7 +20,7 @@ local TOKEN_LIST = {"name", "time", "charges", "maxcharges", "stacks", "aura", "
 
 -- Tokens available as conditional targets (excludes always-present tokens: name, status, icon)
 local COND_TOKEN_LIST = {}
-local COND_TOKEN_ORDER = {"time", "available", "charges", "maxcharges", "missingcharges", "zerocharges", "stacks", "aura", "keybind", "pandemic", "proc", "unusable", "oor"}
+local COND_TOKEN_ORDER = {"time", "available", "charges", "maxcharges", "missingcharges", "zerocharges", "stacks", "aura", "keybind", "pandemic", "proc", "unusable", "oor", "incombat"}
 for _, t in ipairs(COND_TOKEN_ORDER) do
     COND_TOKEN_LIST[t] = t
 end
@@ -345,6 +345,7 @@ local function EvaluateMockPresence(tokenName, mockState)
     elseif tokenName == "unusable" then return mockState.unusable == true
     elseif tokenName == "oor" then return mockState.oor == true
     elseif tokenName == "available" then return not mockState.time or mockState.time <= 0
+    elseif tokenName == "incombat" then return mockState.incombat == true
     end
     return false
 end
@@ -624,6 +625,12 @@ local function BuildMockStates(style, segments)
         states[#states + 1] = {
             label = WrapPreviewColor("Out of Range:", EXTRA_ROW_COLOR),
             state = { name = name, time = 0, charges = 3, maxCharges = 3, hasCharges = true, stacks = 0, auraTime = 0, keybind = "F1", icon = icon, oor = true },
+        }
+    end
+    if used["incombat"] then
+        states[#states + 1] = {
+            label = WrapPreviewColor("In Combat:", EXTRA_ROW_COLOR),
+            state = { name = name, time = 0, charges = 3, maxCharges = 3, hasCharges = true, stacks = 0, auraTime = 0, keybind = "F1", icon = icon, incombat = true },
         }
     end
 
@@ -974,6 +981,7 @@ local function OpenFormatEditor(style, groupId, opts)
         {"|cffffff00{proc}|r  Spell proc overlay active", 1, 1, 1, true},
         {"|cffffff00{unusable}|r  Spell/item not usable", 1, 1, 1, true},
         {"|cffffff00{oor}|r  Target out of range", 1, 1, 1, true},
+        {"|cffffff00{incombat}|r  Player is in combat", 1, 1, 1, true},
         " ",
         {"Syntax", 1, 0.82, 0, true},
         " ",

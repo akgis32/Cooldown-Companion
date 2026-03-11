@@ -49,6 +49,7 @@ local KNOWN_TOKENS = {
     unusable = true,
     oor = true,
     available = true,
+    incombat = true,
     keybind = true,
     status = true,
     icon = true,
@@ -233,6 +234,8 @@ local function EvaluateTokenPresence(button, tokenName, timeRemaining, timeIsSec
         return button._isOutOfRange == true
     elseif tokenName == "available" then
         return button._desatCooldownActive ~= true
+    elseif tokenName == "incombat" then
+        return UnitAffectingCombat("player") == true
     end
     return false
 end
