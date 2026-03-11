@@ -288,6 +288,8 @@ local function BuildTextAppearanceTab(container, group, style)
         CooldownCompanion:RefreshConfigPanel()
     end)
 
+    CreatePromoteButton(fontHeading, "textFont", CS.selectedButton and group.buttons[CS.selectedButton], style)
+
     if not fontCollapsed then
     local fontDrop = AceGUI:Create("Dropdown")
     fontDrop:SetLabel("Font")

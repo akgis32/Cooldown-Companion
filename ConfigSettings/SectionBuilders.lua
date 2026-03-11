@@ -1467,6 +1467,51 @@ end
 ------------------------------------------------------------------------
 -- Text Mode — Text Colors
 ------------------------------------------------------------------------
+local function BuildTextFontControls(container, styleTable, refreshCallback)
+    local fontDrop = AceGUI:Create("Dropdown")
+    fontDrop:SetLabel("Font")
+    CS.SetupFontDropdown(fontDrop)
+    fontDrop:SetValue(styleTable.textFont or "Friz Quadrata TT")
+    fontDrop:SetFullWidth(true)
+    fontDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        styleTable.textFont = val
+        refreshCallback()
+    end)
+    container:AddChild(fontDrop)
+
+    local outlineDrop = AceGUI:Create("Dropdown")
+    outlineDrop:SetLabel("Font Outline")
+    outlineDrop:SetList(CS.outlineOptions)
+    outlineDrop:SetValue(styleTable.textFontOutline or "OUTLINE")
+    outlineDrop:SetFullWidth(true)
+    outlineDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        styleTable.textFontOutline = val
+        refreshCallback()
+    end)
+    container:AddChild(outlineDrop)
+
+    local alignDrop = AceGUI:Create("Dropdown")
+    alignDrop:SetLabel("Alignment")
+    alignDrop:SetList({LEFT = "Left", CENTER = "Center", RIGHT = "Right"})
+    alignDrop:SetValue(styleTable.textAlignment or "LEFT")
+    alignDrop:SetFullWidth(true)
+    alignDrop:SetCallback("OnValueChanged", function(widget, event, val)
+        styleTable.textAlignment = val
+        refreshCallback()
+    end)
+    container:AddChild(alignDrop)
+
+    local shadowCb = AceGUI:Create("CheckBox")
+    shadowCb:SetLabel("Text Shadow")
+    shadowCb:SetValue(styleTable.textShadow == true)
+    shadowCb:SetFullWidth(true)
+    shadowCb:SetCallback("OnValueChanged", function(widget, event, val)
+        styleTable.textShadow = val or false
+        refreshCallback()
+    end)
+    container:AddChild(shadowCb)
+end
+
 local function BuildTextColorsControls(container, styleTable, refreshCallback)
     local textColorPicker = AceGUI:Create("ColorPicker")
     textColorPicker:SetLabel("Text Color")
@@ -1576,4 +1621,5 @@ ST._BuildBarActiveAuraControls = BuildBarActiveAuraControls
 ST._BuildBarColorsControls = BuildBarColorsControls
 ST._BuildBarNameTextControls = BuildBarNameTextControls
 ST._BuildBarReadyTextControls = BuildBarReadyTextControls
+ST._BuildTextFontControls = BuildTextFontControls
 ST._BuildTextColorsControls = BuildTextColorsControls

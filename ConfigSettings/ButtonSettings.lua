@@ -39,6 +39,7 @@ local BuildBarActiveAuraControls = ST._BuildBarActiveAuraControls
 local BuildBarColorsControls = ST._BuildBarColorsControls
 local BuildBarNameTextControls = ST._BuildBarNameTextControls
 local BuildBarReadyTextControls = ST._BuildBarReadyTextControls
+local BuildTextFontControls = ST._BuildTextFontControls
 local BuildTextColorsControls = ST._BuildTextColorsControls
 
 local tabInfoButtons = CS.tabInfoButtons
@@ -1090,7 +1091,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
         "keybindText", "chargeText", "desaturation", "cooldownSwipe", "showGCDSwipe", "showOutOfRange", "showTooltips",
         "lossOfControl", "unusableDimming", "assistedHighlight", "procGlow", "pandemicGlow", "auraIndicator", "readyGlow",
         "barColors", "barNameText", "barReadyText", "pandemicBar", "barActiveAura",
-        "textColors",
+        "textFont", "textColors",
     }
 
     -- Map of section IDs to builder functions
@@ -1119,6 +1120,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
         barReadyText = BuildBarReadyTextControls,
         pandemicBar = BuildPandemicBarControls,
         barActiveAura = BuildBarActiveAuraControls,
+        textFont = BuildTextFontControls,
         textColors = BuildTextColorsControls,
     }
 

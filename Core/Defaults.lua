@@ -584,7 +584,7 @@ ST.OVERRIDE_SECTIONS = {
     },
     textFont = {
         label = "Text Font",
-        keys = {"textFont", "textFontSize", "textFontOutline", "textAlignment", "textShadow"},
+        keys = {"textFont", "textFontOutline", "textAlignment", "textShadow"},
         modes = {text = true},
     },
     textColors = {
