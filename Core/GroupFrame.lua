@@ -505,8 +505,11 @@ end
 local function GetButtonDimensions(group)
     local style = group.style or {}
     local isBarMode = group.displayMode == "bars"
+    local isTextMode = group.displayMode == "text"
     local w, h
-    if isBarMode then
+    if isTextMode then
+        w, h = style.textWidth or 200, style.textHeight or 20
+    elseif isBarMode then
         w, h = style.barLength or 180, style.barHeight or 20
         if style.barFillVertical then w, h = h, w end
     elseif style.maintainAspectRatio then
@@ -541,6 +544,43 @@ function CooldownCompanion:PopulateGroupButtons(groupId)
     end
     wipe(frame.buttons)
 
+    -- Text mode group header
+    local isTextMode = group.displayMode == "text"
+    local headerHeight = 0
+    if isTextMode and style.showTextGroupHeader then
+        if not frame.textHeader then
+            frame.textHeader = frame:CreateFontString(nil, "OVERLAY")
+            frame.textHeader:SetJustifyV("TOP")
+        end
+        local font = CooldownCompanion:FetchFont(style.textFont or "Friz Quadrata TT")
+        local fontSize = style.textHeaderFontSize or style.textFontSize or 12
+        local fontOutline = style.textFontOutline or "OUTLINE"
+        frame.textHeader:SetFont(font, fontSize, fontOutline)
+        local hdrColor = style.textHeaderFontColor or {1, 1, 1, 1}
+        frame.textHeader:SetTextColor(hdrColor[1], hdrColor[2], hdrColor[3], hdrColor[4] or 1)
+        if style.textShadow then
+            frame.textHeader:SetShadowColor(0, 0, 0, 0.8)
+            frame.textHeader:SetShadowOffset(1, -1)
+        else
+            frame.textHeader:SetShadowColor(0, 0, 0, 0)
+            frame.textHeader:SetShadowOffset(0, 0)
+        end
+        local align = style.textAlignment or "LEFT"
+        frame.textHeader:SetJustifyH(align)
+        frame.textHeader:SetText(group.name or "")
+        frame.textHeader:ClearAllPoints()
+        local anchor = align == "RIGHT" and "TOPRIGHT" or align == "CENTER" and "TOP" or "TOPLEFT"
+        local parentAnchor = anchor
+        local xOff = (align == "CENTER") and 0 or (align == "RIGHT") and -2 or 2
+        frame.textHeader:SetPoint(anchor, frame, parentAnchor, xOff, -1)
+        frame.textHeader:SetWidth(frame:GetWidth() - 4)
+        frame.textHeader:Show()
+        headerHeight = fontSize + 4
+    elseif frame.textHeader then
+        frame.textHeader:Hide()
+    end
+    frame._textHeaderHeight = headerHeight
+
     -- Create new buttons (skip untalented spells)
     local visibleIndex = 0
     for i, buttonData in ipairs(group.buttons) do
@@ -548,29 +588,32 @@ function CooldownCompanion:PopulateGroupButtons(groupId)
             visibleIndex = visibleIndex + 1
             local effectiveStyle = self:GetEffectiveStyle(style, buttonData)
             local button
-            if isBarMode then
+            if group.displayMode == "text" then
+                button = self:CreateTextFrame(frame, i, buttonData, effectiveStyle)
+            elseif isBarMode then
                 button = self:CreateBarFrame(frame, i, buttonData, effectiveStyle)
             else
                 button = self:CreateButtonFrame(frame, i, buttonData, effectiveStyle)
             end
 
             -- Position the button using visibleIndex for gap-free layout
+            local yOffset = headerHeight
             local row, col
             if orientation == "horizontal" then
                 row = math_floor((visibleIndex - 1) / buttonsPerRow)
                 col = (visibleIndex - 1) % buttonsPerRow
-                button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -row * (buttonHeight + spacing))
+                button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -(row * (buttonHeight + spacing) + yOffset))
             else
                 col = math_floor((visibleIndex - 1) / buttonsPerRow)
                 row = (visibleIndex - 1) % buttonsPerRow
-                button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -row * (buttonHeight + spacing))
+                button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -(row * (buttonHeight + spacing) + yOffset))
             end
 
             button:Show()
             table_insert(frame.buttons, button)
 
             -- Add to Masque if enabled (after button is shown and in the list, icons only)
-            if not isBarMode and group.masqueEnabled then
+            if not isBarMode and group.displayMode ~= "text" and group.masqueEnabled then
                 self:AddButtonToMasque(groupId, button)
             end
         end
@@ -635,6 +678,11 @@ function CooldownCompanion:ResizeGroupFrame(groupId)
 
         local width = cols * buttonWidth + (cols - 1) * spacing
         local height = rows * buttonHeight + (rows - 1) * spacing
+
+        -- Add text group header height if active
+        local headerH = frame._textHeaderHeight or 0
+        height = height + headerH
+
         targetWidth = math_max(width, buttonWidth)
         targetHeight = math_max(height, buttonHeight)
     end
@@ -708,6 +756,7 @@ function CooldownCompanion:UpdateGroupLayout(groupId)
     end
 
     local visibleCount = #visibleButtons
+    local headerH = frame._textHeaderHeight or 0
     for visibleIndex, button in ipairs(visibleButtons) do
         button:ClearAllPoints()
         local row, col = GetCompactSlotForIndex(
@@ -717,7 +766,7 @@ function CooldownCompanion:UpdateGroupLayout(groupId)
             orientation,
             compactGrowthDirection
         )
-        button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -row * (buttonHeight + spacing))
+        button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -(row * (buttonHeight + spacing) + headerH))
     end
 
     if frame.visibleButtonCount ~= visibleCount then

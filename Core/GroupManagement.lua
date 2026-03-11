@@ -15,6 +15,7 @@ local table_remove = table.remove
 local GROUP_SETTING_PRESET_MODES = {
     icons = true,
     bars = true,
+    text = true,
 }
 
 local function IsValidGroupSettingPresetMode(mode)

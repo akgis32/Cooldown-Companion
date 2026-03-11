@@ -62,6 +62,7 @@ ButtonFrame\Visibility.lua
 ButtonFrame\Tracking.lua
 ButtonFrame\IconMode.lua
 ButtonFrame\BarMode.lua
+ButtonFrame\TextMode.lua
 ButtonFrame\Preview.lua
 ButtonFrame\CooldownUpdate.lua
 Core\GroupFrame.lua
@@ -89,4 +90,6 @@ ConfigSettings\FrameAnchoringPanels.lua
 ConfigSettings\ButtonSettings.lua
 ConfigSettings\ButtonConditions.lua
 ConfigSettings\BarModeTabs.lua
+ConfigSettings\FormatEditor.lua
+ConfigSettings\TextModeTabs.lua
 ConfigSettings\GroupTabs.lua

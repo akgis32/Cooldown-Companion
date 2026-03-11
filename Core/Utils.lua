@@ -216,6 +216,21 @@ function ST.HasTooltipCooldown(spellId)
     return lastNoneLine ~= nil and lastNoneLine.rightText ~= nil and lastNoneLine.rightText ~= ""
 end
 
+-- Returns true if the spell tooltip contains a UsageRequirement line
+-- (e.g. "Requires Bear Form"). Uses structured tooltip data — no localized
+-- text parsing. Complements HasTooltipCooldown for config-time gating.
+function ST.HasUsageRequirement(spellId)
+    if not spellId then return false end
+    local data = C_TooltipInfo.GetSpellByID(spellId)
+    if not data or not data.lines then return false end
+    for _, line in ipairs(data.lines) do
+        if line.type == Enum.TooltipDataLineType.UsageRequirement then
+            return true
+        end
+    end
+    return false
+end
+
 --------------------------------------------------------------------------------
 -- Border Helpers
 --------------------------------------------------------------------------------

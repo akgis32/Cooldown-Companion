@@ -39,6 +39,9 @@ local BuildBarActiveAuraControls = ST._BuildBarActiveAuraControls
 local BuildBarColorsControls = ST._BuildBarColorsControls
 local BuildBarNameTextControls = ST._BuildBarNameTextControls
 local BuildBarReadyTextControls = ST._BuildBarReadyTextControls
+local BuildTextFontControls = ST._BuildTextFontControls
+local BuildTextColorsControls = ST._BuildTextColorsControls
+local BuildTextBackgroundControls = ST._BuildTextBackgroundControls
 
 local tabInfoButtons = CS.tabInfoButtons
 local appearanceTabElements = CS.appearanceTabElements
@@ -687,8 +690,7 @@ local function BuildItemSettings(scroll, buttonData, infoButtons)
 end
 
 local function BuildEquipItemSettings(scroll, buttonData, infoButtons)
-    local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
-    if not group then return end
+    -- Currently no equip-item-specific settings
 end
 
 ------------------------------------------------------------------------
@@ -970,12 +972,102 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
 
     local displayMode = group.displayMode or "icons"
 
-    -- Check if any overrides exist
+    -- Per-button text format override (text mode only)
+    if displayMode == "text" then
+        local fmtHeading = AceGUI:Create("Heading")
+        fmtHeading:SetText("Format Override")
+        ColorHeading(fmtHeading)
+        fmtHeading:SetFullWidth(true)
+        scroll:AddChild(fmtHeading)
+
+        local fmtInfo = CreateInfoButton(fmtHeading.frame, fmtHeading.label, "LEFT", "RIGHT", 4, 0, {
+            {"Per-Button Format Override", 1, 0.82, 0, true},
+            " ",
+            {"Overrides the group format string for this button only.", 1, 1, 1},
+            {"Clear the override to revert to the group default.", 1, 1, 1},
+        }, infoButtons)
+        fmtHeading.right:ClearAllPoints()
+        fmtHeading.right:SetPoint("RIGHT", fmtHeading.frame, "RIGHT", -3, 0)
+        fmtHeading.right:SetPoint("LEFT", fmtInfo, "RIGHT", 4, 0)
+
+        local effectiveFmt = buttonData.textFormat or group.style.textFormat or "{name}  {status}"
+
+        -- Preview label
+        local preSpacer = AceGUI:Create("Label")
+        preSpacer:SetText(" ")
+        preSpacer:SetFullWidth(true)
+        scroll:AddChild(preSpacer)
+
+        local fmtPreview = AceGUI:Create("Label")
+        fmtPreview:SetText(ST._RenderFormatPreview(effectiveFmt, group.style))
+        fmtPreview:SetFullWidth(true)
+        fmtPreview:SetFontObject(GameFontHighlight)
+        fmtPreview:SetJustifyH("CENTER")
+        scroll:AddChild(fmtPreview)
+
+        local postSpacer = AceGUI:Create("Label")
+        postSpacer:SetText(" ")
+        postSpacer:SetFullWidth(true)
+        scroll:AddChild(postSpacer)
+
+        -- "Using group default" note or tag summary
+        if not buttonData.textFormat then
+            local defaultNote = AceGUI:Create("Label")
+            defaultNote:SetText("|cff888888Using group default|r")
+            defaultNote:SetFullWidth(true)
+            defaultNote:SetFontObject(GameFontHighlightSmall)
+            scroll:AddChild(defaultNote)
+        else
+            local summaryParts = ST._BuildFormatSummary(effectiveFmt)
+            for _, line in ipairs(summaryParts) do
+                local fmtSummary = AceGUI:Create("Label")
+                fmtSummary:SetText(line)
+                fmtSummary:SetFullWidth(true)
+                fmtSummary:SetFontObject(GameFontHighlightSmall)
+                scroll:AddChild(fmtSummary)
+            end
+        end
+
+        local btnSpacer = AceGUI:Create("Label")
+        btnSpacer:SetText(" ")
+        btnSpacer:SetFullWidth(true)
+        scroll:AddChild(btnSpacer)
+
+        -- Edit button
+        local editBtn = AceGUI:Create("Button")
+        editBtn:SetText("Edit Format Override")
+        editBtn:SetFullWidth(true)
+        editBtn:SetCallback("OnClick", function()
+            ST._OpenFormatEditor(group.style, CS.selectedGroup, {
+                title = "Button Format Override",
+                saveTarget = buttonData,
+                defaultFormat = group.style.textFormat or "{name}  {status}",
+            })
+        end)
+        scroll:AddChild(editBtn)
+
+        -- Clear button (only when override exists)
+        if buttonData.textFormat then
+            local clearBtn = AceGUI:Create("Button")
+            clearBtn:SetText("Clear Override")
+            clearBtn:SetFullWidth(true)
+            clearBtn:SetCallback("OnClick", function()
+                buttonData.textFormat = nil
+                CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+                CooldownCompanion:RefreshConfigPanel()
+            end)
+            scroll:AddChild(clearBtn)
+        end
+    end
+
+    -- Check if any style overrides exist
     if not buttonData.overrideSections or not next(buttonData.overrideSections) then
-        local noOverridesLabel = AceGUI:Create("Label")
-        noOverridesLabel:SetText("|cff888888No appearance overrides.\n\nTo customize this button's appearance, select it and click the |A:Crosshair_VehichleCursor_32:0:0|a icon next to a group settings section heading.|r")
-        noOverridesLabel:SetFullWidth(true)
-        scroll:AddChild(noOverridesLabel)
+        if displayMode ~= "text" then
+            local noOverridesLabel = AceGUI:Create("Label")
+            noOverridesLabel:SetText("|cff888888No appearance overrides.\n\nTo customize this button's appearance, select it and click the |A:Crosshair_VehichleCursor_32:0:0|a icon next to a group settings section heading.|r")
+            noOverridesLabel:SetFullWidth(true)
+            scroll:AddChild(noOverridesLabel)
+        end
         return
     end
 
@@ -1000,6 +1092,7 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
         "keybindText", "chargeText", "desaturation", "cooldownSwipe", "showGCDSwipe", "showOutOfRange", "showTooltips",
         "lossOfControl", "unusableDimming", "assistedHighlight", "procGlow", "pandemicGlow", "auraIndicator", "readyGlow",
         "barColors", "barNameText", "barReadyText", "pandemicBar", "barActiveAura",
+        "textFont", "textColors", "textBackground",
     }
 
     -- Map of section IDs to builder functions
@@ -1028,6 +1121,9 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
         barReadyText = BuildBarReadyTextControls,
         pandemicBar = BuildPandemicBarControls,
         barActiveAura = BuildBarActiveAuraControls,
+        textFont = BuildTextFontControls,
+        textColors = BuildTextColorsControls,
+        textBackground = BuildTextBackgroundControls,
     }
 
     -- Detect no-cooldown spells to skip irrelevant override sections

@@ -47,6 +47,9 @@ local appearanceTabElements = CS.appearanceTabElements
 local BuildBarAppearanceTab = ST._BuildBarAppearanceTab
 local BuildBarEffectsTab = ST._BuildBarEffectsTab
 
+-- Imports from TextModeTabs.lua
+local BuildTextAppearanceTab = ST._BuildTextAppearanceTab
+
 local function BuildLayoutTab(container)
     for _, elem in ipairs(appearanceTabElements) do
         elem:ClearAllPoints()
@@ -207,7 +210,33 @@ local function BuildLayoutTab(container)
     -- ================================================================
     -- Orientation / Layout controls (mode-dependent)
     -- ================================================================
-    if group.displayMode == "bars" then
+    if group.displayMode == "text" then
+        local orientDrop = AceGUI:Create("Dropdown")
+        orientDrop:SetLabel("Orientation")
+        orientDrop:SetList({ horizontal = "Horizontal", vertical = "Vertical" })
+        orientDrop:SetValue(style.orientation or "vertical")
+        orientDrop:SetFullWidth(true)
+        orientDrop:SetCallback("OnValueChanged", function(widget, event, val)
+            style.orientation = val
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(orientDrop)
+
+        if #group.buttons > 1 then
+            local bprSlider = AceGUI:Create("Slider")
+            bprSlider:SetLabel("Entries per Row/Column")
+            local numEntries = math.max(1, #group.buttons)
+            bprSlider:SetSliderValues(1, numEntries, 1)
+            bprSlider:SetValue(math.min(style.buttonsPerRow or 12, numEntries))
+            bprSlider:SetFullWidth(true)
+            bprSlider:SetCallback("OnValueChanged", function(widget, event, val)
+                style.buttonsPerRow = val
+                CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+            end)
+            container:AddChild(bprSlider)
+        end
+    elseif group.displayMode == "bars" then
         local vertFillCheck = AceGUI:Create("CheckBox")
         vertFillCheck:SetLabel("Vertical Bar Fill")
         vertFillCheck:SetValue(style.barFillVertical or false)
@@ -255,18 +284,20 @@ local function BuildLayoutTab(container)
         container:AddChild(orientDrop)
     end
 
-    -- Buttons Per Row/Column
-    local numButtons = math.max(1, #group.buttons)
-    local bprSlider = AceGUI:Create("Slider")
-    bprSlider:SetLabel("Buttons Per Row/Column")
-    bprSlider:SetSliderValues(1, numButtons, 1)
-    bprSlider:SetValue(math.min(style.buttonsPerRow or 12, numButtons))
-    bprSlider:SetFullWidth(true)
-    bprSlider:SetCallback("OnValueChanged", function(widget, event, val)
-        style.buttonsPerRow = val
-        CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
-    end)
-    container:AddChild(bprSlider)
+    -- Buttons Per Row/Column (icon/bar modes only; text mode has its own slider)
+    if group.displayMode ~= "text" then
+        local numButtons = math.max(1, #group.buttons)
+        local bprSlider = AceGUI:Create("Slider")
+        bprSlider:SetLabel("Buttons Per Row/Column")
+        bprSlider:SetSliderValues(1, numButtons, 1)
+        bprSlider:SetValue(math.min(style.buttonsPerRow or 12, numButtons))
+        bprSlider:SetFullWidth(true)
+        bprSlider:SetCallback("OnValueChanged", function(widget, event, val)
+            style.buttonsPerRow = val
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+        end)
+        container:AddChild(bprSlider)
+    end
 
     -- ================================================================
     -- ADVANCED: Alpha (from Extras)
@@ -484,7 +515,7 @@ local function BuildLayoutTab(container)
     end
 
     -- Custom Icon Strata (sub-element ordering) — icon mode only
-    if group.displayMode ~= "bars" then
+    if group.displayMode == "icons" then
     local customStrataEnabled = type(style.strataOrder) == "table"
 
     local strataToggle = AceGUI:Create("CheckBox")
@@ -990,6 +1021,12 @@ local function BuildAppearanceTab(container)
     local group = CooldownCompanion.db.profile.groups[CS.selectedGroup]
     if not group then return end
     local style = group.style
+
+    -- Branch for text mode
+    if group.displayMode == "text" then
+        BuildTextAppearanceTab(container, group, style)
+        return
+    end
 
     -- Branch for bar mode
     if group.displayMode == "bars" then
