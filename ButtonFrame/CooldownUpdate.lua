@@ -28,7 +28,6 @@ local EvaluateButtonVisibility = ST._EvaluateButtonVisibility
 local C_Spell_IsSpellUsable = C_Spell.IsSpellUsable
 local IsUsableItem = C_Item.IsUsableItem
 local IsItemInRange = C_Item.IsItemInRange
-local InCombatLockdown = InCombatLockdown
 
 -- Imports from Utils
 local HasTooltipCooldown = ST.HasTooltipCooldown
@@ -1228,10 +1227,8 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         if buttonData.type == "spell" then
             button._isOutOfRange = button._spellOutOfRange or false
         elseif buttonData.type == "item" or buttonData.type == "equipitem" then
-            if not InCombatLockdown() then
-                local inRange = IsItemInRange(buttonData.id, "target")
-                button._isOutOfRange = (inRange == false)
-            end
+            local inRange = IsItemInRange(buttonData.id, "target")
+            button._isOutOfRange = (inRange == false)
         else
             button._isOutOfRange = false
         end
