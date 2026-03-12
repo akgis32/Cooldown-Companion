@@ -726,6 +726,7 @@ local function RefreshColumn2()
                     bar:SetColorTexture(cc.r, cc.g, cc.b, 0.8)
                 end
                 bar:Show()
+                spacer:SetCallback("OnRelease", function() bar:Hide() end)
                 CS.col2Scroll:AddChild(spacer)
             end
 
