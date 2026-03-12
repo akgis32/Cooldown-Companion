@@ -665,14 +665,19 @@ local function RefreshColumn2()
                 end
                 UIDropDownMenu_AddButton(info, level)
 
+                local charKey = CooldownCompanion.db.keys.char
                 local folderList = {}
                 for fid, folder in pairs(db.folders) do
-                    table.insert(folderList, {
-                        id = fid,
-                        name = folder.name,
-                        section = folder.section,
-                        order = folder.order or fid,
-                    })
+                    if folder.section == "char" and folder.createdBy and folder.createdBy ~= charKey then
+                        -- skip: belongs to another character
+                    else
+                        table.insert(folderList, {
+                            id = fid,
+                            name = folder.name,
+                            section = folder.section,
+                            order = folder.order or fid,
+                        })
+                    end
                 end
                 table.sort(folderList, function(a, b)
                     if a.section ~= b.section then

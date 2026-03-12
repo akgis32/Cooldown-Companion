@@ -571,8 +571,12 @@ local function RefreshColumn1(preserveDrag)
                         local hasFolders = false
                         for fid, folder in pairs(db.folders) do
                             if folder.section == containerSection then
-                                hasFolders = true
-                                break
+                                if containerSection == "char" and folder.createdBy and folder.createdBy ~= charKey then
+                                    -- skip: belongs to another character
+                                else
+                                    hasFolders = true
+                                    break
+                                end
                             end
                         end
                         if hasFolders or container.folderId then
@@ -726,7 +730,11 @@ local function RefreshColumn1(preserveDrag)
                         local folderList = {}
                         for fid, folder in pairs(db.folders) do
                             if folder.section == containerSection then
-                                table.insert(folderList, { id = fid, name = folder.name, order = folder.order or fid })
+                                if containerSection == "char" and folder.createdBy and folder.createdBy ~= charKey then
+                                    -- skip: belongs to another character
+                                else
+                                    table.insert(folderList, { id = fid, name = folder.name, order = folder.order or fid })
+                                end
                             end
                         end
                         table.sort(folderList, function(a, b) return a.order < b.order end)
