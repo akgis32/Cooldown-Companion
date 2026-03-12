@@ -14,6 +14,7 @@ local CleanRecycledEntry = ST._CleanRecycledEntry
 local GetButtonIcon = ST._GetButtonIcon
 local GenerateFolderName = ST._GenerateFolderName
 local ShowPopupAboveConfig = ST._ShowPopupAboveConfig
+local CompactUntitledInlineGroupConfig = ST._CompactUntitledInlineGroupConfig
 local CancelDrag = ST._CancelDrag
 local StartDragTracking = ST._StartDragTracking
 local GetScaledCursorPosition = ST._GetScaledCursorPosition
@@ -599,10 +600,6 @@ local function RefreshColumn2()
         sep:SetFullWidth(true)
         CS.col2Scroll:AddChild(sep)
 
-        -- Track scroll child count for drag offset computation
-        -- inputBox, spacer, addRow, sep = 4 children so far
-        local scrollChildCount = 4
-
         local cdmEnabled = GetCVarBool("cooldownViewerEnabled")
 
         -- Metadata for cross-panel drag detection
@@ -613,6 +610,14 @@ local function RefreshColumn2()
             local panelId = panelInfo.groupId
             local panel = panelInfo.group
             local isCollapsed = CS.collapsedPanels[panelId]
+
+            -- Bordered container for this panel
+            local panelContainer = AceGUI:Create("InlineGroup")
+            panelContainer:SetTitle("")
+            panelContainer:SetLayout("List")
+            panelContainer:SetFullWidth(true)
+            CompactUntitledInlineGroupConfig(panelContainer)
+            CS.col2Scroll:AddChild(panelContainer)
 
             -- Panel header
                 local modeLabel
@@ -768,15 +773,12 @@ local function RefreshColumn2()
                 end)
                 collapseBtn:Show()
 
-                CS.col2Scroll:AddChild(header)
-                scrollChildCount = scrollChildCount + 1
+                panelContainer:AddChild(header)
                 table.insert(col2RenderedRows, { kind = "header", panelId = panelId, isCollapsed = isCollapsed, widget = header })
 
             -- Button list for this panel (skip if collapsed)
             if not isCollapsed then
                 local panelButtons = panel.buttons or {}
-                local numButtons = #panelButtons
-                local panelChildOffset = scrollChildCount
 
                 for i, buttonData in ipairs(panelButtons) do
                     local entry = AceGUI:Create("InteractiveLabel")
@@ -1159,8 +1161,7 @@ local function RefreshColumn2()
                         end
                     end)
 
-                    CS.col2Scroll:AddChild(entry)
-                    scrollChildCount = scrollChildCount + 1
+                    panelContainer:AddChild(entry)
                     table.insert(col2RenderedRows, { kind = "button", panelId = panelId, buttonIndex = i, widget = entry })
 
                     entryFrame:SetScript("OnReceiveDrag", TryReceiveCursorDrop)
@@ -1174,8 +1175,6 @@ local function RefreshColumn2()
                     end
                     local dragPanelId = panelId
                     local dragBtnIndex = i
-                    local dragChildOffset = panelChildOffset
-                    local dragTotal = numButtons
                     entryFrame._cdcOnMouseDown = function(self, mouseButton)
                         if GetCursorInfo() then return end
                         if mouseButton == "LeftButton" and not IsControlKeyDown() then

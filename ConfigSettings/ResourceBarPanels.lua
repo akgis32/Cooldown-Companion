@@ -804,49 +804,7 @@ local function ClearResourceAuraEntryConfig(powerType, resource, specID)
     CooldownCompanion:RefreshConfigPanel()
 end
 
-local function CompactUntitledInlineGroupConfig(group)
-    local frame = group and group.frame
-    local content = group and group.content
-    local border = content and content:GetParent()
-    local titleText = group and group.titletext
-    if not frame or not content or not border or not titleText then
-        return
-    end
-
-    local originalLayoutFinished = group.LayoutFinished
-
-    titleText:Hide()
-    border:ClearAllPoints()
-    border:SetPoint("TOPLEFT", 0, 0)
-    border:SetPoint("BOTTOMRIGHT", -1, 3)
-    content:ClearAllPoints()
-    content:SetPoint("TOPLEFT", 10, -6)
-    content:SetPoint("BOTTOMRIGHT", -10, 6)
-    group.LayoutFinished = function(self, width, height)
-        if self.noAutoHeight then
-            return
-        end
-        self:SetHeight((height or 0) + 15)
-    end
-
-    group:SetCallback("OnRelease", function(widget)
-        local releaseTitle = widget and widget.titletext
-        local releaseContent = widget and widget.content
-        local releaseBorder = releaseContent and releaseContent:GetParent()
-        if not releaseTitle or not releaseContent or not releaseBorder then
-            return
-        end
-
-        releaseTitle:Show()
-        releaseBorder:ClearAllPoints()
-        releaseBorder:SetPoint("TOPLEFT", 0, -17)
-        releaseBorder:SetPoint("BOTTOMRIGHT", -1, 3)
-        releaseContent:ClearAllPoints()
-        releaseContent:SetPoint("TOPLEFT", 10, -10)
-        releaseContent:SetPoint("BOTTOMRIGHT", -10, 10)
-        widget.LayoutFinished = originalLayoutFinished
-    end)
-end
+local CompactUntitledInlineGroupConfig = ST._CompactUntitledInlineGroupConfig
 
 local function AttachResourceAuraEntryToggleButton(parentWidget, isCollapsed, onClickFn)
     local frame = parentWidget and parentWidget.frame
