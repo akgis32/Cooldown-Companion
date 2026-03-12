@@ -16,22 +16,7 @@ local ShowPopupAboveConfig = ST._ShowPopupAboveConfig
 -- COLUMN 4: Group Settings / Tab Column
 ------------------------------------------------------------------------
 local function RefreshColumn4(container)
-    -- Cross-character browse mode: show placeholder
-    if CS.browseMode then
-        if container.placeholderLabel then container.placeholderLabel:Hide() end
-        if container.tabGroup then container.tabGroup.frame:Hide() end
-        if container.containerTabGroup then container.containerTabGroup.frame:Hide() end
-        if container.layoutOrderScroll then container.layoutOrderScroll.frame:Hide() end
-        if not container._browsePlaceholder then
-            container._browsePlaceholder = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            container._browsePlaceholder:SetPoint("TOPLEFT", container, "TOPLEFT", 4, -4)
-        end
-        local charName = CS.browseCharKey and (CS.browseCharKey:match("^(.-)%s*%-") or CS.browseCharKey) or "..."
-        container._browsePlaceholder:SetText("Browsing " .. charName .. "'s groups")
-        container._browsePlaceholder:Show()
-        return
-    end
-    -- Hide browse placeholder when not in browse mode
+    -- Hide browse placeholder
     if container._browsePlaceholder then
         container._browsePlaceholder:Hide()
     end
@@ -116,6 +101,10 @@ local function RefreshColumn4(container)
                 elseif tab == "loadconditions" then
                     ST._BuildContainerLoadConditionsTab(scroll, CS.selectedContainer)
                 end
+
+                if CS.browseMode then
+                    ST._DisableAllWidgets(scroll)
+                end
             end)
             tabGroup.frame:SetParent(container)
             tabGroup.frame:ClearAllPoints()
@@ -190,6 +179,13 @@ local function RefreshColumn4(container)
                 ST._BuildEffectsTab(scroll)
             elseif tab == "loadconditions" then
                 ST._BuildLoadConditionsTab(scroll)
+            end
+
+            if CS.browseMode then
+                ST._DisableAllWidgets(scroll)
+                for _, btn in ipairs(CS.tabInfoButtons) do
+                    if btn.Disable then btn:Disable() end
+                end
             end
         end)
 

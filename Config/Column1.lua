@@ -66,6 +66,10 @@ local function RenderBrowseMode()
             CS.browseMode = false
             CS.browseCharKey = nil
             CS.browseContainerId = nil
+            CS.selectedContainer = nil
+            CS.selectedGroup = nil
+            CS.selectedButton = nil
+            wipe(CS.selectedButtons)
             CooldownCompanion:RefreshConfigPanel()
         end)
         CS.col1Scroll:AddChild(backBtn)
@@ -106,6 +110,10 @@ local function RenderBrowseMode()
             entry:SetCallback("OnClick", function()
                 CS.browseCharKey = charInfo.charKey
                 CS.browseContainerId = nil
+                CS.selectedContainer = nil
+                CS.selectedGroup = nil
+                CS.selectedButton = nil
+                wipe(CS.selectedButtons)
                 CooldownCompanion:RefreshConfigPanel()
             end)
             CS.col1Scroll:AddChild(entry)
@@ -120,6 +128,10 @@ local function RenderBrowseMode()
         backBtn:SetCallback("OnClick", function()
             CS.browseCharKey = nil
             CS.browseContainerId = nil
+            CS.selectedContainer = nil
+            CS.selectedGroup = nil
+            CS.selectedButton = nil
+            wipe(CS.selectedButtons)
             CooldownCompanion:RefreshConfigPanel()
         end)
         CS.col1Scroll:AddChild(backBtn)
@@ -181,9 +193,14 @@ local function RenderBrowseMode()
                 if button == "LeftButton" then
                     if CS.browseContainerId == containerId then
                         CS.browseContainerId = nil
+                        CS.selectedContainer = nil
                     else
                         CS.browseContainerId = containerId
+                        CS.selectedContainer = containerId
                     end
+                    CS.selectedGroup = nil
+                    CS.selectedButton = nil
+                    wipe(CS.selectedButtons)
                     CooldownCompanion:RefreshConfigPanel()
                 elseif button == "RightButton" then
                     -- Verify source still exists

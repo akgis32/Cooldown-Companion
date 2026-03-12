@@ -327,6 +327,8 @@ local function RefreshColumn2()
     -- Cross-character browse mode: read-only preview
     if CS.browseMode then
         if CS.col2ButtonBar then CS.col2ButtonBar:Hide() end
+        -- Extend scroll to full column height (no button bar in browse mode)
+        CS.col2Scroll.frame:SetPoint("BOTTOMRIGHT", CS.col2Scroll.frame:GetParent(), "BOTTOMRIGHT", 0, 0)
         local db = CooldownCompanion.db.profile
 
         if not CS.browseContainerId then
@@ -424,6 +426,17 @@ local function RefreshColumn2()
             header:SetJustifyH("CENTER")
             local textW = header.label:GetStringWidth()
             modeBadge:SetPoint("RIGHT", header.label, "CENTER", -(textW / 2) - 2, 0)
+            if CS.selectedGroup == panelGroupId and not CS.selectedButton then
+                header:SetColor(0, 1, 0)
+            end
+            header:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+            header:SetCallback("OnClick", function()
+                CS.selectedContainer = CS.browseContainerId
+                CS.selectedGroup = panelGroupId
+                CS.selectedButton = nil
+                wipe(CS.selectedButtons)
+                CooldownCompanion:RefreshConfigPanel()
+            end)
             panelContainer:AddChild(header)
 
             -- Spacer after header
@@ -435,7 +448,7 @@ local function RefreshColumn2()
 
             -- Button list (read-only)
             if panel.buttons then
-                for _, buttonData in ipairs(panel.buttons) do
+                for buttonIndex, buttonData in ipairs(panel.buttons) do
                     local entry = AceGUI:Create("InteractiveLabel")
                     CleanRecycledEntry(entry)
                     local icon = GetButtonIcon(buttonData)
@@ -444,6 +457,18 @@ local function RefreshColumn2()
                     entry:SetText(buttonData.name or ("ID: " .. (buttonData.id or "?")))
                     entry:SetFullWidth(true)
                     entry:SetFontObject(GameFontHighlightSmall)
+                    entry:SetHighlight("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+                    if CS.selectedGroup == panelGroupId and CS.selectedButton == buttonIndex then
+                        entry:SetColor(0, 1, 0)
+                    end
+                    local capturedIndex = buttonIndex
+                    entry:SetCallback("OnClick", function()
+                        CS.selectedContainer = CS.browseContainerId
+                        CS.selectedGroup = panelGroupId
+                        CS.selectedButton = capturedIndex
+                        wipe(CS.selectedButtons)
+                        CooldownCompanion:RefreshConfigPanel()
+                    end)
                     panelContainer:AddChild(entry)
                 end
             end
@@ -574,6 +599,9 @@ local function RefreshColumn2()
         CS.col2Scroll:AddChild(copyAllBtn)
         return
     end
+
+    -- Restore scroll bottom offset for button bar space (browse mode may have cleared it)
+    CS.col2Scroll.frame:SetPoint("BOTTOMRIGHT", CS.col2Scroll.frame:GetParent(), "BOTTOMRIGHT", 0, 30)
 
     -- Multi-group selection: show inline action buttons (container IDs)
     local multiGroupCount = 0

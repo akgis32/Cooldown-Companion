@@ -1054,3 +1054,16 @@ ST._SetConfigPrimaryMode = SetConfigPrimaryMode
 ST._GroupsHaveForeignSpecs = GroupsHaveForeignSpecs
 ST._ContainersHaveForeignSpecs = ContainersHaveForeignSpecs
 ST._FolderHasForeignSpecs = FolderHasForeignSpecs
+
+------------------------------------------------------------------------
+-- Helper: Recursively disable all interactive AceGUI widgets
+------------------------------------------------------------------------
+local function DisableAllWidgets(container)
+    if container.children then
+        for _, child in ipairs(container.children) do
+            if child.SetDisabled then child:SetDisabled(true) end
+            DisableAllWidgets(child)
+        end
+    end
+end
+ST._DisableAllWidgets = DisableAllWidgets

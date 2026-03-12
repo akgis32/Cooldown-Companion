@@ -900,6 +900,13 @@ local function CreateConfigPanel()
             ST._BuildOverridesTab(scroll, buttonData, CS.buttonSettingsInfoButtons)
         end
 
+        if CS.browseMode then
+            ST._DisableAllWidgets(scroll)
+            for _, btn in ipairs(CS.buttonSettingsInfoButtons) do
+                if btn.Disable then btn:Disable() end
+            end
+        end
+
         -- Apply hideInfoButtons setting
         if CooldownCompanion.db.profile.hideInfoButtons then
             for _, btn in ipairs(CS.buttonSettingsInfoButtons) do
@@ -1223,8 +1230,16 @@ function CooldownCompanion:RefreshConfigPanel()
     elseif CS.browseMode then
         CS.configFrame.col1:SetTitle("Browse Characters")
         CS.configFrame.col2:SetTitle("Preview")
-        CS.configFrame.col3:SetTitle("Button Settings")
-        CS.configFrame.col4:SetTitle("Group Settings")
+        if CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
+            CS.configFrame.col3:SetTitle("Panel Settings")
+        else
+            CS.configFrame.col3:SetTitle("Button Settings")
+        end
+        if CS.selectedContainer and CS.selectedGroup and anyButtonSelected then
+            CS.configFrame.col4:SetTitle("Panel Settings")
+        else
+            CS.configFrame.col4:SetTitle("Group Settings")
+        end
     else
         CS.configFrame.col1:SetTitle("Groups")
         CS.configFrame.col2:SetTitle("Spells / Items")
@@ -1250,6 +1265,12 @@ function CooldownCompanion:RefreshConfigPanel()
     -- Recompute Column 3 title after RefreshColumn3(), since it may cancel Auto Add.
     if CS.resourceBarPanelActive then
         CS.configFrame.col3:SetTitle(GetCustomAuraBarsColumnTitle())
+    elseif CS.browseMode then
+        if CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
+            CS.configFrame.col3:SetTitle("Panel Settings")
+        else
+            CS.configFrame.col3:SetTitle("Button Settings")
+        end
     elseif CS.autoAddFlowActive then
         CS.configFrame.col3:SetTitle("Auto Add")
     elseif CS.selectedContainer and CS.selectedGroup and not anyButtonSelected then
