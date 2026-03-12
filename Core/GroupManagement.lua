@@ -565,14 +565,13 @@ end
 
 function CooldownCompanion:CreateGroup(name)
     local containerId = self:CreateContainer(name)
-    local groupId = self:CreatePanel(containerId, "icons")
 
     -- Create container frame (Phase 3 — safe noop if method doesn't exist yet)
     if self.CreateContainerFrame then
         self:CreateContainerFrame(containerId)
     end
 
-    return containerId, groupId
+    return containerId
 end
 
 function CooldownCompanion:DeleteGroup(id)

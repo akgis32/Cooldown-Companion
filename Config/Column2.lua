@@ -874,6 +874,24 @@ local function RefreshColumn2()
         -- Collect sorted panels
         local panels = CooldownCompanion:GetPanels(CS.selectedContainer)
         local panelCount = #panels
+
+        if panelCount == 0 then
+            local spacer = AceGUI:Create("SimpleGroup")
+            spacer:SetFullWidth(true)
+            spacer:SetHeight(20)
+            spacer.noAutoHeight = true
+            CS.col2Scroll:AddChild(spacer)
+
+            local msg = AceGUI:Create("Label")
+            msg:SetText("Click one of the buttons above to add your first panel.")
+            msg:SetFullWidth(true)
+            msg:SetJustifyH("CENTER")
+            msg:SetFont(GameFontNormal:GetFont(), 13)
+            CS.col2Scroll:AddChild(msg)
+            CS.col2Scroll:DoLayout()
+            return
+        end
+
         -- Search / add bar (targets CS.selectedGroup)
         local inputBox = AceGUI:Create("EditBox")
         if inputBox.editbox.Instructions then inputBox.editbox.Instructions:Hide() end
