@@ -357,10 +357,11 @@ local function SanitizeAnchorGroupID(groupId)
     if type(group) ~= "table" then
         return nil
     end
-    -- Check isGlobal on container (or group for legacy)
-    local container = group.parentContainerId and profile.groupContainers and profile.groupContainers[group.parentContainerId]
-    local isGlobal = container and container.isGlobal or group.isGlobal
-    if group.displayMode ~= "icons" or isGlobal then
+    if not group.parentContainerId then
+        return nil
+    end
+    local container = profile.groupContainers and profile.groupContainers[group.parentContainerId]
+    if group.displayMode ~= "icons" or (container and container.isGlobal) then
         return nil
     end
     if not CooldownCompanion:IsGroupVisibleToCurrentChar(numericGroupID) then

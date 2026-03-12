@@ -1211,18 +1211,9 @@ local function BuildResourceBarAnchoringPanel(container)
     if not settings.resources then settings.resources = {} end
 
     -- Anchor Group dropdown
-    local groupDropValues = { [""] = "Auto (first available)" }
-    local groupDropOrder = { "" }
-    for groupId, group in pairs(db.groups) do
-        if CooldownCompanion:IsGroupAvailableForAnchoring(groupId) then
-            groupDropValues[tostring(groupId)] = group.name or ("Group " .. groupId)
-            table.insert(groupDropOrder, tostring(groupId))
-        end
-    end
-
     local anchorDrop = AceGUI:Create("Dropdown")
-    anchorDrop:SetLabel("Anchor to Group")
-    anchorDrop:SetList(groupDropValues, groupDropOrder)
+    anchorDrop:SetLabel("Anchor to Panel")
+    local eligibleCount = CooldownCompanion:PopulateAnchorDropdown(anchorDrop)
     anchorDrop:SetValue(settings.anchorGroupId and tostring(settings.anchorGroupId) or "")
     anchorDrop:SetFullWidth(true)
     anchorDrop:SetCallback("OnValueChanged", function(widget, event, val)
@@ -1265,9 +1256,9 @@ local function BuildResourceBarAnchoringPanel(container)
     end)
     container:AddChild(fillDirDrop)
 
-    if #groupDropOrder <= 1 then
+    if eligibleCount == 0 then
         local noGroupsLabel = AceGUI:Create("Label")
-        noGroupsLabel:SetText("No eligible character icon groups are enabled for this spec. Global groups are excluded from anchoring to avoid counterintuitive targets.")
+        noGroupsLabel:SetText("No eligible character icon panels are enabled for this spec. Global panels are excluded from anchoring.")
         noGroupsLabel:SetFullWidth(true)
         container:AddChild(noGroupsLabel)
     end
@@ -2510,19 +2501,6 @@ local function EnsureCustomAuraIndependentConfig(cab, settings)
     cab.independentSize.height = ClampCustomAuraIndependentDimension(cab.independentSize.height, settings and (settings.barHeight or settings.barWidth or 12) or 12)
 end
 
-local function BuildCustomAuraAnchorGroupOptions()
-    local db = CooldownCompanion.db.profile
-    local groupValues = { [""] = "Auto (first available)" }
-    local groupOrder = { "" }
-    for groupId, group in pairs(db.groups) do
-        if CooldownCompanion:IsGroupAvailableForAnchoring(groupId) then
-            groupValues[tostring(groupId)] = group.name or ("Group " .. groupId)
-            table.insert(groupOrder, tostring(groupId))
-        end
-    end
-    return groupValues, groupOrder
-end
-
 local function BuildCustomAuraBarAnchorSettings(container, customBars, settings, capturedIdx)
     local cab = customBars[capturedIdx]
     if not cab then return end
@@ -2556,10 +2534,9 @@ local function BuildCustomAuraBarAnchorSettings(container, customBars, settings,
     container:AddChild(modeDrop)
 
     if (cab.independentAnchorTargetMode or "group") == "group" then
-        local groupValues, groupOrder = BuildCustomAuraAnchorGroupOptions()
         local groupDrop = AceGUI:Create("Dropdown")
-        groupDrop:SetLabel("Anchor to Group")
-        groupDrop:SetList(groupValues, groupOrder)
+        groupDrop:SetLabel("Anchor to Panel")
+        CooldownCompanion:PopulateAnchorDropdown(groupDrop)
         groupDrop:SetValue(cab.independentAnchorGroupId and tostring(cab.independentAnchorGroupId) or "")
         groupDrop:SetFullWidth(true)
         groupDrop:SetCallback("OnValueChanged", function(widget, event, val)

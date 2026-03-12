@@ -460,11 +460,10 @@ end
 function CooldownCompanion:IsGroupAvailableForAnchoring(groupId)
     local group = self.db.profile.groups[groupId]
     if not group then return false end
+    if not group.parentContainerId then return false end
     if group.displayMode ~= "icons" then return false end
-    -- Check isGlobal on container (or group for legacy)
     local container = self:GetParentContainer(group)
-    local isGlobal = container and container.isGlobal or group.isGlobal
-    if isGlobal then return false end
+    if container and container.isGlobal then return false end
     if not self:IsGroupActive(groupId, {
         group = group,
         checkCharVisibility = true,
@@ -494,6 +493,80 @@ function CooldownCompanion:GetFirstAvailableAnchorGroup()
         return orderA < orderB
     end)
     return candidates[1]
+end
+
+function CooldownCompanion:PopulateAnchorDropdown(dropdown)
+    local db = self.db.profile
+    local containers = db.groupContainers or {}
+    local folders = db.folders or {}
+    local folderPanels = {}
+    local loosePanels = {}
+    local eligibleCount = 0
+
+    for groupId, group in pairs(db.groups) do
+        if self:IsGroupAvailableForAnchoring(groupId) then
+            eligibleCount = eligibleCount + 1
+            local cid = group.parentContainerId
+            local ctr = cid and containers[cid]
+            local fid = ctr and ctr.folderId
+            local contName = ctr and ctr.name or "Group"
+            local panelName = group.name or ("Panel " .. groupId)
+            local entry = { id = groupId, name = panelName, contName = contName }
+            if fid and folders[fid] then
+                folderPanels[fid] = folderPanels[fid] or {}
+                table.insert(folderPanels[fid], entry)
+            else
+                table.insert(loosePanels, entry)
+            end
+        end
+    end
+
+    dropdown:SetList({ [""] = "Auto (first available)" }, { "" })
+
+    local sortedFolders = {}
+    for fid, folder in pairs(folders) do
+        if folderPanels[fid] then
+            table.insert(sortedFolders, { id = fid, name = folder.name or ("Folder " .. fid), order = folder.order or fid })
+        end
+    end
+    table.sort(sortedFolders, function(a, b) return a.order < b.order end)
+
+    local hasHeaders = #sortedFolders > 0
+
+    for _, folder in ipairs(sortedFolders) do
+        local hdrKey = "_hdr_" .. folder.id
+        dropdown:AddItem(hdrKey, "|cffffd100" .. folder.name .. "|r")
+        dropdown:SetItemDisabled(hdrKey, true)
+
+        table.sort(folderPanels[folder.id], function(a, b)
+            if a.contName ~= b.contName then return a.contName < b.contName end
+            return a.name < b.name
+        end)
+        for _, panel in ipairs(folderPanels[folder.id]) do
+            local key = tostring(panel.id)
+            dropdown:AddItem(key, "   " .. panel.name)
+            dropdown.list[key] = panel.contName .. " > " .. panel.name
+        end
+    end
+
+    if #loosePanels > 0 then
+        if hasHeaders then
+            dropdown:AddItem("_hdr_none", "|cffffd100No Folder|r")
+            dropdown:SetItemDisabled("_hdr_none", true)
+        end
+        table.sort(loosePanels, function(a, b)
+            if a.contName ~= b.contName then return a.contName < b.contName end
+            return a.name < b.name
+        end)
+        for _, panel in ipairs(loosePanels) do
+            local key = tostring(panel.id)
+            local prefix = hasHeaders and "   " or ""
+            dropdown:AddItem(key, prefix .. panel.name)
+            dropdown.list[key] = panel.contName .. " > " .. panel.name
+        end
+    end
+
+    return eligibleCount
 end
 
 function CooldownCompanion:CheckLoadConditions(group)
