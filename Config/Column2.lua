@@ -593,9 +593,10 @@ local function RefreshColumn2()
 
         CS.col2Scroll:AddChild(addRow)
 
+        local cc = C_ClassColor.GetClassColor(select(2, UnitClass("player")))
+
         local sep = AceGUI:Create("Heading")
         sep:SetText("")
-        local cc = C_ClassColor.GetClassColor(select(2, UnitClass("player")))
         if cc then sep.label:SetTextColor(cc.r, cc.g, cc.b) end
         sep:SetFullWidth(true)
         CS.col2Scroll:AddChild(sep)
@@ -606,10 +607,33 @@ local function RefreshColumn2()
         local col2RenderedRows = {}
 
         -- Render each panel's buttons (with headers for multi-panel containers)
-        for _, panelInfo in ipairs(panels) do
+        for panelIndex, panelInfo in ipairs(panels) do
             local panelId = panelInfo.groupId
             local panel = panelInfo.group
             local isCollapsed = CS.collapsedPanels[panelId]
+
+            -- Class-colored accent separator between panels
+            if panelIndex > 1 then
+                local spacer = AceGUI:Create("Label")
+                spacer:SetText(" ")
+                spacer:SetFullWidth(true)
+                spacer:SetHeight(2)
+                local bar = spacer.frame._cdcAccentBar
+                if not bar then
+                    bar = spacer.frame:CreateTexture(nil, "ARTWORK")
+                    spacer.frame._cdcAccentBar = bar
+                end
+                bar:SetHeight(1.5)
+                bar:ClearAllPoints()
+                local barInset = math.floor(spacer.frame:GetWidth() * 0.10 + 0.5)
+                bar:SetPoint("LEFT", spacer.frame, "LEFT", barInset, 1)
+                bar:SetPoint("RIGHT", spacer.frame, "RIGHT", -barInset, 1)
+                if cc then
+                    bar:SetColorTexture(cc.r, cc.g, cc.b, 0.8)
+                end
+                bar:Show()
+                CS.col2Scroll:AddChild(spacer)
+            end
 
             -- Bordered container for this panel
             local panelContainer = AceGUI:Create("InlineGroup")
