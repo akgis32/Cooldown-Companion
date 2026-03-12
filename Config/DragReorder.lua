@@ -313,7 +313,7 @@ local function ApplyCol1Drop(state)
             if dropTarget.isBelowAll then
                 -- Dropped below all rows: always become top-level
                 CooldownCompanion:MoveGroupToFolder(sourceContainerId, nil)
-            elseif targetRow.kind == "group" and targetRow.inFolder then
+            elseif targetRow.kind == "container" and targetRow.inFolder then
                 -- If dropping on a row that's in a folder, join that folder
                 CooldownCompanion:MoveGroupToFolder(sourceContainerId, targetRow.inFolder)
             elseif targetRow.kind == "folder" then
@@ -351,12 +351,12 @@ local function ApplyCol1Drop(state)
                     if row.section == section then
                         if targetFolderId then
                             -- Ordering within a folder: collect containers in same folder
-                            if row.kind == "group" and row.inFolder == targetFolderId and row.id ~= sourceContainerId then
+                            if row.kind == "container" and row.inFolder == targetFolderId and row.id ~= sourceContainerId then
                                 table.insert(orderItems, row.id)
                             end
                         else
                             -- Top-level ordering: collect top-level items (folders + loose containers)
-                            if (row.kind == "folder") or (row.kind == "group" and not row.inFolder) then
+                            if (row.kind == "folder") or (row.kind == "container" and not row.inFolder) then
                                 if row.id ~= sourceContainerId then
                                     table.insert(orderItems, { kind = row.kind, id = row.id })
                                 end
@@ -413,7 +413,7 @@ local function ApplyCol1Drop(state)
         elseif dropTarget.action == "reorder-before" or dropTarget.action == "reorder-after" then
             if dropTarget.isBelowAll then
                 targetFolderId = nil
-            elseif targetRow.kind == "group" and targetRow.inFolder then
+            elseif targetRow.kind == "container" and targetRow.inFolder then
                 targetFolderId = targetRow.inFolder
             else
                 targetFolderId = nil
@@ -456,7 +456,7 @@ local function ApplyCol1Drop(state)
                 -- Ordering within a folder
                 local orderItems = {}
                 for _, row in ipairs(renderedRows) do
-                    if row.kind == "group" and row.inFolder == targetFolderId and not sourceContainerIds[row.id] then
+                    if row.kind == "container" and row.inFolder == targetFolderId and not sourceContainerIds[row.id] then
                         table.insert(orderItems, row.id)
                     end
                 end
@@ -481,7 +481,7 @@ local function ApplyCol1Drop(state)
                 local orderItems = {}
                 for _, row in ipairs(renderedRows) do
                     if row.section == targetSection then
-                        if (row.kind == "folder") or (row.kind == "group" and not row.inFolder) then
+                        if (row.kind == "folder") or (row.kind == "container" and not row.inFolder) then
                             if not sourceContainerIds[row.id] then
                                 table.insert(orderItems, { kind = row.kind, id = row.id })
                             end
@@ -542,7 +542,7 @@ local function ApplyCol1Drop(state)
             local orderItems = {}
             for _, row in ipairs(renderedRows) do
                 if row.section == section then
-                    if (row.kind == "folder" or (row.kind == "group" and not row.inFolder)) and row.id ~= sourceFolderId then
+                    if (row.kind == "folder" or (row.kind == "container" and not row.inFolder)) and row.id ~= sourceFolderId then
                         table.insert(orderItems, { kind = row.kind, id = row.id })
                     end
                 end
@@ -803,7 +803,7 @@ local function StartDragTracking()
                 if CS.dragState.kind == "multi-group" and CS.dragState.sourceGroupIds then
                     CS.dragState.dimmedWidgets = {}
                     for _, row in ipairs(CS.dragState.col1RenderedRows) do
-                        if row.kind == "group" and CS.dragState.sourceGroupIds[row.id] then
+                        if row.kind == "container" and CS.dragState.sourceGroupIds[row.id] then
                             row.widget.frame:SetAlpha(0.4)
                             table.insert(CS.dragState.dimmedWidgets, row.widget)
                         end
@@ -845,7 +845,7 @@ local function StartDragTracking()
                         if savedKind == "multi-group" and savedSourceGroupIds then
                             CS.dragState.dimmedWidgets = {}
                             for _, row in ipairs(CS.dragState.col1RenderedRows) do
-                                if row.kind == "group" and savedSourceGroupIds[row.id] then
+                                if row.kind == "container" and savedSourceGroupIds[row.id] then
                                     row.widget.frame:SetAlpha(0.4)
                                     table.insert(CS.dragState.dimmedWidgets, row.widget)
                                 end
@@ -856,7 +856,7 @@ local function StartDragTracking()
                                     CS.dragState.widget = row.widget
                                     row.widget.frame:SetAlpha(0.4)
                                     break
-                                elseif (savedKind == "group" or savedKind == "folder-group") and row.kind == "group" and row.id == savedSourceGroupId then
+                                elseif (savedKind == "group" or savedKind == "folder-group") and row.kind == "container" and row.id == savedSourceGroupId then
                                     CS.dragState.widget = row.widget
                                     row.widget.frame:SetAlpha(0.4)
                                     break
