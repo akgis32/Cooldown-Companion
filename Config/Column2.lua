@@ -426,6 +426,13 @@ local function RefreshColumn2()
             modeBadge:SetPoint("RIGHT", header.label, "CENTER", -(textW / 2) - 2, 0)
             panelContainer:AddChild(header)
 
+            -- Spacer after header
+            local headerSpacer = AceGUI:Create("Label")
+            headerSpacer:SetText(" ")
+            headerSpacer:SetFullWidth(true)
+            headerSpacer:SetHeight(4)
+            panelContainer:AddChild(headerSpacer)
+
             -- Button list (read-only)
             if panel.buttons then
                 for _, buttonData in ipairs(panel.buttons) do
@@ -441,10 +448,27 @@ local function RefreshColumn2()
                 end
             end
 
-            -- "Copy Panel" button
+            -- Spacer before copy button
+            local btnSpacer = AceGUI:Create("Label")
+            btnSpacer:SetText(" ")
+            btnSpacer:SetFullWidth(true)
+            btnSpacer:SetHeight(4)
+            panelContainer:AddChild(btnSpacer)
+
+            -- "Copy Panel" button (centered at half width)
+            local btnRow = AceGUI:Create("SimpleGroup")
+            btnRow:SetFullWidth(true)
+            btnRow:SetLayout("Flow")
+            panelContainer:AddChild(btnRow)
+
+            local leftPad = AceGUI:Create("Label")
+            leftPad:SetText("")
+            leftPad:SetRelativeWidth(0.25)
+            btnRow:AddChild(leftPad)
+
             local copyPanelBtn = AceGUI:Create("Button")
             copyPanelBtn:SetText("Copy Panel")
-            copyPanelBtn:SetFullWidth(true)
+            copyPanelBtn:SetRelativeWidth(0.5)
             copyPanelBtn:SetCallback("OnClick", function()
                 -- Guard: source still exists
                 if not db.groups[panelGroupId] then
@@ -519,7 +543,7 @@ local function RefreshColumn2()
                 CS.browseContextMenu:SetFrameStrata("FULLSCREEN_DIALOG")
                 ToggleDropDownMenu(1, nil, CS.browseContextMenu, "cursor", 0, 0)
             end)
-            panelContainer:AddChild(copyPanelBtn)
+            btnRow:AddChild(copyPanelBtn)
         end
 
         -- "Copy Entire Group" button at the bottom
