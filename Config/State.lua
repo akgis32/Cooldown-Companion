@@ -165,6 +165,7 @@ ST._configState = {
     panelClickTimes = {},
     addingToPanelId = nil,
     folderAccentBars = {},
+    _panelDropTargets = {},
 
     -- Talent picker mode (2-column layout)
     talentPickerMode = false,

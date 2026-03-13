@@ -204,6 +204,9 @@ local function RefreshColumn2()
     if not CS.col2Scroll then return end
     local col2 = CS.configFrame and CS.configFrame.col2
 
+    -- Clear per-panel drop targets (rebuilt if we enter the panel render loop)
+    CS._panelDropTargets = {}
+
     -- Release previous col2 bar widgets
     for _, widget in ipairs(CS.col2BarWidgets) do
         widget:Release()
@@ -914,6 +917,9 @@ local function RefreshColumn2()
         -- Metadata for cross-panel drag detection
         local col2RenderedRows = {}
 
+        -- Reset per-panel drop targets (rebuilt in the loop below)
+        CS._panelDropTargets = {}
+
         -- Render each panel's buttons (with headers for multi-panel containers)
         for panelIndex, panelInfo in ipairs(panels) do
             local panelId = panelInfo.groupId
@@ -951,6 +957,54 @@ local function RefreshColumn2()
             panelContainer:SetFullWidth(true)
             CompactUntitledInlineGroupConfig(panelContainer)
             CS.col2Scroll:AddChild(panelContainer)
+
+            -- Per-panel drop highlight overlay (pooled on underlying frame to survive AceGUI recycling)
+            do
+                local pf = panelContainer.frame
+                local overlay = pf._cdcDropOverlay
+                if not overlay then
+                    overlay = CreateFrame("Frame", nil, pf, "BackdropTemplate")
+                    overlay:SetAllPoints(pf)
+                    overlay:SetBackdrop({ bgFile = "Interface\\BUTTONS\\WHITE8X8" })
+                    overlay:SetBackdropColor(0.15, 0.55, 0.85, 0.25)
+                    overlay:EnableMouse(true)
+
+                    local border = overlay:CreateTexture(nil, "BORDER")
+                    border:SetAllPoints()
+                    border:SetColorTexture(0.3, 0.7, 1.0, 0.35)
+
+                    local inner = overlay:CreateTexture(nil, "ARTWORK")
+                    inner:SetPoint("TOPLEFT", 2, -2)
+                    inner:SetPoint("BOTTOMRIGHT", -2, 2)
+                    inner:SetColorTexture(0.05, 0.15, 0.25, 0.6)
+
+                    overlay._cdcText = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                    overlay._cdcText:SetPoint("CENTER", 0, 0)
+
+                    pf._cdcDropOverlay = overlay
+                end
+                overlay:SetFrameLevel(pf:GetFrameLevel() + 10)
+                overlay._cdcText:SetText("|cffAADDFFDrop here|r")
+                overlay:Hide()
+
+                local dropPanelId = panelId
+                overlay:SetScript("OnReceiveDrag", function()
+                    local prev = CS.selectedGroup
+                    CS.selectedGroup = dropPanelId
+                    TryReceiveCursorDrop()
+                    CS.selectedGroup = prev
+                end)
+                overlay:SetScript("OnMouseUp", function(self, button)
+                    if button == "LeftButton" and GetCursorInfo() then
+                        local prev = CS.selectedGroup
+                        CS.selectedGroup = dropPanelId
+                        TryReceiveCursorDrop()
+                        CS.selectedGroup = prev
+                    end
+                end)
+
+                table.insert(CS._panelDropTargets, { panelId = dropPanelId, frame = pf, overlay = overlay })
+            end
 
             -- Panel header
                 local btnCount = panel.buttons and #panel.buttons or 0
@@ -1654,7 +1708,7 @@ local function RefreshColumn2()
                     panelContainer:AddChild(entry)
                     table.insert(col2RenderedRows, { kind = "button", panelId = panelId, buttonIndex = i, widget = entry })
 
-                    entryFrame:SetScript("OnReceiveDrag", TryReceiveCursorDrop)
+                    -- (Drop is now handled by per-panel overlay, not individual button rows)
 
                     -- Hold-click drag reorder (within this panel only)
                     if not entryFrame._cdcDragHooked then

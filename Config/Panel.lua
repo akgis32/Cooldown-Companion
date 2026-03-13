@@ -15,7 +15,6 @@ local AceConfigDialog = LibStub("AceConfigDialog-3.0")
 local ResetConfigSelection = ST._ResetConfigSelection
 local ShowPopupAboveConfig = ST._ShowPopupAboveConfig
 local COLUMN_PADDING = ST._COLUMN_PADDING
-local TryReceiveCursorDrop = ST._TryReceiveCursorDrop
 local BuildAutocompleteCache = ST._BuildAutocompleteCache
 local RefreshColumn1 = ST._RefreshColumn1
 local RefreshColumn2 = ST._RefreshColumn2
@@ -936,65 +935,66 @@ local function CreateConfigPanel()
     buttonSettingsScroll = bsScroll
     CS.buttonSettingsScroll = bsScroll
 
-    -- Drop hint overlay for column 2
-    local dropOverlay = CreateFrame("Frame", nil, col2.frame, "BackdropTemplate")
-    dropOverlay:SetAllPoints(col2.frame)
-    dropOverlay:SetFrameLevel(col2.frame:GetFrameLevel() + 20)
-    dropOverlay:SetBackdrop({ bgFile = "Interface\\BUTTONS\\WHITE8X8" })
-    dropOverlay:SetBackdropColor(0.15, 0.55, 0.85, 0.25)
-    dropOverlay:EnableMouse(true)
-    dropOverlay:Hide()
-
-    local dropBorder = dropOverlay:CreateTexture(nil, "BORDER")
-    dropBorder:SetAllPoints()
-    dropBorder:SetColorTexture(0.3, 0.7, 1.0, 0.35)
-
-    local dropInner = dropOverlay:CreateTexture(nil, "ARTWORK")
-    dropInner:SetPoint("TOPLEFT", 2, -2)
-    dropInner:SetPoint("BOTTOMRIGHT", -2, 2)
-    dropInner:SetColorTexture(0.05, 0.15, 0.25, 0.6)
-
-    local dropText = dropOverlay:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    dropText:SetPoint("CENTER", 0, 0)
-    dropText:SetText("|cffAADDFFDrop spell or item here to track|r")
-
+    -- Per-panel drop highlight system
     local function IsCursorDropPayload(cursorType)
         return cursorType == "spell" or cursorType == "item" or cursorType == "petaction"
     end
 
-    local function UpdateDropOverlayVisibility()
-        local cursorType = GetCursorInfo()
-        if IsCursorDropPayload(cursorType)
-            and CS.selectedGroup
-            and col2.frame:IsShown() then
-            dropOverlay:Show()
-        else
-            dropOverlay:Hide()
+    CS._panelDropTargets = {}
+
+    -- Throttled OnUpdate scanner: shows/hides per-panel overlays based on cursor position
+    local DROP_SCAN_INTERVAL = 1 / 20  -- 20 Hz
+    local dropScanElapsed = 0
+    local dropScanFrame = CreateFrame("Frame")
+
+    dropScanFrame:SetScript("OnUpdate", function(self, dt)
+        dropScanElapsed = dropScanElapsed + dt
+        if dropScanElapsed < DROP_SCAN_INTERVAL then return end
+        dropScanElapsed = 0
+
+        local targets = CS._panelDropTargets
+        if not targets or #targets == 0 then
+            self:Hide()
+            return
         end
-    end
 
-    local function TryReceiveAnyDrop()
-        local added = TryReceiveCursorDrop()
-        UpdateDropOverlayVisibility()
-        return added
-    end
-
-    -- Accept spell/item drops anywhere on the column 2 scroll area
-    scroll2.frame:EnableMouse(true)
-    scroll2.frame:SetScript("OnReceiveDrag", TryReceiveAnyDrop)
-    scroll2.content:EnableMouse(true)
-    scroll2.content:SetScript("OnReceiveDrag", TryReceiveAnyDrop)
-
-    dropOverlay:SetScript("OnReceiveDrag", TryReceiveAnyDrop)
-    dropOverlay:SetScript("OnMouseUp", function(self, button)
-        if button == "LeftButton" and GetCursorInfo() then
-            TryReceiveAnyDrop()
+        for _, entry in ipairs(targets) do
+            if entry.frame:IsMouseOver() then
+                entry.overlay:Show()
+            else
+                entry.overlay:Hide()
+            end
         end
     end)
+    dropScanFrame:Hide()
 
-    dropOverlay:RegisterEvent("CURSOR_CHANGED")
-    dropOverlay:SetScript("OnEvent", function()
-        UpdateDropOverlayVisibility()
+    local function HideAllPanelDropOverlays()
+        local targets = CS._panelDropTargets
+        if targets then
+            for _, entry in ipairs(targets) do
+                entry.overlay:Hide()
+            end
+        end
+    end
+
+    local function UpdatePanelDropScan()
+        local cursorType = GetCursorInfo()
+        local targets = CS._panelDropTargets
+        if IsCursorDropPayload(cursorType)
+            and targets and #targets > 0
+            and col2.frame:IsShown() then
+            dropScanElapsed = DROP_SCAN_INTERVAL  -- scan immediately on first tick
+            dropScanFrame:Show()
+        else
+            dropScanFrame:Hide()
+            HideAllPanelDropOverlays()
+        end
+    end
+
+    local dropEventFrame = CreateFrame("Frame")
+    dropEventFrame:RegisterEvent("CURSOR_CHANGED")
+    dropEventFrame:SetScript("OnEvent", function()
+        UpdatePanelDropScan()
     end)
 
     -- Column 4 content area (use InlineGroup's content directly)
