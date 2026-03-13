@@ -828,6 +828,13 @@ local function RefreshColumn1(preserveDrag)
             local folder = container.folderId and db.folders and db.folders[container.folderId]
             local folderSpecs = folder and folder.specs
             local folderHeroTalents = folder and folder.heroTalents
+            local effectiveSpecs
+            if folderSpecs or container.specs then
+                effectiveSpecs = {}
+                if folderSpecs then for k in pairs(folderSpecs) do effectiveSpecs[k] = true end end
+                if container.specs then for k in pairs(container.specs) do effectiveSpecs[k] = true end end
+                if not next(effectiveSpecs) then effectiveSpecs = nil end
+            end
             for i = 1, numSpecs do
                 local specId, name, _, icon = C_SpecializationInfo.GetSpecializationInfo(i)
                 local lockedByFolder = folderSpecs and folderSpecs[specId]
@@ -866,6 +873,10 @@ local function RefreshColumn1(preserveDrag)
                         useHeroTalentsSource = true,
                         disableToggles = true,
                     }
+                end
+                if effectiveSpecs then
+                    htOpts = htOpts or {}
+                    htOpts.specsSource = effectiveSpecs
                 end
                 BuildHeroTalentSubTreeCheckboxes(CS.col1Scroll, container, configID, specId, htIndent, containerId, htOpts)
             end
@@ -916,12 +927,28 @@ local function RefreshColumn1(preserveDrag)
                 end
             end
 
-            if container.specs and next(container.specs) then
+            local hasOwnSpecs = false
+            if container.specs then
+                for specId in pairs(container.specs) do
+                    if not (folderSpecs and folderSpecs[specId]) then
+                        hasOwnSpecs = true
+                        break
+                    end
+                end
+            end
+            if not hasOwnSpecs and container.heroTalents and next(container.heroTalents) then
+                hasOwnSpecs = true
+            end
+            if hasOwnSpecs then
                 local clearBtn = AceGUI:Create("Button")
                 clearBtn:SetText("Clear All")
                 clearBtn:SetFullWidth(true)
                 clearBtn:SetCallback("OnClick", function()
-                    container.specs = nil
+                    if folderSpecs then
+                        container.specs = CopyTable(folderSpecs)
+                    else
+                        container.specs = nil
+                    end
                     container.heroTalents = nil
                     RefreshContainerPanels(containerId)
                     CooldownCompanion:RefreshConfigPanel()

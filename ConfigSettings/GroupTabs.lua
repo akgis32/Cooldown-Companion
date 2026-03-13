@@ -2161,6 +2161,15 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
     local folderHeroTalents = folder and folder.heroTalents
     local hasFolderSpecs = folderSpecs and next(folderSpecs)
 
+    -- Effective specs for hero talent rendering (union of folder + container specs)
+    local effectiveSpecs
+    if folderSpecs or container.specs then
+        effectiveSpecs = {}
+        if folderSpecs then for k in pairs(folderSpecs) do effectiveSpecs[k] = true end end
+        if container.specs then for k in pairs(container.specs) do effectiveSpecs[k] = true end end
+        if not next(effectiveSpecs) then effectiveSpecs = nil end
+    end
+
     if hasFolderSpecs then
         local inheritedLabel = AceGUI:Create("Label")
         inheritedLabel:SetText("|cff888888Specs set by the parent folder cannot be changed here.|r")
@@ -2210,10 +2219,12 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
                         heroTalentsSource = folderHeroTalents,
                         useHeroTalentsSource = true,
                         disableToggles = true,
+                        specsSource = effectiveSpecs,
                     }
                 else
                     htOpts = {
                         heroTalentsSource = container.heroTalents,
+                        specsSource = effectiveSpecs,
                     }
                 end
                 ST._BuildHeroTalentSubTreeCheckboxes(scroll, container, configID, specId, 20, containerId, htOpts)
@@ -2221,13 +2232,29 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
         end
     end
 
-    local hasOwnSpecs = container.specs and next(container.specs)
+    -- Only show Clear All when container has specs/hero-talents beyond folder cascade
+    local hasOwnSpecs = false
+    if container.specs then
+        for specId in pairs(container.specs) do
+            if not (folderSpecs and folderSpecs[specId]) then
+                hasOwnSpecs = true
+                break
+            end
+        end
+    end
+    if not hasOwnSpecs and container.heroTalents and next(container.heroTalents) then
+        hasOwnSpecs = true
+    end
     if hasOwnSpecs then
         local clearBtn = AceGUI:Create("Button")
         clearBtn:SetText("Clear All Spec Filters")
         clearBtn:SetFullWidth(true)
         clearBtn:SetCallback("OnClick", function()
-            container.specs = nil
+            if folderSpecs then
+                container.specs = CopyTable(folderSpecs)
+            else
+                container.specs = nil
+            end
             container.heroTalents = nil
             RefreshPanels()
             CooldownCompanion:RefreshConfigPanel()
