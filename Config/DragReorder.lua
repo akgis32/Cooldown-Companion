@@ -197,6 +197,82 @@ local function ShowDragIndicator(anchorFrame, anchorAbove, parentScrollWidget)
 end
 
 ------------------------------------------------------------------------
+-- Column 2 panel-header drop target detection
+------------------------------------------------------------------------
+local function GetCol2PanelDropTarget(cursorY, panelDropTargets)
+    if not panelDropTargets or #panelDropTargets == 0 then return nil end
+
+    for i, entry in ipairs(panelDropTargets) do
+        local frame = entry.frame
+        if frame and frame:IsShown() then
+            local top = frame:GetTop()
+            local bottom = frame:GetBottom()
+            if top and bottom then
+                local mid = (top + bottom) / 2
+                if cursorY > mid then
+                    -- Cursor is in the upper half → drop above this panel (index i)
+                    return {
+                        targetIndex = i,
+                        targetPanelId = entry.panelId,
+                        anchorFrame = frame,
+                        anchorAbove = true,
+                    }
+                elseif i == #panelDropTargets then
+                    -- Below midpoint of last panel → drop after last
+                    return {
+                        targetIndex = i + 1,
+                        targetPanelId = entry.panelId,
+                        anchorFrame = frame,
+                        anchorAbove = false,
+                    }
+                end
+            end
+        end
+    end
+
+    -- Cursor above all panels → index 1
+    local first = panelDropTargets[1]
+    if first and first.frame and first.frame:IsShown() then
+        return {
+            targetIndex = 1,
+            targetPanelId = first.panelId,
+            anchorFrame = first.frame,
+            anchorAbove = true,
+        }
+    end
+    return nil
+end
+
+------------------------------------------------------------------------
+-- Panel reorder
+------------------------------------------------------------------------
+local function PerformPanelReorder(sourcePanelId, dropIndex, panelDropTargets)
+    local db = CooldownCompanion.db.profile
+    -- Build ordered panelIds list from drop targets
+    local panelIds = {}
+    for _, entry in ipairs(panelDropTargets) do
+        table.insert(panelIds, entry.panelId)
+    end
+    -- Find source index
+    local sourceIndex
+    for i, pid in ipairs(panelIds) do
+        if pid == sourcePanelId then
+            sourceIndex = i
+            break
+        end
+    end
+    if not sourceIndex then return end
+    if dropIndex > sourceIndex then dropIndex = dropIndex - 1 end
+    if sourceIndex == dropIndex then return end
+    table.remove(panelIds, sourceIndex)
+    table.insert(panelIds, dropIndex, sourcePanelId)
+    -- Reassign .order based on new list position
+    for i, pid in ipairs(panelIds) do
+        db.groups[pid].order = i
+    end
+end
+
+------------------------------------------------------------------------
 -- Group reorder
 ------------------------------------------------------------------------
 local function PerformGroupReorder(sourceIndex, dropIndex, groupIds)
@@ -734,6 +810,16 @@ local function FinishDrag()
         end
         ApplyCol1Drop(state)
         CooldownCompanion:RefreshConfigPanel()
+    elseif state.kind == "panel" then
+        local dropTarget = state.dropTarget
+        if dropTarget then
+            PerformPanelReorder(state.sourcePanelId, dropTarget.targetIndex, state.panelDropTargets)
+            -- Refresh all affected panel frames
+            for _, entry in ipairs(state.panelDropTargets) do
+                CooldownCompanion:RefreshGroupFrame(entry.panelId)
+            end
+        end
+        CooldownCompanion:RefreshConfigPanel()
     elseif state.kind == "button" then
         if state.dropTarget then
             -- Cross-panel-aware path (multi-panel containers)
@@ -882,6 +968,16 @@ local function StartDragTracking()
                     else
                         ShowDragIndicator(dropTarget.anchorFrame, false, CS.dragState.scrollWidget)
                     end
+                else
+                    HideDragIndicator()
+                end
+            elseif CS.dragState.panelDropTargets then
+                -- Panel reorder detection
+                local dropTarget = GetCol2PanelDropTarget(cursorY, CS.dragState.panelDropTargets)
+                CS.dragState.dropTarget = dropTarget
+                if dropTarget then
+                    ResetDragIndicatorStyle()
+                    ShowDragIndicator(dropTarget.anchorFrame, dropTarget.anchorAbove, CS.dragState.scrollWidget)
                 else
                     HideDragIndicator()
                 end

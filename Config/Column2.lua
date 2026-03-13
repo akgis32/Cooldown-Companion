@@ -1075,7 +1075,9 @@ local function RefreshColumn2()
                             return
                         end
                         -- Single-click: select or deselect this panel
-                        if CS.selectedGroup == panelId then
+                        -- If a button is selected within this panel, just clear the button
+                        -- selection (transition to panel settings) rather than deselecting.
+                        if CS.selectedGroup == panelId and not CS.selectedButton then
                             CS.selectedGroup = nil
                         else
                             CS.selectedGroup = panelId
@@ -1319,6 +1321,35 @@ local function RefreshColumn2()
 
                 panelContainer:AddChild(header)
                 table.insert(col2RenderedRows, { kind = "header", panelId = panelId, isCollapsed = isCollapsed, widget = header })
+
+                -- Drag-to-reorder panel headers (only for multi-panel containers)
+                if panelCount > 1 then
+                    local headerFrame = header.frame
+                    if not headerFrame._cdcDragHooked then
+                        headerFrame._cdcDragHooked = true
+                        headerFrame:HookScript("OnMouseDown", function(self, mouseBtn)
+                            if self._cdcOnMouseDown then self._cdcOnMouseDown(self, mouseBtn) end
+                        end)
+                    end
+                    local dragPanelId = panelId
+                    headerFrame._cdcOnMouseDown = function(self, mouseButton)
+                        if GetCursorInfo() then return end
+                        if mouseButton == "LeftButton" and not IsControlKeyDown() then
+                            local cursorY = GetScaledCursorPosition(CS.col2Scroll)
+                            CS.dragState = {
+                                kind = "panel",
+                                phase = "pending",
+                                sourcePanelId = dragPanelId,
+                                containerId = CS.selectedContainer,
+                                scrollWidget = CS.col2Scroll,
+                                widget = header,
+                                startY = cursorY,
+                                panelDropTargets = CS._panelDropTargets,
+                            }
+                            StartDragTracking()
+                        end
+                    end
+                end
 
             -- Button list for this panel (skip if collapsed)
             if not isCollapsed then
