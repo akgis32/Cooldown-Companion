@@ -1104,20 +1104,6 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
         AddSpacer()
     end
 
-    -- Delete Selected
-    local delBtn = AceGUI:Create("Button")
-    delBtn:SetText("Delete Selected")
-    delBtn:SetFullWidth(true)
-    delBtn:SetCallback("OnClick", function()
-        local ids = {}
-        for _, pid in ipairs(multiPanelIds) do ids[#ids + 1] = pid end
-        CS.ShowPopupAboveConfig("CDC_DELETE_SELECTED_PANELS", multiCount,
-            { containerId = containerId, panelIds = ids })
-    end)
-    scroll:AddChild(delBtn)
-
-    AddSpacer()
-
     -- Export Selected
     local exportBtn = AceGUI:Create("Button")
     exportBtn:SetText("Export Selected")
@@ -1138,6 +1124,20 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
         CS.ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
     end)
     scroll:AddChild(exportBtn)
+
+    AddSpacer()
+
+    -- Delete Selected
+    local delBtn = AceGUI:Create("Button")
+    delBtn:SetText("Delete Selected")
+    delBtn:SetFullWidth(true)
+    delBtn:SetCallback("OnClick", function()
+        local ids = {}
+        for _, pid in ipairs(multiPanelIds) do ids[#ids + 1] = pid end
+        CS.ShowPopupAboveConfig("CDC_DELETE_SELECTED_PANELS", multiCount,
+            { containerId = containerId, panelIds = ids })
+    end)
+    scroll:AddChild(delBtn)
 end
 
 local function RefreshButtonSettingsColumn()

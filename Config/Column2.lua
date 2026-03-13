@@ -644,17 +644,35 @@ local function RefreshColumn2()
         heading:SetFullWidth(true)
         CS.col2Scroll:AddChild(heading)
 
-        -- Delete Selected
-        local delBtn = AceGUI:Create("Button")
-        delBtn:SetText("Delete Selected")
-        delBtn:SetFullWidth(true)
-        delBtn:SetCallback("OnClick", function()
-            local popup = StaticPopup_Show("CDC_DELETE_SELECTED_GROUPS", #multiContainerIds)
-            if popup then
-                popup.data = { groupIds = CopyTable(multiContainerIds) }
+        -- Lock / Unlock All (operates on containers)
+        local anyLocked = false
+        for _, cid in ipairs(multiContainerIds) do
+            local c = containers[cid]
+            if c and c.locked then
+                anyLocked = true
+                break
             end
+        end
+
+        local lockBtn = AceGUI:Create("Button")
+        lockBtn:SetText(anyLocked and "Unlock All" or "Lock All")
+        lockBtn:SetFullWidth(true)
+        lockBtn:SetCallback("OnClick", function()
+            local newState = not anyLocked
+            for _, cid in ipairs(multiContainerIds) do
+                local c = containers[cid]
+                if c then
+                    c.locked = newState
+                    for gid, g in pairs(db.groups) do
+                        if g.parentContainerId == cid then
+                            CooldownCompanion:RefreshGroupFrame(gid)
+                        end
+                    end
+                end
+            end
+            CooldownCompanion:RefreshConfigPanel()
         end)
-        CS.col2Scroll:AddChild(delBtn)
+        CS.col2Scroll:AddChild(lockBtn)
 
         local spacer1 = AceGUI:Create("Label")
         spacer1:SetText(" ")
@@ -733,43 +751,6 @@ local function RefreshColumn2()
         spacer2:SetFont(f2, 3, fl2 or "")
         CS.col2Scroll:AddChild(spacer2)
 
-        -- Lock / Unlock All (operates on containers)
-        local anyLocked = false
-        for _, cid in ipairs(multiContainerIds) do
-            local c = containers[cid]
-            if c and c.locked then
-                anyLocked = true
-                break
-            end
-        end
-
-        local lockBtn = AceGUI:Create("Button")
-        lockBtn:SetText(anyLocked and "Unlock All" or "Lock All")
-        lockBtn:SetFullWidth(true)
-        lockBtn:SetCallback("OnClick", function()
-            local newState = not anyLocked
-            for _, cid in ipairs(multiContainerIds) do
-                local c = containers[cid]
-                if c then
-                    c.locked = newState
-                    for gid, g in pairs(db.groups) do
-                        if g.parentContainerId == cid then
-                            CooldownCompanion:RefreshGroupFrame(gid)
-                        end
-                    end
-                end
-            end
-            CooldownCompanion:RefreshConfigPanel()
-        end)
-        CS.col2Scroll:AddChild(lockBtn)
-
-        local spacer3 = AceGUI:Create("Label")
-        spacer3:SetText(" ")
-        spacer3:SetFullWidth(true)
-        local f3, _, fl3 = spacer3.label:GetFont()
-        spacer3:SetFont(f3, 3, fl3 or "")
-        CS.col2Scroll:AddChild(spacer3)
-
         -- Export Selected
         local exportBtn = AceGUI:Create("Button")
         exportBtn:SetText("Export Selected")
@@ -788,6 +769,25 @@ local function RefreshColumn2()
             ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
         end)
         CS.col2Scroll:AddChild(exportBtn)
+
+        local spacer3 = AceGUI:Create("Label")
+        spacer3:SetText(" ")
+        spacer3:SetFullWidth(true)
+        local f3, _, fl3 = spacer3.label:GetFont()
+        spacer3:SetFont(f3, 3, fl3 or "")
+        CS.col2Scroll:AddChild(spacer3)
+
+        -- Delete Selected
+        local delBtn = AceGUI:Create("Button")
+        delBtn:SetText("Delete Selected")
+        delBtn:SetFullWidth(true)
+        delBtn:SetCallback("OnClick", function()
+            local popup = StaticPopup_Show("CDC_DELETE_SELECTED_GROUPS", #multiContainerIds)
+            if popup then
+                popup.data = { groupIds = CopyTable(multiContainerIds) }
+            end
+        end)
+        CS.col2Scroll:AddChild(delBtn)
 
         return
     end
