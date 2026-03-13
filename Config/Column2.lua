@@ -1090,6 +1090,95 @@ local function RefreshColumn2()
                     disabledBadge:Hide()
                 end
 
+                -- Spec / hero talent filter badges (panel-level filters not inherited from container/folder)
+                local specBadges = header.frame._cdcSpecBadges
+                if not specBadges then
+                    specBadges = {}
+                    header.frame._cdcSpecBadges = specBadges
+                end
+                for _, sb in ipairs(specBadges) do
+                    if sb._cdcCircleMask then sb.icon:RemoveMaskTexture(sb._cdcCircleMask) end
+                    sb.icon:SetTexCoord(0, 1, 0, 1)
+                    sb:Hide()
+                end
+
+                local containerSpecs = container.specs
+                local containerHeroTalents = container.heroTalents
+                local folderSpecs, folderHeroTalents
+                if container.folderId and profile.folders then
+                    local folder = profile.folders[container.folderId]
+                    if folder then
+                        folderSpecs = folder.specs
+                        folderHeroTalents = folder.heroTalents
+                    end
+                end
+
+                local specBadgeIdx = 0
+                local rightOffset = (textW / 2) + 4
+                if panel.locked == false then rightOffset = rightOffset + 22 end
+                if panel.enabled == false then rightOffset = rightOffset + 22 end
+
+                if panel.specs then
+                    for specId in pairs(panel.specs) do
+                        if not (containerSpecs and containerSpecs[specId])
+                           and not (folderSpecs and folderSpecs[specId]) then
+                            local _, _, _, specIcon = GetSpecializationInfoForSpecID(specId)
+                            if specIcon then
+                                specBadgeIdx = specBadgeIdx + 1
+                                local sb = specBadges[specBadgeIdx]
+                                if not sb then
+                                    sb = CreateFrame("Frame", nil, header.frame)
+                                    sb.icon = sb:CreateTexture(nil, "OVERLAY")
+                                    sb.icon:SetAllPoints()
+                                    sb:EnableMouse(false)
+                                    local mask = sb:CreateMaskTexture()
+                                    mask:SetAllPoints(sb.icon)
+                                    mask:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+                                    sb._cdcCircleMask = mask
+                                    specBadges[specBadgeIdx] = sb
+                                end
+                                sb:SetSize(16, 16)
+                                sb.icon:SetTexture(specIcon)
+                                sb.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                                sb.icon:AddMaskTexture(sb._cdcCircleMask)
+                                sb:ClearAllPoints()
+                                sb:SetPoint("LEFT", header.label, "CENTER", rightOffset, 0)
+                                sb:Show()
+                                rightOffset = rightOffset + 18
+                            end
+                        end
+                    end
+                end
+
+                if panel.heroTalents then
+                    local configID = C_ClassTalents.GetActiveConfigID()
+                    if configID then
+                        for subTreeID in pairs(panel.heroTalents) do
+                            if not (containerHeroTalents and containerHeroTalents[subTreeID])
+                               and not (folderHeroTalents and folderHeroTalents[subTreeID]) then
+                                local subTreeInfo = C_Traits.GetSubTreeInfo(configID, subTreeID)
+                                if subTreeInfo and subTreeInfo.iconElementID then
+                                    specBadgeIdx = specBadgeIdx + 1
+                                    local sb = specBadges[specBadgeIdx]
+                                    if not sb then
+                                        sb = CreateFrame("Frame", nil, header.frame)
+                                        sb.icon = sb:CreateTexture(nil, "OVERLAY")
+                                        sb.icon:SetAllPoints()
+                                        sb:EnableMouse(false)
+                                        specBadges[specBadgeIdx] = sb
+                                    end
+                                    sb:SetSize(16, 16)
+                                    sb.icon:SetAtlas(subTreeInfo.iconElementID, false)
+                                    sb:ClearAllPoints()
+                                    sb:SetPoint("LEFT", header.label, "CENTER", rightOffset, 0)
+                                    sb:Show()
+                                    rightOffset = rightOffset + 18
+                                end
+                            end
+                        end
+                    end
+                end
+
                 -- Highlight: blue if multi-selected (overrides all), gray if disabled, green if single-selected
                 if CS.selectedPanels[panelId] then
                     header:SetColor(0.4, 0.7, 1.0)
