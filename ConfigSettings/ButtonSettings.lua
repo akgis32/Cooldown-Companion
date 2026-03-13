@@ -13,6 +13,8 @@ local CreateCheckboxPromoteButton = ST._CreateCheckboxPromoteButton
 local CreateInfoButton = ST._CreateInfoButton
 local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 local HasTooltipCooldown = ST.HasTooltipCooldown
+local BuildGroupExportData = ST._BuildGroupExportData
+local EncodeExportData = ST._EncodeExportData
 
 -- Imports from SectionBuilders.lua (used by BuildOverridesTab)
 local BuildCooldownTextControls = ST._BuildCooldownTextControls
@@ -1113,6 +1115,29 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
             { containerId = containerId, panelIds = ids })
     end)
     scroll:AddChild(delBtn)
+
+    AddSpacer()
+
+    -- Export Selected
+    local exportBtn = AceGUI:Create("Button")
+    exportBtn:SetText("Export Selected")
+    exportBtn:SetFullWidth(true)
+    exportBtn:SetCallback("OnClick", function()
+        local containerData = CopyTable(db.groupContainers[containerId])
+        containerData.createdBy = nil
+        containerData.order = nil
+        containerData.folderId = nil
+        containerData.isGlobal = nil
+        local exportPanels = {}
+        for _, pid in ipairs(multiPanelIds) do
+            local p = db.groups[pid]
+            if p then exportPanels[#exportPanels + 1] = BuildGroupExportData(p) end
+        end
+        local payload = { type = "container", version = 1, container = containerData, panels = exportPanels }
+        local exportString = EncodeExportData(payload)
+        CS.ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
+    end)
+    scroll:AddChild(exportBtn)
 end
 
 local function RefreshButtonSettingsColumn()

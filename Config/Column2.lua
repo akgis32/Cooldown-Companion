@@ -1246,6 +1246,25 @@ local function RefreshColumn2()
                             end
                             UIDropDownMenu_AddButton(info, level)
 
+                            -- Export single panel
+                            info = UIDropDownMenu_CreateInfo()
+                            info.text = "Export"
+                            info.notCheckable = true
+                            info.func = function()
+                                CloseDropDownMenus()
+                                local db = CooldownCompanion.db.profile
+                                local containerData = CopyTable(db.groupContainers[ctxContainerId])
+                                containerData.name = ctxPanel.name or "Panel"
+                                containerData.createdBy = nil
+                                containerData.order = nil
+                                containerData.folderId = nil
+                                containerData.isGlobal = nil
+                                local payload = { type = "container", version = 1, container = containerData, panels = { BuildGroupExportData(ctxPanel) } }
+                                local exportString = EncodeExportData(payload)
+                                ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
+                            end
+                            UIDropDownMenu_AddButton(info, level)
+
                             -- "Move to Group" submenu (only when other visible containers exist)
                             local db = CooldownCompanion.db.profile
                             local hasOtherContainer = false
