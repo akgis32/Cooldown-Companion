@@ -1562,7 +1562,7 @@ local function RefreshColumn1(preserveDrag)
         table.insert(CS.col1BarWidgets, newFolderBtn)
 
         local importBtn = AceGUI:Create("Button")
-        importBtn:SetText("Import Group")
+        importBtn:SetText("Import")
         importBtn:SetCallback("OnClick", function()
             ShowPopupAboveConfig("CDC_IMPORT_GROUP")
         end)

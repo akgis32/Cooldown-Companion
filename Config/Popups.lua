@@ -948,7 +948,7 @@ StaticPopupDialogs["CDC_EXPORT_GROUP"] = {
 }
 
 StaticPopupDialogs["CDC_IMPORT_GROUP"] = {
-    text = "Paste group import string:",
+    text = "Paste import string (Ctrl+V to paste):",
     button1 = "Close",
     hasEditBox = true,
     OnShow = function(self)
