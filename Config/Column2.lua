@@ -401,7 +401,7 @@ local function RefreshColumn2()
             -- Panel header (same badge pattern as normal Column 2 panel headers)
             local headerText = panel.name or "Panel"
             local buttonCount = panel.buttons and #panel.buttons or 0
-            headerText = headerText .. "  |cff888888(" .. buttonCount .. " buttons)|r"
+            headerText = headerText .. " |cff888888(" .. buttonCount .. " buttons)|r"
 
             local header = AceGUI:Create("InteractiveLabel")
             CleanRecycledEntry(header)
@@ -1008,7 +1008,7 @@ local function RefreshColumn2()
 
             -- Panel header
                 local btnCount = panel.buttons and #panel.buttons or 0
-                local headerText = (panel.name or ("Panel " .. panelId)) .. "  |cff666666(" .. btnCount .. ")|r"
+                local headerText = (panel.name or ("Panel " .. panelId)) .. " |cff666666(" .. btnCount .. ")|r"
 
                 local header = AceGUI:Create("InteractiveLabel")
                 CleanRecycledEntry(header)
