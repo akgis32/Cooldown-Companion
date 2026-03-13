@@ -215,6 +215,7 @@ local DEFAULT_CONTINUOUS_TICK_COLOR_CONFIG = { 1, 0.84, 0, 1 }
 local DEFAULT_CONTINUOUS_TICK_MODE_CONFIG = "percent"
 local DEFAULT_CONTINUOUS_TICK_PERCENT_CONFIG = 50
 local DEFAULT_CONTINUOUS_TICK_ABSOLUTE_CONFIG = 50
+local DEFAULT_CONTINUOUS_TICK_WIDTH_CONFIG = 2
 
 -- Class-to-resource mapping for config UI
 local CLASS_RESOURCES_CONFIG = {
@@ -2403,6 +2404,17 @@ local function BuildResourceBarStylingPanel(container, sectionMode)
                             CooldownCompanion:ApplyResourceBars()
                         end)
                         container:AddChild(tickColorPicker)
+
+                        local tickWidthSlider = AceGUI:Create("Slider")
+                        tickWidthSlider:SetLabel(resourceName .. " Tick Width")
+                        tickWidthSlider:SetSliderValues(1, 10, 1)
+                        tickWidthSlider:SetValue(tonumber(res.continuousTickWidth) or DEFAULT_CONTINUOUS_TICK_WIDTH_CONFIG)
+                        tickWidthSlider:SetFullWidth(true)
+                        tickWidthSlider:SetCallback("OnValueChanged", function(widget, event, val)
+                            settings.resources[capturedPt].continuousTickWidth = val
+                            CooldownCompanion:ApplyResourceBars()
+                        end)
+                        container:AddChild(tickWidthSlider)
                     end
                 end
             end

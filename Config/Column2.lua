@@ -198,7 +198,7 @@ local function IsAuraTrackingReady(buttonData, cdmEnabled)
 end
 
 ------------------------------------------------------------------------
--- COLUMN 2: Spells / Items
+-- COLUMN 2: Panels
 ------------------------------------------------------------------------
 local function RefreshColumn2()
     if not CS.col2Scroll then return end
@@ -1837,16 +1837,7 @@ local function RefreshColumn2()
                     local manualAddBtn = AceGUI:Create("Button")
                     manualAddBtn:SetText("Manual Add")
                     manualAddBtn:SetRelativeWidth(0.49)
-                    manualAddBtn.frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-                    manualAddBtn:SetCallback("OnClick", function(_, _, mouseButton)
-                        if mouseButton == "RightButton" then
-                            if InCombatLockdown() then
-                                CooldownCompanion:Print("Cannot open spellbook during combat.")
-                                return
-                            end
-                            PlayerSpellsUtil.ToggleSpellBookFrame()
-                            return
-                        end
+                    manualAddBtn:SetCallback("OnClick", function()
                         if CS.newInput ~= "" and CS.addingToPanelId then
                             CS.selectedGroup = CS.addingToPanelId
                             if TryAdd(CS.newInput) then
