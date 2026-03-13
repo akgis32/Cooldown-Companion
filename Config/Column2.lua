@@ -1011,11 +1011,11 @@ local function RefreshColumn2()
                 header:SetCallback("OnClick", function(widget, event, mouseButton)
                     if mouseButton == "LeftButton" then
                         local now = GetTime()
-                        local lastClick = header.frame._cdcLastClickTime or 0
-                        header.frame._cdcLastClickTime = now
+                        local lastClick = CS.panelClickTimes[panelId] or 0
+                        CS.panelClickTimes[panelId] = now
                         if (now - lastClick) < 0.3 then
                             -- Double-click: toggle collapse/expand
-                            header.frame._cdcLastClickTime = 0
+                            CS.panelClickTimes[panelId] = 0
                             CS.collapsedPanels[panelId] = not CS.collapsedPanels[panelId] or nil
                             CooldownCompanion:RefreshConfigPanel()
                             return

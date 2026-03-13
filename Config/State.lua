@@ -162,6 +162,7 @@ ST._configState = {
     collapsedSections = {},
     collapsedFolders = {},
     collapsedPanels = {},
+    panelClickTimes = {},
     addingToPanelId = nil,
     folderAccentBars = {},
 
@@ -519,6 +520,9 @@ local function CleanRecycledEntry(entry)
     if entry.frame._cdcAddBtn then entry.frame._cdcAddBtn:Hide() end
     if entry.frame._cdcAnchorBadge then entry.frame._cdcAnchorBadge:Hide() end
     entry.frame:SetScript("OnMouseUp", nil)
+    entry.frame:SetScript("OnReceiveDrag", nil)
+    entry.frame._cdcOnMouseDown = nil
+    entry.frame._cdcLastClickTime = nil
     entry.image:SetAlpha(1)
     if entry.image and entry.image.SetDesaturated then
         entry.image:SetDesaturated(false)
