@@ -1020,9 +1020,9 @@ function CooldownCompanion:SetGroupAnchor(groupId, targetFrameName, forceCenter)
     -- Panel anchored to its own container: reset to default position
     if containerFrameName and targetFrameName == containerFrameName then
         group.anchor = {
-            point = "TOPLEFT",
+            point = "CENTER",
             relativeTo = containerFrameName,
-            relativePoint = "TOPLEFT",
+            relativePoint = "CENTER",
             x = 0,
             y = 0,
         }

@@ -378,9 +378,9 @@ function CooldownCompanion:DuplicateContainer(containerId)
             local newPanel = CopyTable(group)
             newPanel.parentContainerId = newContainerId
             newPanel.anchor = {
-                point = "TOPLEFT",
+                point = "CENTER",
                 relativeTo = containerFrameName,
-                relativePoint = "TOPLEFT",
+                relativePoint = "CENTER",
                 x = group.anchor and group.anchor.x or 0,
                 y = group.anchor and group.anchor.y or 0,
             }
@@ -425,9 +425,9 @@ function CooldownCompanion:CreatePanel(containerId, displayMode)
         parentContainerId = containerId,
         order = panelOrder,
         anchor = {
-            point = "TOPLEFT",
+            point = "CENTER",
             relativeTo = containerFrameName,
-            relativePoint = "TOPLEFT",
+            relativePoint = "CENTER",
             x = 0,
             y = 0,
         },
@@ -510,12 +510,12 @@ function CooldownCompanion:MovePanel(groupId, targetContainerId)
     -- Reassign to target container
     group.parentContainerId = targetContainerId
 
-    -- Reset anchor to top-left of new container frame
+    -- Reset anchor to center of new container frame
     local containerFrameName = "CooldownCompanionContainer" .. targetContainerId
     group.anchor = {
-        point = "TOPLEFT",
+        point = "CENTER",
         relativeTo = containerFrameName,
-        relativePoint = "TOPLEFT",
+        relativePoint = "CENTER",
         x = 0,
         y = 0,
     }
@@ -1044,9 +1044,9 @@ function CooldownCompanion:CopyPanelToContainer(sourceGroupId, targetContainerId
 
     local containerFrameName = "CooldownCompanionContainer" .. targetContainerId
     newPanel.anchor = {
-        point = "TOPLEFT",
+        point = "CENTER",
         relativeTo = containerFrameName,
-        relativePoint = "TOPLEFT",
+        relativePoint = "CENTER",
         x = 0,
         y = 0,
     }
@@ -1081,9 +1081,9 @@ function CooldownCompanion:CopyPanelAsNewGroup(sourceGroupId, sourceName)
 
     local containerFrameName = "CooldownCompanionContainer" .. containerId
     newPanel.anchor = {
-        point = "TOPLEFT",
+        point = "CENTER",
         relativeTo = containerFrameName,
-        relativePoint = "TOPLEFT",
+        relativePoint = "CENTER",
         x = 0,
         y = 0,
     }
