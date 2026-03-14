@@ -173,6 +173,7 @@ function CooldownCompanion:UpdateGroupAlpha(groupId, group, locked, frame, now, 
 
     -- Force 100% alpha while group is unlocked for easier positioning
     if not locked then
+        frame._naturalAlpha = nil
         if state.currentAlpha ~= 1 or state.lastAlpha ~= 1 then
             frame:SetAlpha(1)
             state.currentAlpha = 1
@@ -183,16 +184,27 @@ function CooldownCompanion:UpdateGroupAlpha(groupId, group, locked, frame, now, 
         return
     end
 
+    local configSelected = ST.IsGroupConfigSelected(groupId)
+
     -- Skip processing when feature is entirely unused (baseline=1, no forceHide toggles)
     local hasForceHide = group.forceHideInCombat or group.forceHideOutOfCombat
         or group.forceHideRegularMounted or group.forceHideDragonriding
     if group.baselineAlpha == 1 and not hasForceHide then
+        -- Natural alpha is 1 — store for downstream consumers if config-selected
+        if configSelected then
+            frame._naturalAlpha = 1
+        else
+            frame._naturalAlpha = nil
+        end
         -- Reset state so it doesn't carry stale values if settings change later
         if state.currentAlpha and state.currentAlpha ~= 1 then
             frame:SetAlpha(1)
             state.currentAlpha = 1
             state.desiredAlpha = 1
             state.fadeDuration = 0
+        end
+        if configSelected then
+            state.lastAlpha = 1
         end
         return
     end
@@ -243,6 +255,22 @@ function CooldownCompanion:UpdateGroupAlpha(groupId, group, locked, frame, now, 
     end
 
     local desired = forceFull and 1 or (forceHidden and 0 or group.baselineAlpha)
+
+    -- Config-selected override: store the natural alpha for downstream consumers,
+    -- then force the frame itself to full alpha for config visibility.
+    if configSelected then
+        frame._naturalAlpha = desired
+        if state.lastAlpha ~= 1 then
+            frame:SetAlpha(1)
+            state.currentAlpha = 1
+            state.desiredAlpha = 1
+            state.fadeDuration = 0
+            state.lastAlpha = 1
+        end
+        return
+    end
+
+    frame._naturalAlpha = nil
     local fadeIn = group.fadeInDuration or 0.2
     local fadeOut = group.fadeOutDuration or 0.2
     local alpha = UpdateFadedAlpha(state, desired, now, fadeIn, fadeOut)
@@ -263,7 +291,8 @@ function CooldownCompanion:InitAlphaUpdateFrame()
     local accumulator = 0
     local UPDATE_INTERVAL = 1 / 30 -- ~30Hz for smooth fading
 
-    local function GroupNeedsAlphaUpdate(group)
+    local function GroupNeedsAlphaUpdate(group, groupId)
+        if ST.IsGroupConfigSelected(groupId) then return true end
         if (group.baselineAlpha or 1) < 1 then return true end
         return group.forceHideInCombat or group.forceHideOutOfCombat
             or group.forceHideRegularMounted or group.forceHideDragonriding
@@ -293,7 +322,7 @@ function CooldownCompanion:InitAlphaUpdateFrame()
         for groupId, group in pairs(self.db.profile.groups) do
             local frame = self.groupFrames[groupId]
             if frame and frame:IsShown() then
-                local needsUpdate = GroupNeedsAlphaUpdate(group)
+                local needsUpdate = GroupNeedsAlphaUpdate(group, groupId)
                 -- Also process if the group has stale alpha state that needs cleanup
                 if not needsUpdate then
                     local state = self.alphaState[groupId]

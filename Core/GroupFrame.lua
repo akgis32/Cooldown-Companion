@@ -466,8 +466,8 @@ function CooldownCompanion:SetupAlphaSync(frame, parentFrame)
         return
     end
 
-    -- Sync alpha immediately and cache for change detection
-    local lastAlpha = parentFrame:GetEffectiveAlpha()
+    -- Sync alpha immediately — use parent's natural alpha to avoid config override cascade
+    local lastAlpha = parentFrame._naturalAlpha or parentFrame:GetEffectiveAlpha()
     frame:SetAlpha(lastAlpha)
 
     -- Sync alpha at ~30Hz (smooth enough for fade animations, avoids per-frame overhead)
@@ -481,7 +481,18 @@ function CooldownCompanion:SetupAlphaSync(frame, parentFrame)
             -- Skip sync if alpha system is active or group is unlocked
             local locked, bAlpha = GetContainerState(frame.groupId)
             if bAlpha < 1 or not locked then return end
-            local alpha = frame.anchoredToParent:GetEffectiveAlpha()
+            -- Read parent's natural alpha to avoid config override cascade
+            local alpha = frame.anchoredToParent._naturalAlpha or frame.anchoredToParent:GetEffectiveAlpha()
+            -- Config-selected: store natural alpha for further downstream chains, force own frame to full
+            if ST.IsGroupConfigSelected(frame.groupId) then
+                frame._naturalAlpha = alpha
+                if lastAlpha ~= 1 then
+                    lastAlpha = 1
+                    frame:SetAlpha(1)
+                end
+                return
+            end
+            frame._naturalAlpha = nil
             if alpha ~= lastAlpha then
                 lastAlpha = alpha
                 frame:SetAlpha(alpha)
