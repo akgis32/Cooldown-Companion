@@ -495,23 +495,64 @@ function CooldownCompanion:IsGroupAvailableForAnchoring(groupId)
 end
 
 function CooldownCompanion:GetFirstAvailableAnchorGroup()
-    local groups = self.db.profile.groups
+    local db = self.db.profile
+    local groups = db.groups
     if not groups then return nil end
+    local containers = db.groupContainers
+    if not containers then return nil end
+    local folders = db.folders or {}
 
-    local candidates = {}
-    for groupId in pairs(groups) do
-        if self:IsGroupAvailableForAnchoring(groupId) then
-            table.insert(candidates, groupId)
+    -- Build container-to-folder mapping
+    local folderContainers = {}  -- [folderId] = { {id, order}, ... }
+    local looseContainers = {}   -- { {id, order}, ... }
+
+    for cid, container in pairs(containers) do
+        local fid = container.folderId
+        if fid and folders[fid] then
+            if not folderContainers[fid] then
+                folderContainers[fid] = {}
+            end
+            folderContainers[fid][#folderContainers[fid] + 1] = { id = cid, order = container.order or cid }
+        else
+            looseContainers[#looseContainers + 1] = { id = cid, order = container.order or cid }
         end
     end
-    if #candidates == 0 then return nil end
 
-    table.sort(candidates, function(a, b)
-        local orderA = groups[a].order or a
-        local orderB = groups[b].order or b
-        return orderA < orderB
-    end)
-    return candidates[1]
+    -- Sort containers within each folder by container.order
+    for _, children in pairs(folderContainers) do
+        table.sort(children, function(a, b) return a.order < b.order end)
+    end
+    table.sort(looseContainers, function(a, b) return a.order < b.order end)
+
+    -- Build top-level items: folders + loose containers, sorted by order
+    -- (mirrors Column1.lua BuildSectionItems)
+    local topItems = {}
+    for fid in pairs(folderContainers) do
+        topItems[#topItems + 1] = { kind = "folder", id = fid, order = folders[fid].order or fid }
+    end
+    for _, lc in ipairs(looseContainers) do
+        topItems[#topItems + 1] = { kind = "container", id = lc.id, order = lc.order }
+    end
+    table.sort(topItems, function(a, b) return a.order < b.order end)
+
+    -- Iterate in visual order, return first available panel
+    for _, item in ipairs(topItems) do
+        local containerList
+        if item.kind == "folder" then
+            containerList = folderContainers[item.id]
+        else
+            containerList = { item }
+        end
+        for _, cInfo in ipairs(containerList) do
+            local panels = self:GetPanels(cInfo.id)
+            for _, panelInfo in ipairs(panels) do
+                if self:IsGroupAvailableForAnchoring(panelInfo.groupId) then
+                    return panelInfo.groupId
+                end
+            end
+        end
+    end
+    return nil
 end
 
 function CooldownCompanion:PopulateAnchorDropdown(dropdown)
