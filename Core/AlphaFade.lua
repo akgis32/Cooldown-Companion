@@ -331,11 +331,11 @@ function CooldownCompanion:InitAlphaUpdateFrame()
                     end
                 end
                 if needsUpdate then
-                    -- Resolve locked from the container (panels don't have their own lock toggle)
+                    -- Resolve locked from the container for alpha fade processing
                     local locked = true
                     if group.parentContainerId then
                         local c = containers[group.parentContainerId]
-                        if c then locked = c.locked end
+                        if c then locked = c.locked ~= false end
                     else
                         locked = group.locked
                     end

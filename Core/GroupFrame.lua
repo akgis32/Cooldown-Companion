@@ -1093,7 +1093,7 @@ function CooldownCompanion:UpdateGroupClickthrough(groupId)
                     local g = CooldownCompanion.db.profile.groups[groupId]
                     if g then
                         -- Lock this specific group/panel
-                        g.locked = true
+                        g.locked = nil
                         CooldownCompanion:RefreshGroupFrame(groupId)
                         CooldownCompanion:RefreshConfigPanel()
                         CooldownCompanion:Print(g.name .. " locked.")

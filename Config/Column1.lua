@@ -30,6 +30,17 @@ local FolderHasForeignSpecs = ST._FolderHasForeignSpecs
 local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 
 ------------------------------------------------------------------------
+-- Clear all selection state (container, panel, button, multi-select)
+------------------------------------------------------------------------
+local function ClearSelection()
+    CS.selectedContainer = nil
+    CS.selectedGroup = nil
+    CS.selectedButton = nil
+    wipe(CS.selectedButtons)
+    wipe(CS.selectedPanels)
+end
+
+------------------------------------------------------------------------
 -- Browse mode: class-colored name helper
 ------------------------------------------------------------------------
 local function GetClassColoredCharName(charKey, classFilename)
@@ -70,11 +81,7 @@ local function RenderBrowseMode()
             CS.browseMode = false
             CS.browseCharKey = nil
             CS.browseContainerId = nil
-            CS.selectedContainer = nil
-            CS.selectedGroup = nil
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
-            wipe(CS.selectedPanels)
+            ClearSelection()
             CooldownCompanion:RefreshConfigPanel()
         end)
         CS.col1Scroll:AddChild(backBtn)
@@ -115,11 +122,7 @@ local function RenderBrowseMode()
             entry:SetCallback("OnClick", function()
                 CS.browseCharKey = charInfo.charKey
                 CS.browseContainerId = nil
-                CS.selectedContainer = nil
-                CS.selectedGroup = nil
-                CS.selectedButton = nil
-                wipe(CS.selectedButtons)
-                wipe(CS.selectedPanels)
+                ClearSelection()
                 CooldownCompanion:RefreshConfigPanel()
             end)
             CS.col1Scroll:AddChild(entry)
@@ -138,11 +141,7 @@ local function RenderBrowseMode()
         backBtn:SetCallback("OnClick", function()
             CS.browseCharKey = nil
             CS.browseContainerId = nil
-            CS.selectedContainer = nil
-            CS.selectedGroup = nil
-            CS.selectedButton = nil
-            wipe(CS.selectedButtons)
-            wipe(CS.selectedPanels)
+            ClearSelection()
             CooldownCompanion:RefreshConfigPanel()
         end)
         CS.col1Scroll:AddChild(backBtn)
@@ -430,26 +429,6 @@ local function RefreshColumn1(preserveDrag)
         return true
     end
 
-    -- Helper: count panels belonging to a container
-    local function GetPanelCount(containerId)
-        local count = 0
-        for _, group in pairs(db.groups) do
-            if group.parentContainerId == containerId then
-                count = count + 1
-            end
-        end
-        return count
-    end
-
-    -- Helper: refresh all panel frames in a container
-    local function RefreshContainerPanels(containerId)
-        for gid, group in pairs(db.groups) do
-            if group.parentContainerId == containerId then
-                CooldownCompanion:RefreshGroupFrame(gid)
-            end
-        end
-    end
-
     -- Helper: render a single container row (reused by both sections)
     local function RenderContainerRow(containerId, inFolder, sectionTag)
         local container = db.groupContainers[containerId]
@@ -460,7 +439,7 @@ local function RefreshColumn1(preserveDrag)
         local isInactive = IsContainerInactive(containerId, container)
 
         -- Show panel count in name when >1 panel
-        local panelCount = GetPanelCount(containerId)
+        local panelCount = CooldownCompanion:GetPanelCount(containerId)
         local displayName = container.name
         if panelCount > 1 then
             displayName = displayName .. "  |cff888888(" .. panelCount .. " panels)|r"
@@ -516,11 +495,7 @@ local function RefreshColumn1(preserveDrag)
                     if CS.selectedContainer and not CS.selectedGroups[CS.selectedContainer] and next(CS.selectedGroups) then
                         CS.selectedGroups[CS.selectedContainer] = true
                     end
-                    CS.selectedContainer = nil
-                    CS.selectedGroup = nil
-                    CS.selectedButton = nil
-                    wipe(CS.selectedButtons)
-                    wipe(CS.selectedPanels)
+                    ClearSelection()
                     CooldownCompanion:RefreshConfigPanel()
                     return
                 end
@@ -604,7 +579,7 @@ local function RefreshColumn1(preserveDrag)
                         info.func = function()
                             CloseDropDownMenus()
                             container.enabled = not (container.enabled ~= false)
-                            RefreshContainerPanels(containerId)
+                            CooldownCompanion:RefreshContainerPanels(containerId)
                             CooldownCompanion:RefreshConfigPanel()
                         end
                         UIDropDownMenu_AddButton(info, level)
@@ -678,15 +653,8 @@ local function RefreshColumn1(preserveDrag)
                         info.func = function()
                             CloseDropDownMenus()
                             container.locked = not container.locked
-                            local cFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-                            if cFrame and cFrame.dragHandle then
-                                if container.locked then
-                                    cFrame.dragHandle:Hide()
-                                else
-                                    cFrame.dragHandle:Show()
-                                end
-                            end
-                            RefreshContainerPanels(containerId)
+                            CooldownCompanion:UpdateContainerDragHandle(containerId, container.locked)
+                            CooldownCompanion:RefreshContainerPanels(containerId)
                             CooldownCompanion:RefreshConfigPanel()
                         end
                         UIDropDownMenu_AddButton(info, level)
@@ -789,16 +757,8 @@ local function RefreshColumn1(preserveDrag)
                 return
             elseif button == "MiddleButton" then
                 container.locked = not container.locked
-                -- Show/hide the container parent anchor drag handle
-                local cFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-                if cFrame and cFrame.dragHandle then
-                    if container.locked then
-                        cFrame.dragHandle:Hide()
-                    else
-                        cFrame.dragHandle:Show()
-                    end
-                end
-                RefreshContainerPanels(containerId)
+                CooldownCompanion:UpdateContainerDragHandle(containerId, container.locked)
+                CooldownCompanion:RefreshContainerPanels(containerId)
                 CooldownCompanion:RefreshConfigPanel()
                 return
             end
@@ -859,7 +819,7 @@ local function RefreshColumn1(preserveDrag)
                             end
                             CooldownCompanion:CleanHeroTalentsForSpec(container, specId)
                         end
-                        RefreshContainerPanels(containerId)
+                        CooldownCompanion:RefreshContainerPanels(containerId)
                         CooldownCompanion:RefreshConfigPanel()
                     end)
                 end
@@ -879,7 +839,7 @@ local function RefreshColumn1(preserveDrag)
                     htOpts.specsSource = effectiveSpecs
                 end
                 htOpts.onChanged = function()
-                    RefreshContainerPanels(containerId)
+                    CooldownCompanion:RefreshContainerPanels(containerId)
                     CooldownCompanion:RefreshConfigPanel()
                 end
                 BuildHeroTalentSubTreeCheckboxes(CS.col1Scroll, container, configID, specId, htIndent, containerId, htOpts)
@@ -922,7 +882,7 @@ local function RefreshColumn1(preserveDrag)
                                 if not container.specs then container.specs = {} end
                                 container.specs[specId] = true
                             end
-                            RefreshContainerPanels(containerId)
+                            CooldownCompanion:RefreshContainerPanels(containerId)
                             CooldownCompanion:RefreshConfigPanel()
                         end)
                         CS.col1Scroll:AddChild(fcb)
@@ -954,7 +914,7 @@ local function RefreshColumn1(preserveDrag)
                         container.specs = nil
                     end
                     container.heroTalents = nil
-                    RefreshContainerPanels(containerId)
+                    CooldownCompanion:RefreshContainerPanels(containerId)
                     CooldownCompanion:RefreshConfigPanel()
                 end)
                 CS.col1Scroll:AddChild(clearBtn)
@@ -1078,16 +1038,8 @@ local function RefreshColumn1(preserveDrag)
                 for cid, c in pairs(containers) do
                     if c.folderId == folderId then
                         c.locked = newState
-                        -- Show/hide container drag handle
-                        local cFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[cid]
-                        if cFrame and cFrame.dragHandle then
-                            if newState then cFrame.dragHandle:Hide() else cFrame.dragHandle:Show() end
-                        end
-                        for gid, g in pairs(db.groups) do
-                            if g.parentContainerId == cid then
-                                CooldownCompanion:RefreshGroupFrame(gid)
-                            end
-                        end
+                        CooldownCompanion:UpdateContainerDragHandle(cid, newState)
+                        CooldownCompanion:RefreshContainerPanels(cid)
                     end
                 end
                 CooldownCompanion:RefreshConfigPanel()
@@ -1168,15 +1120,8 @@ local function RefreshColumn1(preserveDrag)
                         for cid, c in pairs(containers) do
                             if c.folderId == folderId then
                                 c.locked = newState
-                                local cFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[cid]
-                                if cFrame and cFrame.dragHandle then
-                                    if newState then cFrame.dragHandle:Hide() else cFrame.dragHandle:Show() end
-                                end
-                                for gid, g in pairs(db.groups) do
-                                    if g.parentContainerId == cid then
-                                        CooldownCompanion:RefreshGroupFrame(gid)
-                                    end
-                                end
+                                CooldownCompanion:UpdateContainerDragHandle(cid, newState)
+                                CooldownCompanion:RefreshContainerPanels(cid)
                             end
                         end
                         CooldownCompanion:RefreshConfigPanel()
@@ -1408,10 +1353,7 @@ local function RefreshColumn1(preserveDrag)
                         CS.browseMode = true
                         CS.browseCharKey = nil
                         CS.browseContainerId = nil
-                        CS.selectedContainer = nil
-                        CS.selectedGroup = nil
-                        CS.selectedButton = nil
-                        wipe(CS.selectedButtons)
+                        ClearSelection()
                         wipe(CS.selectedGroups)
                         CooldownCompanion:RefreshConfigPanel()
                     end)

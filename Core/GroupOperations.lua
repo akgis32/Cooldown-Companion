@@ -825,9 +825,14 @@ function CooldownCompanion:RefreshAllGroupsVisibilityOnly()
 
                 if active then
                     frame:Show()
-                    -- Resolve locked/alpha from container (lock) and panel (alpha)
+                    -- Resolve locked from container (panels defer to container lock)
                     local container = self:GetParentContainer(group)
-                    local isLocked = container and container.locked or group.locked
+                    local isLocked
+                    if container then
+                        isLocked = container.locked ~= false
+                    else
+                        isLocked = group.locked
+                    end
                     local baseAlpha = group.baselineAlpha or 1
                     -- Force 100% alpha while unlocked for easier positioning
                     if not isLocked then
@@ -903,6 +908,23 @@ function CooldownCompanion:UpdateAllGroupLayouts()
     end
 end
 
+-- Refresh all panel frames belonging to a container.
+function CooldownCompanion:RefreshContainerPanels(containerId)
+    for gid, group in pairs(self.db.profile.groups) do
+        if group.parentContainerId == containerId then
+            self:RefreshGroupFrame(gid)
+        end
+    end
+end
+
+-- Show or hide the drag handle on a container frame to match its lock state.
+function CooldownCompanion:UpdateContainerDragHandle(containerId, locked)
+    local cFrame = self.containerFrames and self.containerFrames[containerId]
+    if cFrame and cFrame.dragHandle then
+        cFrame.dragHandle:SetShown(not locked)
+    end
+end
+
 function CooldownCompanion:LockAllFrames()
     -- Also lock any individually-unlocked panels
     for groupId, group in pairs(self.db.profile.groups) do
@@ -920,10 +942,8 @@ function CooldownCompanion:LockAllFrames()
     end
     -- Lock container frames
     if self.containerFrames then
-        for _, frame in pairs(self.containerFrames) do
-            if frame and frame.dragHandle then
-                frame.dragHandle:Hide()
-            end
+        for containerId in pairs(self.containerFrames) do
+            self:UpdateContainerDragHandle(containerId, true)
         end
     end
 end
@@ -947,13 +967,9 @@ function CooldownCompanion:UnlockAllFrames()
     end
     -- Unlock container frames
     if self.containerFrames then
-        for containerId, frame in pairs(self.containerFrames) do
-            if frame and frame.dragHandle then
-                local container = self.db.profile.groupContainers[containerId]
-                if container and not container.locked then
-                    frame.dragHandle:Show()
-                end
-            end
+        for containerId in pairs(self.containerFrames) do
+            local container = self.db.profile.groupContainers[containerId]
+            self:UpdateContainerDragHandle(containerId, not container or container.locked)
         end
     end
 end

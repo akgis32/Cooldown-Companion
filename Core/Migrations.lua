@@ -1329,8 +1329,7 @@ local CONTAINER_FIELDS = {
     "fadeDelay", "fadeInDuration", "fadeOutDuration",
 }
 
--- Fields that stay on the panel but also get a copy in the container for reference.
--- "loadConditions" moves entirely to the container.
+-- "loadConditions" moves entirely from the group to the container.
 local LOAD_CONDITIONS_KEY = "loadConditions"
 
 function CooldownCompanion:MigrateGroupsToContainers()

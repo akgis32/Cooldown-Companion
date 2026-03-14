@@ -663,11 +663,8 @@ local function RefreshColumn2()
                 local c = containers[cid]
                 if c then
                     c.locked = newState
-                    for gid, g in pairs(db.groups) do
-                        if g.parentContainerId == cid then
-                            CooldownCompanion:RefreshGroupFrame(gid)
-                        end
-                    end
+                    CooldownCompanion:UpdateContainerDragHandle(cid, newState)
+                    CooldownCompanion:RefreshContainerPanels(cid)
                 end
             end
             CooldownCompanion:RefreshConfigPanel()

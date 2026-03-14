@@ -268,7 +268,9 @@ local function PerformPanelReorder(sourcePanelId, dropIndex, panelDropTargets)
     table.insert(panelIds, dropIndex, sourcePanelId)
     -- Reassign .order based on new list position
     for i, pid in ipairs(panelIds) do
-        db.groups[pid].order = i
+        if db.groups[pid] then
+            db.groups[pid].order = i
+        end
     end
 end
 
@@ -283,7 +285,9 @@ local function PerformGroupReorder(sourceIndex, dropIndex, groupIds)
     table.insert(groupIds, dropIndex, id)
     -- Reassign .order based on new list position
     for i, gid in ipairs(groupIds) do
-        db.groups[gid].order = i
+        if db.groups[gid] then
+            db.groups[gid].order = i
+        end
     end
 end
 
@@ -454,7 +458,9 @@ local function ApplyCol1Drop(state)
                     end
                     table.insert(orderItems, insertPos, sourceContainerId)
                     for i, cid in ipairs(orderItems) do
-                        db.groupContainers[cid].order = i
+                        if db.groupContainers[cid] then
+                            db.groupContainers[cid].order = i
+                        end
                     end
                 else
                     -- Top-level: find target position among mixed items
@@ -467,9 +473,9 @@ local function ApplyCol1Drop(state)
                     end
                     table.insert(orderItems, insertPos, { kind = "group", id = sourceContainerId })
                     for i, item in ipairs(orderItems) do
-                        if item.kind == "folder" then
+                        if item.kind == "folder" and db.folders[item.id] then
                             db.folders[item.id].order = i
-                        else
+                        elseif db.groupContainers[item.id] then
                             db.groupContainers[item.id].order = i
                         end
                     end
@@ -550,7 +556,9 @@ local function ApplyCol1Drop(state)
                     table.insert(orderItems, insertPos + i - 1, item.id)
                 end
                 for i, cid in ipairs(orderItems) do
-                    db.groupContainers[cid].order = i
+                    if db.groupContainers[cid] then
+                        db.groupContainers[cid].order = i
+                    end
                 end
             else
                 -- Top-level ordering
@@ -577,9 +585,9 @@ local function ApplyCol1Drop(state)
                     table.insert(orderItems, insertPos + i - 1, { kind = "group", id = item.id })
                 end
                 for i, item in ipairs(orderItems) do
-                    if item.kind == "folder" then
+                    if item.kind == "folder" and db.folders[item.id] then
                         db.folders[item.id].order = i
-                    else
+                    elseif db.groupContainers[item.id] then
                         db.groupContainers[item.id].order = i
                     end
                 end

@@ -1815,11 +1815,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
     if not container then return end
 
     local function RefreshPanels()
-        for gid, g in pairs(db.groups) do
-            if g.parentContainerId == containerId then
-                CooldownCompanion:RefreshGroupFrame(gid)
-            end
-        end
+        CooldownCompanion:RefreshContainerPanels(containerId)
     end
 
     -- Enabled
@@ -1841,14 +1837,7 @@ local function BuildContainerGeneralTab(scroll, containerId)
     lockedCb:SetValue(container.locked == true)
     lockedCb:SetCallback("OnValueChanged", function(widget, event, value)
         container.locked = value
-        local cFrame = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
-        if cFrame and cFrame.dragHandle then
-            if value then
-                cFrame.dragHandle:Hide()
-            else
-                cFrame.dragHandle:Show()
-            end
-        end
+        CooldownCompanion:UpdateContainerDragHandle(containerId, value)
         RefreshPanels()
         CooldownCompanion:RefreshConfigPanel()
     end)
@@ -2082,11 +2071,7 @@ local function BuildContainerLoadConditionsTab(scroll, containerId)
     if not container then return end
 
     local function RefreshPanels()
-        for gid, g in pairs(db.groups) do
-            if g.parentContainerId == containerId then
-                CooldownCompanion:RefreshGroupFrame(gid)
-            end
-        end
+        CooldownCompanion:RefreshContainerPanels(containerId)
     end
 
     if not container.loadConditions then

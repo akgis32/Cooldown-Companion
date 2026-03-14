@@ -883,9 +883,9 @@ local function ImportGroupData(text)
             local panel = CopyTable(srcPanel)
             panel.parentContainerId = containerId
             panel.anchor = {
-                point = "TOPLEFT",
+                point = "CENTER",
                 relativeTo = "CooldownCompanionContainer" .. containerId,
-                relativePoint = "TOPLEFT",
+                relativePoint = "CENTER",
                 x = 0,
                 y = 0,
             }
@@ -904,9 +904,9 @@ local function ImportGroupData(text)
                 displayMode = "icons",
                 buttons = {},
                 anchor = {
-                    point = "TOPLEFT",
+                    point = "CENTER",
                     relativeTo = "CooldownCompanionContainer" .. containerId,
-                    relativePoint = "TOPLEFT",
+                    relativePoint = "CENTER",
                     x = 0,
                     y = 0,
                 },
