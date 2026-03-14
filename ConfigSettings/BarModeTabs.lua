@@ -437,7 +437,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
         local cdFontColor = AceGUI:Create("ColorPicker")
         cdFontColor:SetLabel("Font Color")
-        cdFontColor:SetHasAlpha(true)
+        cdFontColor:SetHasAlpha(false)
         local cdc = style.cooldownFontColor or {1, 1, 1, 1}
         cdFontColor:SetColor(cdc[1], cdc[2], cdc[3], cdc[4])
         cdFontColor:SetFullWidth(true)
@@ -662,7 +662,7 @@ local function BuildBarAppearanceTab(container, group, style)
 
         local auraFontColor = AceGUI:Create("ColorPicker")
         auraFontColor:SetLabel("Font Color")
-        auraFontColor:SetHasAlpha(true)
+        auraFontColor:SetHasAlpha(false)
         local ac = style.auraTextFontColor or {0, 0.925, 1, 1}
         auraFontColor:SetColor(ac[1], ac[2], ac[3], ac[4])
         auraFontColor:SetFullWidth(true)
