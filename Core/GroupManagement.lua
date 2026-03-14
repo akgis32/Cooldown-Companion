@@ -368,10 +368,19 @@ function CooldownCompanion:DuplicateContainer(containerId)
 
     db.groupContainers[newContainerId] = newContainer
 
-    -- Deep copy all child panels, re-anchoring to new container
-    local containerFrameName = "CooldownCompanionContainer" .. newContainerId
+    -- Collect source panel IDs first (avoid modifying db.groups during pairs iteration)
+    local sourcePanelIds = {}
     for groupId, group in pairs(db.groups) do
         if group.parentContainerId == containerId then
+            sourcePanelIds[#sourcePanelIds + 1] = groupId
+        end
+    end
+
+    -- Deep copy all child panels, re-anchoring to new container
+    local containerFrameName = "CooldownCompanionContainer" .. newContainerId
+    for _, groupId in ipairs(sourcePanelIds) do
+        local group = db.groups[groupId]
+        if group then
             local newGroupId = db.nextGroupId
             db.nextGroupId = newGroupId + 1
 
