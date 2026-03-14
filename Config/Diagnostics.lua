@@ -252,7 +252,7 @@ local function FormatDiagnosticAsText(diag)
         else
             for sid in pairs(specs) do specIds[#specIds + 1] = sid end
         end
-        if #specIds == 0 then return "none" end
+        if #specIds == 0 then return "all" end
         table.sort(specIds)
         local ss = {}
         for _, s in ipairs(specIds) do
@@ -618,8 +618,9 @@ local function FormatDiagnosticAsText(diag)
     -- Legacy/orphan groups (no parentContainerId — pre-container or broken data)
     if p.groups then
         local orphanIds = {}
-        for gid in pairs(p.groups) do
-            if not panelGroupIds[gid] then
+        for gid, g in pairs(p.groups) do
+            if not panelGroupIds[gid]
+                or (g.parentContainerId and (not p.groupContainers or not p.groupContainers[g.parentContainerId])) then
                 orphanIds[#orphanIds + 1] = gid
             end
         end
@@ -643,6 +644,9 @@ local function FormatDiagnosticAsText(diag)
                     g.enabled ~= false and "enabled" or "DISABLED",
                     visStr, btnCount,
                     formatSpecList(g.specs)))
+                if g.parentContainerId then
+                    add(("  parentContainerId: %d (MISSING)"):format(g.parentContainerId))
+                end
                 local a = g.anchor
                 if a then
                     add(("  anchor: %s > %s > %s (%.1f, %.1f)"):format(
@@ -959,21 +963,21 @@ StaticPopupDialogs["CDC_DIAGNOSTIC_IMPORT_CONFIRM"] = {
             local exporterCharKey = decodedDiagnostic.meta and decodedDiagnostic.meta.charKey
             if db.profile.groups then
                 for _, group in pairs(db.profile.groups) do
-                    if not group.isGlobal and group.createdBy == exporterCharKey then
+                    if not group.isGlobal and (exporterCharKey == nil or group.createdBy == exporterCharKey) then
                         group.createdBy = charKey
                     end
                 end
             end
             if db.profile.groupContainers then
                 for _, container in pairs(db.profile.groupContainers) do
-                    if not container.isGlobal and container.createdBy == exporterCharKey then
+                    if not container.isGlobal and (exporterCharKey == nil or container.createdBy == exporterCharKey) then
                         container.createdBy = charKey
                     end
                 end
             end
             if db.profile.folders then
                 for _, folder in pairs(db.profile.folders) do
-                    if folder.section == "char" and folder.createdBy == exporterCharKey then
+                    if folder.section == "char" and (exporterCharKey == nil or folder.createdBy == exporterCharKey) then
                         folder.createdBy = charKey
                     end
                 end
