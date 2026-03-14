@@ -66,11 +66,18 @@ function CooldownCompanion:ClearMigrationSentinels()
     profile.newDefaultsMigrated = nil
     profile._migratedContainersV1 = nil
     profile._migratedContainerAlphaToPanel = nil
+    profile._migratedContainerHeroTalentStamps = nil
 end
 
 function CooldownCompanion:MigrateGroupOwnership()
     for groupId, group in pairs(self.db.profile.groups) do
-        if group.createdBy == nil and group.isGlobal == nil then
+        if group.parentContainerId then
+            -- Panels inherit visibility from their container — clear stale
+            -- ownership fields that may have been re-stamped before this guard
+            -- existed, or left over from an incomplete migration cycle.
+            if group.isGlobal ~= nil then group.isGlobal = nil end
+            if group.createdBy == "migrated" then group.createdBy = nil end
+        elseif group.createdBy == nil and group.isGlobal == nil then
             group.isGlobal = true
             group.createdBy = "migrated"
         end
@@ -1328,6 +1335,28 @@ local LOAD_CONDITIONS_KEY = "loadConditions"
 
 function CooldownCompanion:MigrateGroupsToContainers()
     local profile = self.db.profile
+
+    -- Fix panels migrated with TOPLEFT anchor (should be CENTER to match all
+    -- other panel creation paths).  Runs before the sentinel check so it
+    -- patches existing migrated data.
+    if profile._migratedContainersV1 and not profile._migratedPanelAnchorCenter then
+        local containers = profile.groupContainers or {}
+        for groupId, group in pairs(profile.groups) do
+            local pcid = group.parentContainerId
+            if pcid and containers[pcid] then
+                local a = group.anchor
+                if a and a.point == "TOPLEFT"
+                   and a.relativeTo == "CooldownCompanionContainer" .. pcid
+                   and a.relativePoint == "TOPLEFT"
+                   and (a.x or 0) == 0 and (a.y or 0) == 0 then
+                    a.point = "CENTER"
+                    a.relativePoint = "CENTER"
+                end
+            end
+        end
+        profile._migratedPanelAnchorCenter = true
+    end
+
     if profile._migratedContainersV1 then return end
 
     -- Ensure tables exist (may be first load after schema addition)
@@ -1403,11 +1432,11 @@ function CooldownCompanion:MigrateGroupsToContainers()
         group.name = "Panel 1"
         group.order = 1
 
-        -- Re-anchor panel to the container frame
+        -- Re-anchor panel to the container frame (CENTER matches all other panel creation paths)
         group.anchor = {
-            point = "TOPLEFT",
+            point = "CENTER",
             relativeTo = "CooldownCompanionContainer" .. containerId,
-            relativePoint = "TOPLEFT",
+            relativePoint = "CENTER",
             x = 0,
             y = 0,
         }
@@ -1551,3 +1580,4 @@ function CooldownCompanion:MigrateContainerHeroTalentStamps()
 
     profile._migratedContainerHeroTalentStamps = true
 end
+
