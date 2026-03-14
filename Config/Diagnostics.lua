@@ -26,7 +26,7 @@ local RESOURCE_NAMES = {
 
 local function BuildDiagnosticSnapshot()
     local db = CooldownCompanion.db
-    local snapshot = { _v = 1 }
+    local snapshot = { _v = 2 }
 
     -- Meta
     local _, classFilename, classID = UnitClass("player")
@@ -47,6 +47,11 @@ local function BuildDiagnosticSnapshot()
         end
     end
 
+    local containerCount = 0
+    for _ in pairs(db.profile.groupContainers) do
+        containerCount = containerCount + 1
+    end
+
     local charName = UnitName("player")
     local charKey = db.keys.char
 
@@ -63,6 +68,7 @@ local function BuildDiagnosticSnapshot()
         specName = specName,
         realmName = GetRealmName(),
         timestamp = date("%Y-%m-%d %H:%M:%S"),
+        containerCount = containerCount,
         groupCount = groupCount,
         totalButtons = totalButtons,
         instanceType = CooldownCompanion._currentInstanceType,
@@ -93,6 +99,16 @@ local function BuildDiagnosticSnapshot()
             exists = true,
             shown = frame:IsShown(),
         }
+    end
+
+    local containerFrameStates = {}
+    if CooldownCompanion.containerFrames then
+        for containerId, frame in pairs(CooldownCompanion.containerFrames) do
+            containerFrameStates[tostring(containerId)] = {
+                exists = true,
+                shown = frame:IsShown(),
+            }
+        end
     end
 
     local resourceBarRuntime = nil
@@ -126,29 +142,38 @@ local function BuildDiagnosticSnapshot()
         procOverlaySpells = procOverlaySpells,
         rangeCheckSpells = rangeCheckSpells,
         groupFrameStates = groupFrameStates,
+        containerFrameStates = containerFrameStates,
         resourceBarRuntime = resourceBarRuntime,
         loadedAddons = loadedAddons,
     }
 
     -- Build spec name cache for all referenced spec IDs
     local specNameCache = {}
-    for _, group in pairs(db.profile.groups) do
-        if group.specs then
-            for sid in pairs(group.specs) do
-                if not specNameCache[sid] then
-                    specNameCache[sid] = GetSpecializationNameForSpecID(sid) or nil
-                end
-            end
+    local function cacheSpecName(sid)
+        if sid and not specNameCache[sid] then
+            specNameCache[sid] = GetSpecializationNameForSpecID(sid)
         end
+    end
+    local function cacheSpecsFromTable(specTable)
+        if specTable then
+            for sid in pairs(specTable) do cacheSpecName(sid) end
+        end
+    end
+    for _, group in pairs(db.profile.groups) do
+        cacheSpecsFromTable(group.specs)
+    end
+    for _, container in pairs(db.profile.groupContainers) do
+        cacheSpecsFromTable(container.specs)
+    end
+    for _, folder in pairs(db.profile.folders) do
+        cacheSpecsFromTable(folder.specs)
     end
     local resourceStores = rawget(db.profile, "resourceBarsByChar")
     if type(resourceStores) == "table" then
         for _, resourceSettings in pairs(resourceStores) do
             if type(resourceSettings) == "table" and type(resourceSettings.customAuraBars) == "table" then
                 for sid in pairs(resourceSettings.customAuraBars) do
-                    if sid ~= 0 and not specNameCache[sid] then
-                        specNameCache[sid] = GetSpecializationNameForSpecID(sid) or nil
-                    end
+                    if sid ~= 0 then cacheSpecName(sid) end
                 end
             end
         end
@@ -218,6 +243,25 @@ local function FormatDiagnosticAsText(diag)
     local p = diag.profile or {}
     local specNames = m.specNameCache or {}
 
+    -- Format a spec set (handles both array-style {71,72} and map-style {[71]=true})
+    local function formatSpecList(specs)
+        if not specs then return "nil (no filter)" end
+        local specIds = {}
+        if #specs > 0 then
+            for _, sid in ipairs(specs) do specIds[#specIds + 1] = sid end
+        else
+            for sid in pairs(specs) do specIds[#specIds + 1] = sid end
+        end
+        if #specIds == 0 then return "none" end
+        table.sort(specIds)
+        local ss = {}
+        for _, s in ipairs(specIds) do
+            local name = specNames[s]
+            ss[#ss + 1] = name and (tostring(s) .. "(" .. name .. ")") or tostring(s)
+        end
+        return table.concat(ss, ", ")
+    end
+
     -- Build viewer aura set for cross-referencing with buttons
     local viewerAuraSet = {}
     if r.viewerAuraSpells then
@@ -234,6 +278,14 @@ local function FormatDiagnosticAsText(diag)
         end
     end
 
+    -- Build container visibility map from runtime containerFrameStates
+    local containerFrameVisible = {}  -- [containerId number] = true/false, nil = no frame
+    if r.containerFrameStates then
+        for id, state in pairs(r.containerFrameStates) do
+            containerFrameVisible[tonumber(id)] = state.shown
+        end
+    end
+
     -- Header
     add(("=== CDC BUG REPORT (v%s) ==="):format(tostring(diag._v or "?")))
     add(("Addon: %s | WoW: %s (%s) | Locale: %s"):format(
@@ -246,13 +298,14 @@ local function FormatDiagnosticAsText(diag)
     add(("Instance: %s | Resting: %s | CDM Hidden: %s"):format(
         tostring(m.instanceType or "?"), tostring(r.isResting), tostring(r.cdmHidden)))
     add(("Timestamp: %s"):format(tostring(m.timestamp or "?")))
-    add(("Groups: %s | Total Buttons: %s"):format(
-        tostring(m.groupCount or "?"), tostring(m.totalButtons or "?")))
+    add(("Containers: %s | Panels: %s | Total Buttons: %s"):format(
+        tostring(m.containerCount or "?"), tostring(m.groupCount or "?"), tostring(m.totalButtons or "?")))
 
     -- Runtime
     add("")
     add("--- Runtime ---")
-    add(("Cached Spec ID: %s"):format(tostring(r.currentSpecId or "nil")))
+    add(("Cached Spec ID: %s | Hero Spec ID: %s"):format(
+        tostring(r.currentSpecId or "nil"), tostring(r.currentHeroSpecId or "nil")))
     add(("Assisted Spell: %s"):format(tostring(r.assistedSpellID or "none")))
 
     local function formatIDList(t)
@@ -275,7 +328,20 @@ local function FormatDiagnosticAsText(diag)
             local state = r.groupFrameStates[id]
             parts[#parts + 1] = ("[%s] %s"):format(id, state.shown and "shown" or "hidden")
         end
-        add("Group Frame States:")
+        add("Panel Frame States:")
+        add("  " .. (#parts > 0 and table.concat(parts, "  ") or "none"))
+    end
+
+    if r.containerFrameStates then
+        local parts = {}
+        local ids = {}
+        for id in pairs(r.containerFrameStates) do ids[#ids + 1] = id end
+        table.sort(ids, function(a, b) return tonumber(a) < tonumber(b) end)
+        for _, id in ipairs(ids) do
+            local state = r.containerFrameStates[id]
+            parts[#parts + 1] = ("[%s] %s"):format(id, state.shown and "shown" or "hidden")
+        end
+        add("Container Frame States:")
         add("  " .. (#parts > 0 and table.concat(parts, "  ") or "none"))
     end
 
@@ -310,145 +376,290 @@ local function FormatDiagnosticAsText(diag)
         end
     end
 
-    -- Groups (sorted by display order, not ID)
-    add("")
-    add("--- Groups ---")
+    -- Helper: format buttons list with annotations
+    local function addButtons(g, indent)
+        if not g.buttons or #g.buttons == 0 then return end
+        add(indent .. "buttons:")
+        for i, btn in ipairs(g.buttons) do
+            local main = ("%s  %d. %s:%s %q"):format(
+                indent, i, btn.type or "?", tostring(btn.id or "?"), btn.name or "?")
+            local extras = {}
+            for k, v in pairs(btn) do
+                if k ~= "type" and k ~= "id" and k ~= "name" then
+                    extras[#extras + 1] = tostring(k) .. "=" .. formatValue(v)
+                end
+            end
+            if btn.auraTracking and not btn.auraUnit then
+                extras[#extras + 1] = "auraUnit=player(default)"
+            end
+            if btn.type == "spell" and btn.id and viewerAuraSet[btn.id] then
+                extras[#extras + 1] = "~viewerAura=yes"
+            end
+            table.sort(extras)
+            if #extras > 0 then
+                main = main .. " " .. table.concat(extras, " ")
+            end
+            add(main)
+        end
+    end
+
+    -- Helper: format alpha/fade keys from a table
+    local function addAlphaKeys(t, indent, keys)
+        local alphaParts = {}
+        for _, k in ipairs(keys) do
+            if t[k] ~= nil then
+                alphaParts[#alphaParts + 1] = k .. "=" .. tostring(t[k])
+            end
+        end
+        if #alphaParts > 0 then
+            add(indent .. "alpha: " .. table.concat(alphaParts, " "))
+        end
+    end
+
+    -- Helper: format "other" catch-all keys
+    local function addOtherKeys(t, handledKeys, indent)
+        local extraParts = {}
+        for k, v in pairs(t) do
+            if not handledKeys[k] then
+                extraParts[#extraParts + 1] = tostring(k) .. "=" .. formatValue(v)
+            end
+        end
+        table.sort(extraParts)
+        if #extraParts > 0 then
+            add(indent .. "other: " .. table.concat(extraParts, " "))
+        end
+    end
+
+    -- Build panel-by-container index
+    local panelsByContainer = {}  -- [containerId] = { {gid=N, group=table}, ... }
+    local panelGroupIds = {}      -- set of groupIds that are panels
     if p.groups then
-        local groupIds = {}
-        for id in pairs(p.groups) do groupIds[#groupIds + 1] = id end
-        table.sort(groupIds, function(a, b)
-            local oa = p.groups[a] and p.groups[a].order or 999
-            local ob = p.groups[b] and p.groups[b].order or 999
+        for gid, g in pairs(p.groups) do
+            if g.parentContainerId then
+                panelGroupIds[gid] = true
+                local cid = g.parentContainerId
+                if not panelsByContainer[cid] then panelsByContainer[cid] = {} end
+                panelsByContainer[cid][#panelsByContainer[cid] + 1] = { gid = gid, group = g }
+            end
+        end
+        for _, panels in pairs(panelsByContainer) do
+            table.sort(panels, function(a, b)
+                local oa = a.group.order or 999
+                local ob = b.group.order or 999
+                if oa ~= ob then return oa < ob end
+                return a.gid < b.gid
+            end)
+        end
+    end
+
+    -- Container alpha keys (full suite — containers own force conditions)
+    local containerAlphaKeys = {
+        "baselineAlpha", "forceAlphaInCombat", "forceAlphaOutOfCombat",
+        "forceAlphaRegularMounted", "forceAlphaDragonriding",
+        "forceAlphaTargetExists", "forceAlphaMouseover",
+        "forceHideInCombat", "forceHideOutOfCombat",
+        "forceHideRegularMounted", "forceHideDragonriding",
+        "treatTravelFormAsMounted",
+        "fadeDelay", "fadeInDuration", "fadeOutDuration",
+    }
+
+    -- Container handled keys (for "other" catch-all)
+    local containerHandledKeys = {
+        name=1, order=1, createdBy=1, isGlobal=1, enabled=1, locked=1,
+        specs=1, heroTalents=1, anchor=1, loadConditions=1, folderId=1, frameStrata=1,
+        baselineAlpha=1, forceAlphaInCombat=1, forceAlphaOutOfCombat=1,
+        forceAlphaRegularMounted=1, forceAlphaDragonriding=1,
+        forceAlphaTargetExists=1, forceAlphaMouseover=1,
+        forceHideInCombat=1, forceHideOutOfCombat=1,
+        forceHideRegularMounted=1, forceHideDragonriding=1,
+        treatTravelFormAsMounted=1,
+        fadeDelay=1, fadeInDuration=1, fadeOutDuration=1,
+    }
+
+    -- Panel alpha keys (panels own only their own fade, not force conditions)
+    local panelAlphaKeys = {
+        "baselineAlpha", "fadeDelay", "fadeInDuration", "fadeOutDuration",
+    }
+
+    -- Panel handled keys (for "other" catch-all)
+    local panelHandledKeys = {
+        name=1, parentContainerId=1, order=1, anchor=1, buttons=1, style=1,
+        displayMode=1, masqueEnabled=1, compactLayout=1, maxVisibleButtons=1,
+        compactGrowthDirection=1, specs=1, heroTalents=1,
+        baselineAlpha=1, fadeDelay=1, fadeInDuration=1, fadeOutDuration=1,
+        -- Legacy keys that may still exist on panels after migration
+        enabled=1, locked=1, createdBy=1, isGlobal=1, loadConditions=1,
+        folderId=1, frameStrata=1,
+        forceAlphaInCombat=1, forceAlphaOutOfCombat=1,
+        forceAlphaRegularMounted=1, forceAlphaDragonriding=1,
+        forceAlphaTargetExists=1, forceAlphaMouseover=1,
+        forceHideInCombat=1, forceHideOutOfCombat=1,
+        forceHideRegularMounted=1, forceHideDragonriding=1,
+        treatTravelFormAsMounted=1,
+    }
+
+    -- Containers & Panels (sorted by container order)
+    add("")
+    add("--- Containers & Panels ---")
+    if p.groupContainers then
+        local containerIds = {}
+        for id in pairs(p.groupContainers) do containerIds[#containerIds + 1] = id end
+        table.sort(containerIds, function(a, b)
+            local oa = p.groupContainers[a].order or 999
+            local ob = p.groupContainers[b].order or 999
             if oa ~= ob then return oa < ob end
             return a < b
         end)
 
-        for _, gid in ipairs(groupIds) do
-            local g = p.groups[gid]
+        for _, cid in ipairs(containerIds) do
+            local c = p.groupContainers[cid]
+            local panels = panelsByContainer[cid] or {}
 
-            -- Specs display: nil = no filter, {} = all specs, {71,72} = specific
-            local specStr
-            if not g.specs then
-                specStr = "nil (no filter)"
-            elseif #g.specs == 0 then
-                specStr = "all"
+            -- Container visibility
+            local cVisStr
+            if containerFrameVisible[cid] == true then
+                cVisStr = "VISIBLE"
+            elseif containerFrameVisible[cid] == false then
+                cVisStr = "HIDDEN"
             else
-                local ss = {}
-                for _, s in ipairs(g.specs) do
-                    local name = specNames[s]
-                    ss[#ss + 1] = name and (tostring(s) .. "(" .. name .. ")") or tostring(s)
-                end
-                specStr = table.concat(ss, ", ")
+                cVisStr = "NO FRAME"
             end
 
-            -- Visibility status from runtime frame states
-            local visStr
-            if groupFrameVisible[gid] == true then
-                visStr = "VISIBLE"
-            elseif groupFrameVisible[gid] == false then
-                visStr = "HIDDEN"
-            else
-                visStr = "NO FRAME"
-            end
-
-            local btnCount = g.buttons and #g.buttons or 0
-
-            -- Group header with all key info on one line
-            add(("[%d] %q | %s | %s | %s | %d buttons | specs: %s"):format(
-                gid, g.name or "?",
-                g.displayMode or "icons",
-                g.enabled ~= false and "enabled" or "DISABLED",
-                visStr,
-                btnCount,
-                specStr))
+            -- Container header
+            add(("[%d] %q | %s | %s | %s | %d panels | specs: %s | heroTalents: %s"):format(
+                cid, c.name or "?",
+                c.enabled ~= false and "enabled" or "DISABLED",
+                cVisStr,
+                c.locked ~= false and "locked" or "unlocked",
+                #panels,
+                formatSpecList(c.specs),
+                formatSpecList(c.heroTalents)))
 
             -- Anchor
-            local a = g.anchor
+            local a = c.anchor
             if a then
                 add(("  anchor: %s > %s > %s (%.1f, %.1f)"):format(
                     a.point or "?", a.relativeTo or "?", a.relativePoint or "?",
                     a.x or 0, a.y or 0))
             end
 
-            -- Style (all values)
-            if g.style then
-                add("  style: " .. dumpKV(g.style))
-            end
-
-            -- Alpha/visibility
-            local alphaKeys = {
-                "baselineAlpha", "forceAlphaInCombat", "forceAlphaOutOfCombat",
-                "forceAlphaRegularMounted", "forceAlphaDragonriding",
-                "forceAlphaTargetExists", "forceAlphaMouseover",
-                "forceHideInCombat", "forceHideOutOfCombat",
-                "forceHideRegularMounted", "forceHideDragonriding",
-                "fadeDelay", "fadeInDuration", "fadeOutDuration",
-            }
-            local alphaParts = {}
-            for _, k in ipairs(alphaKeys) do
-                if g[k] ~= nil then
-                    alphaParts[#alphaParts + 1] = k .. "=" .. tostring(g[k])
-                end
-            end
-            if #alphaParts > 0 then
-                add("  alpha: " .. table.concat(alphaParts, " "))
-            end
+            -- Alpha/fade/force conditions
+            addAlphaKeys(c, "  ", containerAlphaKeys)
 
             -- Load conditions
-            if g.loadConditions then
-                add("  load: " .. dumpKV(g.loadConditions))
+            if c.loadConditions then
+                add("  load: " .. dumpKV(c.loadConditions))
             end
 
-            -- Other group-level keys not handled above
-            local groupHandledKeys = {
-                name=1, buttons=1, style=1, anchor=1, loadConditions=1,
-                specs=1, displayMode=1, enabled=1,
-                baselineAlpha=1, forceAlphaInCombat=1, forceAlphaOutOfCombat=1,
-                forceAlphaRegularMounted=1, forceAlphaDragonriding=1,
-                forceAlphaTargetExists=1, forceAlphaMouseover=1,
-                forceHideInCombat=1, forceHideOutOfCombat=1,
-                forceHideRegularMounted=1, forceHideDragonriding=1,
-                fadeDelay=1, fadeInDuration=1, fadeOutDuration=1,
-            }
-            local extraParts = {}
-            for k, v in pairs(g) do
-                if not groupHandledKeys[k] then
-                    extraParts[#extraParts + 1] = tostring(k) .. "=" .. formatValue(v)
-                end
-            end
-            table.sort(extraParts)
-            if #extraParts > 0 then
-                add("  other: " .. table.concat(extraParts, " "))
+            -- Frame strata
+            if c.frameStrata then
+                add("  frameStrata: " .. tostring(c.frameStrata))
             end
 
-            -- Buttons with annotations
-            if g.buttons and #g.buttons > 0 then
-                add("  buttons:")
-                for i, btn in ipairs(g.buttons) do
-                    local main = ("    %d. %s:%s %q"):format(
-                        i, btn.type or "?", tostring(btn.id or "?"), btn.name or "?")
-                    local extras = {}
-                    for k, v in pairs(btn) do
-                        if k ~= "type" and k ~= "id" and k ~= "name" then
-                            extras[#extras + 1] = tostring(k) .. "=" .. formatValue(v)
-                        end
-                    end
-                    -- Annotate: show default auraUnit when auraTracking is on but unit not specified
-                    if btn.auraTracking and not btn.auraUnit then
-                        extras[#extras + 1] = "auraUnit=player(default)"
-                    end
-                    -- Annotate: cross-reference with CDM viewer aura tracking
-                    if btn.type == "spell" and btn.id and viewerAuraSet[btn.id] then
-                        extras[#extras + 1] = "~viewerAura=yes"
-                    end
-                    table.sort(extras)
-                    if #extras > 0 then
-                        main = main .. " " .. table.concat(extras, " ")
-                    end
-                    add(main)
+            -- Other container-level keys
+            addOtherKeys(c, containerHandledKeys, "  ")
+
+            -- Nested panels
+            for _, entry in ipairs(panels) do
+                local gid = entry.gid
+                local g = entry.group
+
+                local pVisStr
+                if groupFrameVisible[gid] == true then
+                    pVisStr = "VISIBLE"
+                elseif groupFrameVisible[gid] == false then
+                    pVisStr = "HIDDEN"
+                else
+                    pVisStr = "NO FRAME"
                 end
+
+                local btnCount = g.buttons and #g.buttons or 0
+
+                add(("  [%d] %q | %s | %s | %d buttons"):format(
+                    gid, g.name or "?",
+                    g.displayMode or "icons",
+                    pVisStr,
+                    btnCount))
+
+                -- Panel anchor
+                local pa = g.anchor
+                if pa then
+                    add(("    anchor: %s > %s > %s (%.1f, %.1f)"):format(
+                        pa.point or "?", pa.relativeTo or "?", pa.relativePoint or "?",
+                        pa.x or 0, pa.y or 0))
+                end
+
+                -- Panel spec filters (own, not inherited from container)
+                if g.specs and next(g.specs) then
+                    add("    specs: " .. formatSpecList(g.specs))
+                end
+                if g.heroTalents and next(g.heroTalents) then
+                    add("    heroTalents: " .. formatSpecList(g.heroTalents))
+                end
+
+                -- Panel style
+                if g.style then
+                    add("    style: " .. dumpKV(g.style))
+                end
+
+                -- Panel alpha (own fade only)
+                addAlphaKeys(g, "    ", panelAlphaKeys)
+
+                -- Panel other
+                addOtherKeys(g, panelHandledKeys, "    ")
+
+                -- Buttons
+                addButtons(g, "    ")
             end
             add("")
+        end
+    end
+
+    -- Legacy/orphan groups (no parentContainerId — pre-container or broken data)
+    if p.groups then
+        local orphanIds = {}
+        for gid in pairs(p.groups) do
+            if not panelGroupIds[gid] then
+                orphanIds[#orphanIds + 1] = gid
+            end
+        end
+        if #orphanIds > 0 then
+            table.sort(orphanIds)
+            add("--- Legacy Groups ---")
+            for _, gid in ipairs(orphanIds) do
+                local g = p.groups[gid]
+                local visStr
+                if groupFrameVisible[gid] == true then
+                    visStr = "VISIBLE"
+                elseif groupFrameVisible[gid] == false then
+                    visStr = "HIDDEN"
+                else
+                    visStr = "NO FRAME"
+                end
+                local btnCount = g.buttons and #g.buttons or 0
+                add(("[%d] %q | %s | %s | %s | %d buttons | specs: %s"):format(
+                    gid, g.name or "?",
+                    g.displayMode or "icons",
+                    g.enabled ~= false and "enabled" or "DISABLED",
+                    visStr, btnCount,
+                    formatSpecList(g.specs)))
+                local a = g.anchor
+                if a then
+                    add(("  anchor: %s > %s > %s (%.1f, %.1f)"):format(
+                        a.point or "?", a.relativeTo or "?", a.relativePoint or "?",
+                        a.x or 0, a.y or 0))
+                end
+                if g.style then
+                    add("  style: " .. dumpKV(g.style))
+                end
+                addAlphaKeys(g, "  ", containerAlphaKeys)
+                if g.loadConditions then
+                    add("  load: " .. dumpKV(g.loadConditions))
+                end
+                addOtherKeys(g, panelHandledKeys, "  ")
+                addButtons(g, "  ")
+                add("")
+            end
         end
     end
 
@@ -458,7 +669,7 @@ local function FormatDiagnosticAsText(diag)
     local legacyRb = rawget(p, "resourceBars")
     local legacyRbSeed = rawget(p, "legacyResourceBarsSeed")
     local rbStore = rawget(p, "resourceBarsByChar")
-    local rb = type(rbStore) == "table" and currentCharKey and rbStore[currentCharKey] or nil
+    local rb = type(rbStore) == "table" and currentCharKey and rbStore[currentCharKey]
     local function addResourceBarBucket(label, settings)
         if type(settings) ~= "table" then
             add(label .. "=nil")
@@ -541,7 +752,7 @@ local function FormatDiagnosticAsText(diag)
     add("")
     add("--- Cast Bar ---")
     local cbStore = rawget(p, "castBarByChar")
-    local cb = type(cbStore) == "table" and currentCharKey and cbStore[currentCharKey] or nil
+    local cb = type(cbStore) == "table" and currentCharKey and cbStore[currentCharKey]
     if type(cbStore) == "table" then
         local storedChars = {}
         for charKey in pairs(cbStore) do
@@ -559,7 +770,7 @@ local function FormatDiagnosticAsText(diag)
     add("")
     add("--- Frame Anchoring ---")
     local faStore = rawget(p, "frameAnchoringByChar")
-    local fa = type(faStore) == "table" and currentCharKey and faStore[currentCharKey] or nil
+    local fa = type(faStore) == "table" and currentCharKey and faStore[currentCharKey]
     if type(faStore) == "table" then
         local storedChars = {}
         for charKey in pairs(faStore) do
@@ -601,7 +812,7 @@ local function FormatDiagnosticAsText(diag)
         add(dumpKV(p.globalStyle))
     end
 
-    -- Folders (with member group listing)
+    -- Folders (with member container listing)
     if p.folders then
         local hasAny = false
         for _ in pairs(p.folders) do hasAny = true; break end
@@ -613,39 +824,91 @@ local function FormatDiagnosticAsText(diag)
             table.sort(folderIds)
             for _, fid in ipairs(folderIds) do
                 local f = p.folders[fid]
-                -- List which groups belong to this folder
-                local memberGroups = {}
-                if p.groups then
-                    for gid, g in pairs(p.groups) do
-                        if g.folderId == fid then
-                            memberGroups[#memberGroups + 1] = ("%d(%q)"):format(gid, g.name or "?")
+                -- List which containers belong to this folder
+                local memberContainers = {}
+                if p.groupContainers then
+                    for cid, c in pairs(p.groupContainers) do
+                        if c.folderId == fid then
+                            memberContainers[#memberContainers + 1] = ("%d(%q)"):format(cid, c.name or "?")
                         end
                     end
                 end
-                table.sort(memberGroups)
-                local membersStr = #memberGroups > 0 and table.concat(memberGroups, ", ") or "empty"
-                add(("[%s] %q section=%s order=%s | groups: %s"):format(
+                table.sort(memberContainers)
+                local membersStr = #memberContainers > 0 and table.concat(memberContainers, ", ") or "empty"
+                add(("[%s] %q section=%s order=%s | containers: %s"):format(
                     tostring(fid), f.name or "?", f.section or "?", tostring(f.order), membersStr))
+                if f.specs and next(f.specs) then
+                    add(("  specs: %s"):format(formatSpecList(f.specs)))
+                end
+                if f.heroTalents and next(f.heroTalents) then
+                    add(("  heroTalents: %s"):format(formatSpecList(f.heroTalents)))
+                end
             end
         end
     end
 
-    -- Other top-level profile keys
+    -- Other top-level profile keys (catch-all with recursive dump for future-proofing)
     add("")
     add("--- Other ---")
     local skipTopLevel = {
-        groups=1, resourceBars=1, castBar=1, frameAnchoring=1,
-        globalStyle=1, folders=1,
+        -- Explicitly handled sections
+        groups=1, groupContainers=1, folders=1, globalStyle=1,
+        resourceBars=1, castBar=1, frameAnchoring=1,
+        resourceBarsByChar=1, castBarByChar=1, frameAnchoringByChar=1,
+        -- Structural counters
+        nextGroupId=1, nextContainerId=1, nextFolderId=1,
+        -- Settings shown in header or config-only
+        locked=1, cdmHidden=1, minimap=1,
+        hideInfoButtons=1, escClosesConfig=1, showAdvanced=1,
+        autoAddPrefs=1, groupSettingPresets=1,
+        -- Legacy migration data
+        legacyResourceBarsSeed=1,
     }
-    local otherParts = {}
-    for k, v in pairs(p) do
+    local function deepFormatValue(v, indent, maxDepth)
+        if type(v) ~= "table" then return tostring(v) end
+        maxDepth = maxDepth or 3
+        local n = 0
+        for _ in pairs(v) do n = n + 1 end
+        if n == 0 then return "{}" end
+        if maxDepth <= 0 then return "{" .. n .. " entries}" end
+        -- Small simple tables: inline
+        if n <= 5 then
+            local allSimple = true
+            for _, val in pairs(v) do
+                if type(val) == "table" then allSimple = false; break end
+            end
+            if allSimple then return formatValue(v) end
+        end
+        -- Multi-line dump
+        local parts = {}
+        local keys = {}
+        for k in pairs(v) do keys[#keys + 1] = k end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        local childIndent = indent .. "  "
+        for _, k in ipairs(keys) do
+            local val = v[k]
+            if type(val) == "table" then
+                parts[#parts + 1] = childIndent .. tostring(k) .. ": " .. deepFormatValue(val, childIndent, maxDepth - 1)
+            else
+                parts[#parts + 1] = childIndent .. tostring(k) .. "=" .. tostring(val)
+            end
+        end
+        return "\n" .. table.concat(parts, "\n")
+    end
+    local otherKeys = {}
+    for k in pairs(p) do
         if not skipTopLevel[k] then
-            otherParts[#otherParts + 1] = tostring(k) .. "=" .. formatValue(v)
+            otherKeys[#otherKeys + 1] = k
         end
     end
-    table.sort(otherParts)
-    for _, line in ipairs(otherParts) do
-        add(line)
+    table.sort(otherKeys, function(a, b) return tostring(a) < tostring(b) end)
+    for _, k in ipairs(otherKeys) do
+        local v = p[k]
+        if type(v) == "table" then
+            add(tostring(k) .. ": " .. deepFormatValue(v, "  ", 3))
+        else
+            add(tostring(k) .. "=" .. tostring(v))
+        end
     end
 
     return table.concat(lines, "\n")
@@ -688,17 +951,29 @@ StaticPopupDialogs["CDC_DIAGNOSTIC_IMPORT_CONFIRM"] = {
             CS.selectedButton = nil
             wipe(CS.selectedButtons)
             wipe(CS.selectedGroups)
+            -- Remap only the exporter's own entities to the importer's character.
+            -- Other characters' entities keep their original createdBy so they
+            -- appear in the browse-other-characters module instead of being
+            -- flattened into the current character.
             local charKey = db.keys.char
+            local exporterCharKey = decodedDiagnostic.meta and decodedDiagnostic.meta.charKey
             if db.profile.groups then
                 for _, group in pairs(db.profile.groups) do
-                    if not group.isGlobal then
+                    if not group.isGlobal and group.createdBy == exporterCharKey then
                         group.createdBy = charKey
+                    end
+                end
+            end
+            if db.profile.groupContainers then
+                for _, container in pairs(db.profile.groupContainers) do
+                    if not container.isGlobal and container.createdBy == exporterCharKey then
+                        container.createdBy = charKey
                     end
                 end
             end
             if db.profile.folders then
                 for _, folder in pairs(db.profile.folders) do
-                    if folder.section == "char" then
+                    if folder.section == "char" and folder.createdBy == exporterCharKey then
                         folder.createdBy = charKey
                     end
                 end
