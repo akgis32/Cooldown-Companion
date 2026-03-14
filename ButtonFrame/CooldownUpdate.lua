@@ -776,12 +776,13 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         button._chargeDurationObj = nil
         -- Cast-count pass-through for non-charge spells (e.g. Mana Tea stacks).
         -- GetSpellCastCount may return secret values; SetText accepts them.
-        -- Secret means non-zero (plain 0 = no stacks).
+        -- Gate on IsSpellUsable to suppress secret-wrapped 0 during combat.
         if buttonData._castCountCandidate and buttonData.type == "spell"
                 and button.style and button.style.showChargeText then
             button._chargeText = nil
             local castCount = C_Spell.GetSpellCastCount(cooldownSpellId or buttonData.id)
-            if issecretvalue(castCount) or (castCount and castCount > 0) then
+            local isUsable = C_Spell_IsSpellUsable(cooldownSpellId or buttonData.id)
+            if isUsable and (issecretvalue(castCount) or (castCount and castCount > 0)) then
                 button.count:SetText(castCount)
             else
                 button.count:SetText("")
