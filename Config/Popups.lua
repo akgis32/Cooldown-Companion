@@ -382,7 +382,10 @@ StaticPopupDialogs["CDC_EXPORT_PROFILE"] = {
     hasEditBox = true,
     OnShow = function(self)
         local db = CooldownCompanion.db
-        local serialized = AceSerializer:Serialize(db.profile)
+        local exportData = CopyTable(db.profile)
+        exportData._exporterCharKey = db.keys.char
+        exportData._characterInfo = db.global.characterInfo
+        local serialized = AceSerializer:Serialize(exportData)
         local compressed = LibDeflate:CompressDeflate(serialized)
         local encoded = LibDeflate:EncodeForPrint(compressed)
         self.EditBox:SetText(encoded)
@@ -398,93 +401,224 @@ StaticPopupDialogs["CDC_EXPORT_PROFILE"] = {
     preferredIndex = 3,
 }
 
+-- Decodes and validates a profile import string. Returns the decoded data
+-- table on success, or nil on failure (prints error to chat).
+local pendingProfileImport = nil
+local function DecodeProfileImport(popup)
+    local text = popup.EditBox:GetText()
+    if not text or text == "" then return nil end
+
+    if text:sub(1, 8) == "CDCdiag:" then
+        CooldownCompanion:Print("This is a bug report string, not a profile export.")
+        return nil
+    end
+    local success, data
+    -- Detect format: legacy AceSerialized strings start with "^1"
+    if text:sub(1, 2) == "^1" then
+        success, data = AceSerializer:Deserialize(text)
+    else
+        local decoded = LibDeflate:DecodeForPrint(text)
+        if decoded then
+            local decompressed = LibDeflate:DecompressDeflate(decoded)
+            if decompressed then
+                success, data = AceSerializer:Deserialize(decompressed)
+            end
+        end
+    end
+    if not (success and type(data) == "table") then
+        CooldownCompanion:Print("Import failed: invalid data.")
+        return nil
+    end
+    -- Reject group/folder exports pasted into the profile import dialog
+    if data.type then
+        CooldownCompanion:Print("This is a group/folder export. Use the group Import button.")
+        return nil
+    end
+    -- Structural validation: a CDC profile must have groups or globalStyle,
+    -- and critical fields must be the correct type if present
+    if not data.groups and not data.globalStyle then
+        CooldownCompanion:Print("Import failed: data does not appear to be a Cooldown Companion profile.")
+        return nil
+    end
+    if (data.groups and type(data.groups) ~= "table")
+       or (data.globalStyle and type(data.globalStyle) ~= "table") then
+        CooldownCompanion:Print("Import failed: profile data is malformed.")
+        return nil
+    end
+    return data
+end
+
+-- Applies a decoded profile import, remapping only the exporter's own
+-- entities to the current character. Other characters' entities keep
+-- their original createdBy so they appear in the browse-other-characters
+-- module instead of being flattened into the current character.
+local function ApplyProfileImport(data)
+    local db = CooldownCompanion.db
+    local exporterCharKey = data._exporterCharKey
+    local exportedCharInfo = data._characterInfo
+    data._exporterCharKey = nil
+    data._characterInfo = nil
+
+    -- True replace: wipe existing profile before applying import.
+    -- AceDB metatable survives wipe, supplying defaults for missing keys.
+    wipe(db.profile)
+    for k, v in pairs(data) do
+        db.profile[k] = v
+    end
+    ResetConfigSelection(true)
+
+    -- Remap only the exporter's own entities to the importer's character.
+    local charKey = db.keys.char
+    if db.profile.groups then
+        for _, group in pairs(db.profile.groups) do
+            if not group.isGlobal and (exporterCharKey == nil or group.createdBy == exporterCharKey) then
+                group.createdBy = charKey
+            end
+        end
+    end
+    if db.profile.groupContainers then
+        for _, container in pairs(db.profile.groupContainers) do
+            if not container.isGlobal and (exporterCharKey == nil or container.createdBy == exporterCharKey) then
+                container.createdBy = charKey
+            end
+        end
+    end
+    if db.profile.folders then
+        for _, folder in pairs(db.profile.folders) do
+            if folder.section == "char" and (exporterCharKey == nil or folder.createdBy == exporterCharKey) then
+                folder.createdBy = charKey
+            end
+        end
+    end
+
+    -- Rename foreign characters to class-based placeholders.
+    -- A "foreign" character is one whose createdBy doesn't match any
+    -- character in the importer's own characterInfo.
+    local importerCharInfo = db.global.characterInfo or {}
+    local foreignKeys = {}
+    local function markForeign(entity, checkGlobal)
+        local cb = entity.createdBy
+        if not cb or cb == charKey then return end
+        if checkGlobal and entity.isGlobal then return end
+        if not importerCharInfo[cb] and not foreignKeys[cb] then
+            foreignKeys[cb] = true
+        end
+    end
+    for _, group in pairs(db.profile.groups or {}) do markForeign(group, true) end
+    for _, container in pairs(db.profile.groupContainers or {}) do markForeign(container, true) end
+    for _, folder in pairs(db.profile.folders or {}) do
+        if folder.section == "char" then markForeign(folder, false) end
+    end
+
+    if next(foreignKeys) then
+        -- Count characters per class for numbering
+        local classCounts = {}
+        local classEntries = {}
+        for foreignKey in pairs(foreignKeys) do
+            local info = exportedCharInfo and exportedCharInfo[foreignKey]
+            local classID = info and info.classID
+            local className = classID and GetClassInfo(classID) or "Character"
+            classCounts[className] = (classCounts[className] or 0) + 1
+            classEntries[foreignKey] = { className = className, classFilename = info and info.classFilename, classID = classID }
+        end
+
+        -- Build rename map: old createdBy → placeholder name
+        local renames = {}
+        local classCounters = {}
+        for foreignKey in pairs(foreignKeys) do
+            local entry = classEntries[foreignKey]
+            local placeholder
+            if classCounts[entry.className] == 1 then
+                placeholder = entry.className
+            else
+                classCounters[entry.className] = (classCounters[entry.className] or 0) + 1
+                placeholder = entry.className .. " " .. classCounters[entry.className]
+            end
+            renames[foreignKey] = placeholder
+            -- Register in characterInfo so browse module shows correct class icon/color
+            if entry.classFilename and entry.classID then
+                importerCharInfo[placeholder] = { classFilename = entry.classFilename, classID = entry.classID }
+            end
+        end
+
+        -- Apply renames across all entity types
+        for _, group in pairs(db.profile.groups or {}) do
+            if group.createdBy and renames[group.createdBy] then
+                group.createdBy = renames[group.createdBy]
+            end
+        end
+        for _, container in pairs(db.profile.groupContainers or {}) do
+            if container.createdBy and renames[container.createdBy] then
+                container.createdBy = renames[container.createdBy]
+            end
+        end
+        for _, folder in pairs(db.profile.folders or {}) do
+            if folder.createdBy and renames[folder.createdBy] then
+                folder.createdBy = renames[folder.createdBy]
+            end
+        end
+    end
+
+    -- Detect legacy (pre-container) profile before sentinels are cleared.
+    local isLegacyProfile = not db.profile.groupContainers or not next(db.profile.groupContainers)
+
+    CooldownCompanion:ClearMigrationSentinels()
+    CooldownCompanion:RunAllMigrations()
+
+    -- Legacy profiles have folder specs on folders, not containers.
+    -- MigrateGroupsToContainers wraps groups but the folder-spec cascade
+    -- is skipped (ClearMigrationSentinels forces the sentinel to true).
+    -- Cascade manually now that migration has created the containers.
+    if isLegacyProfile and db.profile.folders then
+        for folderId, folder in pairs(db.profile.folders) do
+            if folder.specs and next(folder.specs) then
+                CooldownCompanion:ApplyFolderSpecFilterToChildren(folderId)
+            end
+        end
+    end
+
+    CooldownCompanion:RefreshConfigPanel()
+    CooldownCompanion:RefreshAllGroups()
+end
+
+StaticPopupDialogs["CDC_CONFIRM_PROFILE_IMPORT"] = {
+    text = "This will overwrite your current profile. Continue?",
+    button1 = "Import",
+    button2 = "Cancel",
+    OnAccept = function()
+        if pendingProfileImport then
+            ApplyProfileImport(pendingProfileImport)
+            pendingProfileImport = nil
+            CooldownCompanion:Print("Profile imported.")
+        end
+    end,
+    OnCancel = function()
+        pendingProfileImport = nil
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
 StaticPopupDialogs["CDC_IMPORT_PROFILE"] = {
     text = "Paste import string:",
     button1 = "Import",
     button2 = "Cancel",
     hasEditBox = true,
     OnAccept = function(self)
-        local text = self.EditBox:GetText()
-        if text and text ~= "" then
-            if text:sub(1, 8) == "CDCdiag:" then
-                CooldownCompanion:Print("This is a bug report string, not a profile export.")
-                return
-            end
-            local success, data
-            -- Detect format: legacy AceSerialized strings start with "^1"
-            if text:sub(1, 2) == "^1" then
-                success, data = AceSerializer:Deserialize(text)
-            else
-                local decoded = LibDeflate:DecodeForPrint(text)
-                if decoded then
-                    local decompressed = LibDeflate:DecompressDeflate(decoded)
-                    if decompressed then
-                        success, data = AceSerializer:Deserialize(decompressed)
-                    end
-                end
-            end
-            if success and type(data) == "table" then
-                -- Reject group/folder exports pasted into the profile import dialog
-                if data.type then
-                    CooldownCompanion:Print("This is a group/folder export. Use the group Import button.")
-                    return
-                end
-                -- Structural validation: a CDC profile must have groups or globalStyle,
-                -- and critical fields must be the correct type if present
-                if not data.groups and not data.globalStyle then
-                    CooldownCompanion:Print("Import failed: data does not appear to be a Cooldown Companion profile.")
-                    return
-                end
-                if (data.groups and type(data.groups) ~= "table")
-                   or (data.globalStyle and type(data.globalStyle) ~= "table") then
-                    CooldownCompanion:Print("Import failed: profile data is malformed.")
-                    return
-                end
-                local db = CooldownCompanion.db
-                -- True replace: wipe existing profile before applying import.
-                -- AceDB metatable survives wipe, supplying defaults for missing keys.
-                wipe(db.profile)
-                for k, v in pairs(data) do
-                    db.profile[k] = v
-                end
-                ResetConfigSelection(true)
-                if db.profile.groups then
-                    local charKey = db.keys.char
-                    for _, group in pairs(db.profile.groups) do
-                        if not group.isGlobal then
-                            group.createdBy = charKey
-                        end
-                    end
-                end
-                if db.profile.groupContainers then
-                    local charKey = db.keys.char
-                    for _, container in pairs(db.profile.groupContainers) do
-                        if not container.isGlobal then
-                            container.createdBy = charKey
-                        end
-                    end
-                end
-                if db.profile.folders then
-                    local charKey = db.keys.char
-                    for _, folder in pairs(db.profile.folders) do
-                        if folder.section == "char" then
-                            folder.createdBy = charKey
-                        end
-                    end
-                end
-                CooldownCompanion:ClearMigrationSentinels()
-                CooldownCompanion:RunAllMigrations()
-                CooldownCompanion:RefreshConfigPanel()
-                CooldownCompanion:RefreshAllGroups()
-            else
-                CooldownCompanion:Print("Import failed: invalid data.")
-            end
-        end
+        local data = DecodeProfileImport(self)
+        if not data then return true end -- suppress auto-hide on failure
+        pendingProfileImport = data
+        ShowPopupOverConfig("CDC_CONFIRM_PROFILE_IMPORT")
     end,
     EditBoxOnEnterPressed = function(self)
         local parent = self:GetParent()
-        StaticPopupDialogs["CDC_IMPORT_PROFILE"].OnAccept(parent)
+        local data = DecodeProfileImport(parent)
+        if not data then return end
+        pendingProfileImport = data
         parent:Hide()
+        ShowPopupOverConfig("CDC_CONFIRM_PROFILE_IMPORT")
     end,
     OnShow = function(self)
         self.EditBox:SetFocus()
@@ -729,6 +863,7 @@ local function BuildGroupExportData(group)
     data.order = nil
     data.folderId = nil
     data.isGlobal = nil
+    data.parentContainerId = nil
     return data
 end
 
@@ -738,7 +873,17 @@ local function EncodeExportData(payload)
     return LibDeflate:EncodeForPrint(compressed)
 end
 
+local function BuildContainerExportData(container)
+    local data = CopyTable(container)
+    data.createdBy = nil
+    data.order = nil
+    data.folderId = nil
+    data.isGlobal = nil
+    return data
+end
+
 ST._BuildGroupExportData = BuildGroupExportData
+ST._BuildContainerExportData = BuildContainerExportData
 ST._EncodeExportData = EncodeExportData
 
 local function ImportGroupData(text)
@@ -772,6 +917,7 @@ local function ImportGroupData(text)
 
     local db = CooldownCompanion.db.profile
     local charKey = CooldownCompanion.db.keys.char
+    local v1FolderImportId  -- set by v1 folder branch for post-migration spec cascade
 
     if data.type == "group" and data.group then
         local groupId = db.nextGroupId
@@ -801,7 +947,62 @@ local function ImportGroupData(text)
         end
         CooldownCompanion:Print("Imported " .. count .. " groups.")
 
-    elseif data.type == "folder" and data.folder and data.groups then
+    elseif data.type == "containers" and data.containers then
+        -- Import multiple containers with their panels
+        local containerCount = 0
+        for _, entry in ipairs(data.containers) do
+            local containerId = db.nextContainerId
+            db.nextContainerId = containerId + 1
+            local container = CopyTable(entry.container)
+            container.createdBy = charKey
+            container.isGlobal = false
+            container.order = containerId
+            container.folderId = nil
+            db.groupContainers[containerId] = container
+            CooldownCompanion:CreateContainerFrame(containerId)
+
+            local panels = entry.panels or {}
+            for panelIndex, srcPanel in ipairs(panels) do
+                local groupId = db.nextGroupId
+                db.nextGroupId = groupId + 1
+                local panel = CopyTable(srcPanel)
+                panel.parentContainerId = containerId
+                panel.order = panelIndex
+                panel.anchor = {
+                    point = "CENTER",
+                    relativeTo = "CooldownCompanionContainer" .. containerId,
+                    relativePoint = "CENTER",
+                    x = 0,
+                    y = 0,
+                }
+                db.groups[groupId] = panel
+                CooldownCompanion:CreateGroupFrame(groupId)
+            end
+            -- Ensure at least one panel exists
+            if #panels == 0 then
+                local groupId = db.nextGroupId
+                db.nextGroupId = groupId + 1
+                db.groups[groupId] = {
+                    name = "Panel 1",
+                    order = 1,
+                    parentContainerId = containerId,
+                    displayMode = "icons",
+                    buttons = {},
+                    anchor = {
+                        point = "CENTER",
+                        relativeTo = "CooldownCompanionContainer" .. containerId,
+                        relativePoint = "CENTER",
+                        x = 0,
+                        y = 0,
+                    },
+                }
+                CooldownCompanion:CreateGroupFrame(groupId)
+            end
+            containerCount = containerCount + 1
+        end
+        CooldownCompanion:Print("Imported " .. containerCount .. " groups.")
+
+    elseif data.type == "folder" and data.folder then
         local folderId = db.nextFolderId
         db.nextFolderId = folderId + 1
         local importedManualIcon = data.folder.manualIcon
@@ -847,20 +1048,78 @@ local function ImportGroupData(text)
             heroTalents = importedHeroTalents,
         }
         local count = 0
-        for _, srcGroup in ipairs(data.groups) do
-            local groupId = db.nextGroupId
-            db.nextGroupId = groupId + 1
-            local group = CopyTable(srcGroup)
-            group.createdBy = charKey
-            group.isGlobal = false
-            group.order = groupId
-            group.folderId = folderId
-            db.groups[groupId] = group
-            CooldownCompanion:CreateGroupFrame(groupId)
-            count = count + 1
-        end
-        if importedSpecs then
-            CooldownCompanion:ApplyFolderSpecFilterToChildren(folderId)
+        if data.containers then
+            -- v2 format: containers with panels (preserves structure)
+            -- Containers keep their own exported spec filters; folder specs
+            -- are preserved separately as the cascade source.
+            for _, entry in ipairs(data.containers) do
+                local containerId = db.nextContainerId
+                db.nextContainerId = containerId + 1
+                local container = CopyTable(entry.container)
+                container.createdBy = charKey
+                container.isGlobal = false
+                container.order = containerId
+                container.folderId = folderId
+                db.groupContainers[containerId] = container
+                CooldownCompanion:CreateContainerFrame(containerId)
+
+                local panels = entry.panels or {}
+                for panelIndex, srcPanel in ipairs(panels) do
+                    local groupId = db.nextGroupId
+                    db.nextGroupId = groupId + 1
+                    local panel = CopyTable(srcPanel)
+                    panel.parentContainerId = containerId
+                    panel.order = panelIndex
+                    panel.anchor = {
+                        point = "CENTER",
+                        relativeTo = "CooldownCompanionContainer" .. containerId,
+                        relativePoint = "CENTER",
+                        x = 0,
+                        y = 0,
+                    }
+                    db.groups[groupId] = panel
+                    CooldownCompanion:CreateGroupFrame(groupId)
+                    count = count + 1
+                end
+                -- Ensure at least one panel exists per container
+                if #panels == 0 then
+                    local groupId = db.nextGroupId
+                    db.nextGroupId = groupId + 1
+                    db.groups[groupId] = {
+                        name = "Panel 1",
+                        order = 1,
+                        parentContainerId = containerId,
+                        displayMode = "icons",
+                        buttons = {},
+                        anchor = {
+                            point = "CENTER",
+                            relativeTo = "CooldownCompanionContainer" .. containerId,
+                            relativePoint = "CENTER",
+                            x = 0,
+                            y = 0,
+                        },
+                    }
+                    CooldownCompanion:CreateGroupFrame(groupId)
+                    count = count + 1
+                end
+            end
+
+        elseif data.groups then
+            -- v1 format: flat groups (migration wraps each in a container).
+            -- Flag for post-migration spec cascade (see below).
+            v1FolderImportId = folderId
+            for _, srcGroup in ipairs(data.groups) do
+                local groupId = db.nextGroupId
+                db.nextGroupId = groupId + 1
+                local group = CopyTable(srcGroup)
+                group.createdBy = charKey
+                group.isGlobal = false
+                group.order = groupId
+                group.folderId = folderId
+                db.groups[groupId] = group
+                CooldownCompanion:CreateGroupFrame(groupId)
+                count = count + 1
+            end
         end
         CooldownCompanion:Print("Imported folder: " .. (data.folder.name or "Unnamed") .. " (" .. count .. " groups)")
 
@@ -877,11 +1136,12 @@ local function ImportGroupData(text)
         CooldownCompanion:CreateContainerFrame(containerId)
 
         local count = 0
-        for _, srcPanel in ipairs(data.panels) do
+        for panelIndex, srcPanel in ipairs(data.panels) do
             local groupId = db.nextGroupId
             db.nextGroupId = groupId + 1
             local panel = CopyTable(srcPanel)
             panel.parentContainerId = containerId
+            panel.order = panelIndex
             panel.anchor = {
                 point = "CENTER",
                 relativeTo = "CooldownCompanionContainer" .. containerId,
@@ -912,6 +1172,7 @@ local function ImportGroupData(text)
                 },
             }
             CooldownCompanion:CreateGroupFrame(groupId)
+            count = 1
         end
         CooldownCompanion:Print("Imported group: " .. (container.name or "Unnamed") .. " (" .. count .. " panels)")
 
@@ -922,6 +1183,16 @@ local function ImportGroupData(text)
 
     CooldownCompanion:ClearMigrationSentinels()
     CooldownCompanion:RunAllMigrations()
+
+    -- v1 folder imports rely on MigrateGroupsToContainers to wrap flat groups
+    -- into containers, but ClearMigrationSentinels forces
+    -- _migratedFolderSpecsToContainers = true (to protect existing data),
+    -- so the one-time folder→container spec cascade is skipped.
+    -- Cascade manually now that migration has created the containers.
+    if v1FolderImportId then
+        CooldownCompanion:ApplyFolderSpecFilterToChildren(v1FolderImportId)
+    end
+
     CooldownCompanion:RefreshConfigPanel()
     CooldownCompanion:RefreshAllGroups()
     return true

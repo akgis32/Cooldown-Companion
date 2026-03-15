@@ -72,6 +72,9 @@ function CooldownCompanion:ClearMigrationSentinels()
     profile._migratedStrataOrder6 = nil
     profile._migratedCustomAuraSlots5 = nil
     profile._migratedCustomAuraSlots5v2 = nil
+    -- Folder-spec-to-container clearing is a one-time historical migration
+    -- that must never re-run on imported data — always mark as complete.
+    profile._migratedFolderSpecsToContainers = true
 end
 
 function CooldownCompanion:MigrateGroupOwnership()
@@ -1361,7 +1364,13 @@ function CooldownCompanion:MigrateGroupsToContainers()
         profile._migratedPanelAnchorCenter = true
     end
 
-    if profile._migratedContainersV1 then return end
+    if profile._migratedContainersV1 then
+        -- Backfill sentinel for profiles migrated before this guard existed
+        if not profile._migratedFolderSpecsToContainers then
+            profile._migratedFolderSpecsToContainers = true
+        end
+        return
+    end
 
     -- Ensure tables exist (may be first load after schema addition)
     if not profile.groupContainers then
@@ -1457,24 +1466,30 @@ function CooldownCompanion:MigrateGroupsToContainers()
         end -- close else (group without parentContainerId)
     end
 
-    -- Migrate folder spec/hero cascading to containers
-    -- (Folders no longer carry spec/hero filters — containers own them now)
-    if profile.folders then
-        for folderId, folder in pairs(profile.folders) do
-            if folder.specs and next(folder.specs) then
-                -- Copy folder specs to each child container that doesn't already have them
-                for containerId, container in pairs(profile.groupContainers) do
-                    if container.folderId == folderId and not container.specs then
-                        container.specs = CopyTable(folder.specs)
-                        if folder.heroTalents and next(folder.heroTalents) then
-                            container.heroTalents = CopyTable(folder.heroTalents)
+    -- One-time migration: move folder spec/hero filters to containers.
+    -- Guarded by its own sentinel (_migratedFolderSpecsToContainers) that
+    -- is NOT cleared by ClearMigrationSentinels, because folder specs are
+    -- a normal runtime feature post-migration — they should not be stripped
+    -- every time migrations re-run after an import.
+    if not profile._migratedFolderSpecsToContainers then
+        if profile.folders then
+            for folderId, folder in pairs(profile.folders) do
+                if folder.specs and next(folder.specs) then
+                    -- Copy folder specs to each child container that doesn't already have them
+                    for containerId, container in pairs(profile.groupContainers) do
+                        if container.folderId == folderId and not container.specs then
+                            container.specs = CopyTable(folder.specs)
+                            if folder.heroTalents and next(folder.heroTalents) then
+                                container.heroTalents = CopyTable(folder.heroTalents)
+                            end
                         end
                     end
+                    folder.specs = nil
+                    folder.heroTalents = nil
                 end
-                folder.specs = nil
-                folder.heroTalents = nil
             end
         end
+        profile._migratedFolderSpecsToContainers = true
     end
 
     profile._migratedContainersV1 = true
