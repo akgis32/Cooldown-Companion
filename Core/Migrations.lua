@@ -71,6 +71,7 @@ function CooldownCompanion:ClearMigrationSentinels()
     profile._migratedContainerHeroTalentStamps = nil
     profile._migratedStrataOrder6 = nil
     profile._migratedCustomAuraSlots5 = nil
+    profile._migratedCustomAuraSlots5v2 = nil
 end
 
 function CooldownCompanion:MigrateGroupOwnership()
@@ -1632,34 +1633,50 @@ function CooldownCompanion:MigrateStrataOrderExpansion()
     profile._migratedStrataOrder6 = true
 end
 
-function CooldownCompanion:MigrateCustomAuraBarSlots5()
-    local profile = self.db.profile
-    if profile._migratedCustomAuraSlots5 then return end
+local function BackfillCustomAuraBarSlots5(rb)
+    if type(rb) ~= "table" then return end
 
-    local rb = profile.resourceBars
-    if rb then
-        if not rb.customAuraBarSlots then
-            rb.customAuraBarSlots = {}
+    if not rb.customAuraBarSlots then
+        rb.customAuraBarSlots = {}
+    end
+    for i = 4, 5 do
+        if not rb.customAuraBarSlots[i] then
+            rb.customAuraBarSlots[i] = { position = "below", order = 1000 + i }
         end
-        for i = 4, 5 do
-            if not rb.customAuraBarSlots[i] then
-                rb.customAuraBarSlots[i] = { position = "below", order = 1000 + i }
-            end
-        end
+    end
 
-        if rb.customAuraBars then
-            for _, specBars in pairs(rb.customAuraBars) do
-                if type(specBars) == "table" then
-                    for i = 4, 5 do
-                        if not specBars[i] then
-                            specBars[i] = { enabled = false }
-                        end
+    if rb.customAuraBars then
+        for _, specBars in pairs(rb.customAuraBars) do
+            if type(specBars) == "table" then
+                for i = 4, 5 do
+                    if not specBars[i] then
+                        specBars[i] = { enabled = false }
                     end
                 end
             end
         end
     end
+end
 
-    profile._migratedCustomAuraSlots5 = true
+function CooldownCompanion:MigrateCustomAuraBarSlots5()
+    local profile = self.db.profile
+    if profile._migratedCustomAuraSlots5v2 then return end
+
+    -- Clean up stale v1 sentinel
+    profile._migratedCustomAuraSlots5 = nil
+
+    -- Legacy / seed resource bar settings
+    BackfillCustomAuraBarSlots5(rawget(profile, "resourceBars"))
+    BackfillCustomAuraBarSlots5(rawget(profile, "legacyResourceBarsSeed"))
+
+    -- Character-scoped buckets
+    local store = rawget(profile, "resourceBarsByChar")
+    if type(store) == "table" then
+        for _, charSettings in pairs(store) do
+            BackfillCustomAuraBarSlots5(charSettings)
+        end
+    end
+
+    profile._migratedCustomAuraSlots5v2 = true
 end
 
