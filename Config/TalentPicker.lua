@@ -915,6 +915,7 @@ local function ShowTalentPicker(configFrame, initialConditions, group)
     -- Hide col1 normal content
     CS.col1Scroll.frame:Hide()
     CS.col1ButtonBar:Hide()
+    if col1._barsPanelTabGroup then col1._barsPanelTabGroup.frame:Hide() end
 
     -- Hide col3 normal content (all possible states)
     if col3.bsTabGroup then col3.bsTabGroup.frame:Hide() end
