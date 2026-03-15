@@ -476,15 +476,29 @@ function CooldownCompanion:IsFormFilterAllowed(group)
     if not formFilter or not next(formFilter) then return true end
     local currentForm = self._currentShapeshiftForm
     if currentForm == nil then return true end
+
+    -- Resolve current form to spellID (0 = caster / no form)
+    local currentSpellID
     if currentForm == 0 then
-        return formFilter[0] == true
+        currentSpellID = 0
+    else
+        local _, _, _, spellID = GetShapeshiftFormInfo(currentForm)
+        if not spellID then return true end
+        currentSpellID = (spellID == TREANT_FORM_SPELL_ID) and 0 or spellID
     end
-    local _, _, _, spellID = GetShapeshiftFormInfo(currentForm)
-    if not spellID then return true end
-    if spellID == TREANT_FORM_SPELL_ID then
-        return formFilter[0] == true
+
+    -- Explicit entry for current form takes priority
+    local filterValue = formFilter[currentSpellID]
+    if filterValue == true then return true end
+    if filterValue == false then return false end
+
+    -- Current form is agnostic (nil). Behavior depends on filter composition:
+    --   Any "in" (true) entries exist → whitelist mode → agnostic forms hide
+    --   Only "out" (false) entries    → blacklist mode → agnostic forms show
+    for _, v in pairs(formFilter) do
+        if v == true then return false end
     end
-    return formFilter[spellID] == true
+    return true
 end
 
 function CooldownCompanion:IsGroupAvailableForAnchoring(groupId)
