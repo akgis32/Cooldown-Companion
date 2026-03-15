@@ -1504,9 +1504,10 @@ local function BuildLoadConditionsTab(container)
     end
     end -- not specCollapsed
 
-    -- Form / Stance Filter section (only for classes with meaningful forms)
+    -- Form / Stance Filter section (classes with meaningful forms, or orphaned filter data)
     local numForms = GetNumShapeshiftForms()
-    if numForms > 0 and CooldownCompanion._playerClassID ~= 2 then -- skip Paladins
+    local hasExistingFormFilter = group.formFilter and next(group.formFilter)
+    if (numForms > 0 and CooldownCompanion._playerClassID ~= 2) or hasExistingFormFilter then -- skip Paladins unless orphaned data
     local formHeading = AceGUI:Create("Heading")
     formHeading:SetText("Form / Stance Filter")
     ColorHeading(formHeading)
@@ -1525,7 +1526,7 @@ local function BuildLoadConditionsTab(container)
     formDesc:SetFullWidth(true)
     container:AddChild(formDesc)
 
-    -- Caster Form checkbox (form index 0, no spellID) — skip for Warriors/Rogues
+    -- Caster Form checkbox (form index 0, no spellID) — Druids only
     local classID = CooldownCompanion._playerClassID
     if classID == 11 then -- Druid only
     local casterCb = AceGUI:Create("CheckBox")
@@ -1595,7 +1596,7 @@ local function BuildLoadConditionsTab(container)
         container:AddChild(clearBtn)
     end
     end -- not formCollapsed
-    end -- numForms > 0
+    end -- form filter section
 end
 
 
