@@ -3330,7 +3330,8 @@ function CooldownCompanion:ApplyResourceBars()
     local customBars = GetSpecCustomAuraBars(settings)
     for i = 1, MAX_CUSTOM_AURA_BARS do
         local cab = customBars[i]
-        if cab and cab.enabled and cab.spellID then
+        if cab and cab.enabled and cab.spellID
+            and CooldownCompanion:IsTalentConditionMet(cab) then
             table.insert(filtered, CUSTOM_AURA_BAR_BASE + i - 1)
         end
     end

@@ -3392,6 +3392,144 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                     CooldownCompanion:ApplyResourceBars()
                 end)
                 container:AddChild(hideCb)
+
+                -- ---- Talent Conditions section ----
+                local talentHeading = AceGUI:Create("Heading")
+                talentHeading:SetText("Talent Conditions")
+                ColorHeading(talentHeading)
+                talentHeading:SetFullWidth(true)
+                container:AddChild(talentHeading)
+
+                local talentKey = "cab_talent_" .. capturedIdx
+                local talentCollapsed = resourceBarCollapsedSections[talentKey]
+
+                local talentCollapseBtn = AttachCollapseButton(talentHeading, talentCollapsed, function()
+                    resourceBarCollapsedSections[talentKey] = not resourceBarCollapsedSections[talentKey]
+                    CooldownCompanion:RefreshConfigPanel()
+                end)
+
+                local talentInfoBtn = CreateInfoButton(talentHeading.frame, talentCollapseBtn, "LEFT", "RIGHT", 2, 0, {
+                    "Talent Conditions",
+                    {"Show or hide this custom aura bar based on which talents you have selected. If you add multiple conditions, all of them must pass.", 1, 1, 1, true},
+                }, tabInfoButtons)
+                talentHeading.right:ClearAllPoints()
+                talentHeading.right:SetPoint("RIGHT", talentHeading.frame, "RIGHT", -3, 0)
+                talentHeading.right:SetPoint("LEFT", talentInfoBtn, "RIGHT", 4, 0)
+
+                local conditions = cab.talentConditions
+                local condCount = conditions and #conditions or 0
+
+                if talentCollapsed then
+                    local summaryLabel = AceGUI:Create("Label")
+                    if condCount > 0 then
+                        local firstCond = conditions[1]
+                        local displayIcon = firstCond.spellID and C_Spell.GetSpellTexture(firstCond.spellID)
+                        if displayIcon then
+                            summaryLabel:SetImage(displayIcon, 0.08, 0.92, 0.08, 0.92)
+                            summaryLabel:SetImageSize(16, 16)
+                        end
+                        if condCount == 1 then
+                            local showText = (firstCond.show == "not_taken") and " (not taken)" or " (taken)"
+                            summaryLabel:SetText(ST._GetConditionDisplayName(firstCond) .. showText)
+                        else
+                            summaryLabel:SetText(condCount .. " conditions" .. ST._GetConditionListContextSuffix(conditions))
+                        end
+                    else
+                        summaryLabel:SetText("|cff888888None|r")
+                    end
+                    summaryLabel:SetFullWidth(true)
+                    container:AddChild(summaryLabel)
+                end
+
+                if not talentCollapsed then
+
+                -- Condition list display
+                if condCount > 0 then
+                    local cache = CooldownCompanion._talentNodeCache
+                    local currentSpecID = CooldownCompanion._currentSpecId
+                    local currentHeroSubTreeID = CooldownCompanion._currentHeroSpecId
+                    for _, cond in ipairs(conditions) do
+                        local condLabel = AceGUI:Create("Label")
+                        local displayIcon = cond.spellID and C_Spell.GetSpellTexture(cond.spellID)
+                        if displayIcon then
+                            condLabel:SetImage(displayIcon, 0.08, 0.92, 0.08, 0.92)
+                            condLabel:SetImageSize(16, 16)
+                        end
+                        local nameText = ST._GetConditionDisplayName(cond)
+                        local showText
+                        if cond.show == "not_taken" then
+                            showText = " |cffff4d4d(not taken)|r"
+                        else
+                            showText = " |cff33dd33(taken)|r"
+                        end
+                        condLabel:SetText("|cffFFFFFF" .. nameText .. "|r" .. showText)
+                        condLabel:SetFullWidth(true)
+                        container:AddChild(condLabel)
+
+                        -- Per-condition stale node warning
+                        local matchesCurrentScope = (not cond.specID or cond.specID == currentSpecID)
+                            and (not cond.heroSubTreeID or cond.heroSubTreeID == currentHeroSubTreeID)
+                        if matchesCurrentScope and cache and not cache[cond.nodeID] then
+                            local warnLabel = AceGUI:Create("Label")
+                            warnLabel:SetText("|cffff8800  This talent is not in your current active tree, so it behaves as not taken right now.|r")
+                            warnLabel:SetFullWidth(true)
+                            container:AddChild(warnLabel)
+                        end
+                    end
+                else
+                    local emptyLabel = AceGUI:Create("Label")
+                    emptyLabel:SetText("|cff888888No talent conditions set.|r")
+                    emptyLabel:SetFullWidth(true)
+                    container:AddChild(emptyLabel)
+                end
+
+                -- Button row: side-by-side Pick + Clear using Flow layout
+                local talentBtnRow = AceGUI:Create("SimpleGroup")
+                talentBtnRow:SetFullWidth(true)
+                talentBtnRow:SetLayout("Flow")
+
+                local pickBtn = AceGUI:Create("Button")
+                pickBtn:SetText(condCount > 0 and "Edit" or "Pick Talents")
+                pickBtn:SetRelativeWidth(condCount > 0 and 0.5 or 1)
+                pickBtn:SetCallback("OnClick", function()
+                    local initialConditions = cab.talentConditions
+                    -- Restrict picker to current spec (aura bars are per-spec)
+                    local specID = CooldownCompanion._currentSpecId
+                    local specHint = specID and { specs = { [specID] = true } } or nil
+                    CooldownCompanion:OpenTalentPicker(function(results)
+                        if results then
+                            local normalized, changed = CooldownCompanion:NormalizeTalentConditions(results)
+                            if changed then
+                                results = normalized
+                            end
+                            customBars[cabIdx].talentConditions = results
+                        else
+                            customBars[cabIdx].talentConditions = nil
+                        end
+                        CooldownCompanion:ApplyResourceBars()
+                        CooldownCompanion:UpdateAnchorStacking()
+                        CooldownCompanion:RefreshConfigPanel()
+                    end, initialConditions, specHint)
+                end)
+                talentBtnRow:AddChild(pickBtn)
+
+                -- Clear button (only when conditions exist)
+                if condCount > 0 then
+                    local clearBtn = AceGUI:Create("Button")
+                    clearBtn:SetText("Clear")
+                    clearBtn:SetRelativeWidth(0.5)
+                    clearBtn:SetCallback("OnClick", function()
+                        customBars[cabIdx].talentConditions = nil
+                        CooldownCompanion:ApplyResourceBars()
+                        CooldownCompanion:UpdateAnchorStacking()
+                        CooldownCompanion:RefreshConfigPanel()
+                    end)
+                    talentBtnRow:AddChild(clearBtn)
+                end
+
+                container:AddChild(talentBtnRow)
+
+                end -- not talentCollapsed
             end
     end -- if cab.enabled and settings subtab selected
 

@@ -193,6 +193,119 @@ local function RemapBatchValue(widget, val)
 end
 
 ------------------------------------------------------------------------
+-- Talent condition display helpers (shared with ResourceBarPanels)
+------------------------------------------------------------------------
+
+local function ResolveConditionClassName(cond)
+    if not cond then
+        return nil
+    end
+
+    if cond.className and cond.className ~= "" then
+        return cond.className
+    end
+
+    if cond.classID then
+        local name = GetClassInfo(cond.classID)
+        return name or ("Class " .. cond.classID)
+    end
+
+    return nil
+end
+
+local function ResolveConditionSpecName(cond)
+    if not cond then
+        return nil
+    end
+
+    if cond.specName and cond.specName ~= "" then
+        return cond.specName
+    end
+
+    if cond.specID then
+        local _, name = GetSpecializationInfoForSpecID(cond.specID)
+        return name or ("Spec " .. cond.specID)
+    end
+
+    return nil
+end
+
+local function ResolveConditionHeroName(cond)
+    if not cond then
+        return nil
+    end
+
+    if cond.heroName and cond.heroName ~= "" then
+        return cond.heroName
+    end
+
+    if cond.heroSubTreeID then
+        return "Hero " .. cond.heroSubTreeID
+    end
+
+    return nil
+end
+
+local function GetConditionContextSuffix(cond)
+    local parts = {}
+    local className = ResolveConditionClassName(cond)
+    local specName = ResolveConditionSpecName(cond)
+    local heroName = ResolveConditionHeroName(cond)
+
+    if className then
+        parts[#parts + 1] = className
+    end
+    if specName then
+        parts[#parts + 1] = specName
+    end
+    if heroName then
+        parts[#parts + 1] = heroName
+    end
+
+    if #parts == 0 then
+        return ""
+    end
+
+    return " [" .. table.concat(parts, ", ") .. "]"
+end
+
+local function GetConditionListContextSuffix(list)
+    local scope = {}
+
+    for _, cond in ipairs(list or {}) do
+        if not scope.className then
+            scope.className = ResolveConditionClassName(cond)
+        end
+        if not scope.specName then
+            scope.specName = ResolveConditionSpecName(cond)
+        end
+        if not scope.heroName then
+            scope.heroName = ResolveConditionHeroName(cond)
+        end
+    end
+
+    if not scope.className and not scope.specName and not scope.heroName then
+        return ""
+    end
+
+    local parts = {}
+    if scope.className then
+        parts[#parts + 1] = scope.className
+    end
+    if scope.specName then
+        parts[#parts + 1] = scope.specName
+    end
+    if scope.heroName then
+        parts[#parts + 1] = scope.heroName
+    end
+    return " [" .. table.concat(parts, ", ") .. "]"
+end
+
+local function GetConditionDisplayName(cond)
+    return (cond.name or "Unknown Talent") .. GetConditionContextSuffix(cond)
+end
+
+------------------------------------------------------------------------
 -- PER-BUTTON VISIBILITY SETTINGS
 ------------------------------------------------------------------------
 local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchContext)
@@ -845,114 +958,6 @@ local function BuildVisibilitySettings(scroll, buttonData, infoButtons, batchCon
     ------------------------------------------------------------------------
     -- TALENT CONDITIONS (independent section, not nested under Visibility Rules)
     ------------------------------------------------------------------------
-    local function ResolveConditionClassName(cond)
-        if not cond then
-            return nil
-        end
-
-        if cond.className and cond.className ~= "" then
-            return cond.className
-        end
-
-        if cond.classID then
-            local name = GetClassInfo(cond.classID)
-            return name or ("Class " .. cond.classID)
-        end
-
-        return nil
-    end
-
-    local function ResolveConditionSpecName(cond)
-        if not cond then
-            return nil
-        end
-
-        if cond.specName and cond.specName ~= "" then
-            return cond.specName
-        end
-
-        if cond.specID then
-            local _, name = GetSpecializationInfoForSpecID(cond.specID)
-            return name or ("Spec " .. cond.specID)
-        end
-
-        return nil
-    end
-
-    local function ResolveConditionHeroName(cond)
-        if not cond then
-            return nil
-        end
-
-        if cond.heroName and cond.heroName ~= "" then
-            return cond.heroName
-        end
-
-        if cond.heroSubTreeID then
-            return "Hero " .. cond.heroSubTreeID
-        end
-
-        return nil
-    end
-
-    local function GetConditionContextSuffix(cond)
-        local parts = {}
-        local className = ResolveConditionClassName(cond)
-        local specName = ResolveConditionSpecName(cond)
-        local heroName = ResolveConditionHeroName(cond)
-
-        if className then
-            parts[#parts + 1] = className
-        end
-        if specName then
-            parts[#parts + 1] = specName
-        end
-        if heroName then
-            parts[#parts + 1] = heroName
-        end
-
-        if #parts == 0 then
-            return ""
-        end
-
-        return " [" .. table.concat(parts, ", ") .. "]"
-    end
-
-    local function GetConditionListContextSuffix(list)
-        local scope = {}
-
-        for _, cond in ipairs(list or {}) do
-            if not scope.className then
-                scope.className = ResolveConditionClassName(cond)
-            end
-            if not scope.specName then
-                scope.specName = ResolveConditionSpecName(cond)
-            end
-            if not scope.heroName then
-                scope.heroName = ResolveConditionHeroName(cond)
-            end
-        end
-
-        if not scope.className and not scope.specName and not scope.heroName then
-            return ""
-        end
-
-        local parts = {}
-        if scope.className then
-            parts[#parts + 1] = scope.className
-        end
-        if scope.specName then
-            parts[#parts + 1] = scope.specName
-        end
-        if scope.heroName then
-            parts[#parts + 1] = scope.heroName
-        end
-        return " [" .. table.concat(parts, ", ") .. "]"
-    end
-
-    local function GetConditionDisplayName(cond)
-        return (cond.name or "Unknown Talent") .. GetConditionContextSuffix(cond)
-    end
 
     local talentHeading = AceGUI:Create("Heading")
     talentHeading:SetText("Talent Conditions")
@@ -1409,3 +1414,5 @@ end
 ------------------------------------------------------------------------
 ST._BuildVisibilitySettings = BuildVisibilitySettings
 ST._BuildLoadConditionsTab = BuildLoadConditionsTab
+ST._GetConditionDisplayName = GetConditionDisplayName
+ST._GetConditionListContextSuffix = GetConditionListContextSuffix
