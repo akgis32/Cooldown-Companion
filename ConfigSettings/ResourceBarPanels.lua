@@ -3493,6 +3493,9 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                 pickBtn:SetRelativeWidth(condCount > 0 and 0.5 or 1)
                 pickBtn:SetCallback("OnClick", function()
                     local initialConditions = cab.talentConditions
+                    -- Restrict picker to current spec (aura bars are per-spec)
+                    local specID = CooldownCompanion._currentSpecId
+                    local specHint = specID and { specs = { [specID] = true } } or nil
                     CooldownCompanion:OpenTalentPicker(function(results)
                         if results then
                             local normalized, changed = CooldownCompanion:NormalizeTalentConditions(results)
@@ -3506,7 +3509,7 @@ local function BuildCustomAuraBarPanel(container, slotIdx)
                         CooldownCompanion:ApplyResourceBars()
                         CooldownCompanion:UpdateAnchorStacking()
                         CooldownCompanion:RefreshConfigPanel()
-                    end, initialConditions, nil)
+                    end, initialConditions, specHint)
                 end)
                 talentBtnRow:AddChild(pickBtn)
 
