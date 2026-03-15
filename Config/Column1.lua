@@ -24,6 +24,7 @@ local CancelDrag = ST._CancelDrag
 local StartDragTracking = ST._StartDragTracking
 local GetScaledCursorPosition = ST._GetScaledCursorPosition
 local BuildGroupExportData = ST._BuildGroupExportData
+local BuildContainerExportData = ST._BuildContainerExportData
 local EncodeExportData = ST._EncodeExportData
 local ContainersHaveForeignSpecs = ST._ContainersHaveForeignSpecs
 local FolderHasForeignSpecs = ST._FolderHasForeignSpecs
@@ -606,19 +607,20 @@ local function RefreshColumn1(preserveDrag)
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
-                                local exportGroups = {}
+                                local exportContainers = {}
                                 for cid in pairs(CS.selectedGroups) do
                                     local c = db.groupContainers[cid]
                                     if c then
-                                        -- Export each panel of each selected container
-                                        for gid, g in pairs(db.groups) do
-                                            if g.parentContainerId == cid then
-                                                table.insert(exportGroups, BuildGroupExportData(g))
-                                            end
+                                        local containerData = BuildContainerExportData(c)
+                                        local sortedPanels = CooldownCompanion:GetPanels(cid)
+                                        local panels = {}
+                                        for _, entry in ipairs(sortedPanels) do
+                                            panels[#panels + 1] = BuildGroupExportData(entry.group)
                                         end
+                                        exportContainers[#exportContainers + 1] = { container = containerData, panels = panels }
                                     end
                                 end
-                                local payload = { type = "groups", version = 1, groups = exportGroups }
+                                local payload = { type = "containers", version = 1, containers = exportContainers }
                                 local exportString = EncodeExportData(payload)
                                 ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
                             end
@@ -627,18 +629,13 @@ local function RefreshColumn1(preserveDrag)
                             info.notCheckable = true
                             info.func = function()
                                 CloseDropDownMenus()
-                                -- Export container + all panels
+                                -- Export container + all panels (sorted by panel order)
+                                local sortedPanels = CooldownCompanion:GetPanels(containerId)
                                 local panels = {}
-                                for gid, g in pairs(db.groups) do
-                                    if g.parentContainerId == containerId then
-                                        table.insert(panels, BuildGroupExportData(g))
-                                    end
+                                for _, entry in ipairs(sortedPanels) do
+                                    panels[#panels + 1] = BuildGroupExportData(entry.group)
                                 end
-                                local containerData = CopyTable(container)
-                                containerData.createdBy = nil
-                                containerData.order = nil
-                                containerData.folderId = nil
-                                containerData.isGlobal = nil
+                                local containerData = BuildContainerExportData(container)
                                 local payload = { type = "container", version = 1, container = containerData, panels = panels }
                                 local exportString = EncodeExportData(payload)
                                 ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
@@ -1160,18 +1157,26 @@ local function RefreshColumn1(preserveDrag)
                         if folder.heroTalents and next(folder.heroTalents) then
                             folderData.heroTalents = CopyTable(folder.heroTalents)
                         end
-                        -- Collect all panels from containers in this folder
-                        local childGroups = {}
+                        -- Collect containers in order, then build export data
+                        local orderedCids = {}
                         for cid, c in pairs(db.groupContainers) do
                             if c.folderId == folderId then
-                                for gid, g in pairs(db.groups) do
-                                    if g.parentContainerId == cid then
-                                        table.insert(childGroups, BuildGroupExportData(g))
-                                    end
-                                end
+                                orderedCids[#orderedCids + 1] = { cid = cid, order = c.order or cid }
                             end
                         end
-                        local payload = { type = "folder", version = 1, folder = folderData, groups = childGroups }
+                        table.sort(orderedCids, function(a, b) return a.order < b.order end)
+                        local exportContainers = {}
+                        for _, item in ipairs(orderedCids) do
+                            local c = db.groupContainers[item.cid]
+                            local containerData = BuildContainerExportData(c)
+                            local sortedPanels = CooldownCompanion:GetPanels(item.cid)
+                            local panels = {}
+                            for _, entry in ipairs(sortedPanels) do
+                                panels[#panels + 1] = BuildGroupExportData(entry.group)
+                            end
+                            exportContainers[#exportContainers + 1] = { container = containerData, panels = panels }
+                        end
+                        local payload = { type = "folder", version = 2, folder = folderData, containers = exportContainers }
                         local exportString = EncodeExportData(payload)
                         ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
                     end

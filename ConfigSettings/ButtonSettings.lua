@@ -14,6 +14,7 @@ local CreateInfoButton = ST._CreateInfoButton
 local ApplyCheckboxIndent = ST._ApplyCheckboxIndent
 local HasTooltipCooldown = ST.HasTooltipCooldown
 local BuildGroupExportData = ST._BuildGroupExportData
+local BuildContainerExportData = ST._BuildContainerExportData
 local EncodeExportData = ST._EncodeExportData
 
 -- Imports from SectionBuilders.lua (used by BuildOverridesTab)
@@ -1109,11 +1110,7 @@ local function RefreshPanelMultiSelect(scroll, multiCount, multiPanelIds)
     exportBtn:SetText("Export Selected")
     exportBtn:SetFullWidth(true)
     exportBtn:SetCallback("OnClick", function()
-        local containerData = CopyTable(db.groupContainers[containerId])
-        containerData.createdBy = nil
-        containerData.order = nil
-        containerData.folderId = nil
-        containerData.isGlobal = nil
+        local containerData = BuildContainerExportData(db.groupContainers[containerId])
         local exportPanels = {}
         for _, pid in ipairs(multiPanelIds) do
             local p = db.groups[pid]

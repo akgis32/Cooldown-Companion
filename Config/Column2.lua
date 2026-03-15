@@ -24,6 +24,7 @@ local OnAutocompleteSelect = ST._OnAutocompleteSelect
 local SearchAutocomplete = ST._SearchAutocomplete
 local OpenAutoAddFlow = ST._OpenAutoAddFlow
 local BuildGroupExportData = ST._BuildGroupExportData
+local BuildContainerExportData = ST._BuildContainerExportData
 local EncodeExportData = ST._EncodeExportData
 local GroupsHaveForeignSpecs = ST._GroupsHaveForeignSpecs
 
@@ -753,15 +754,20 @@ local function RefreshColumn2()
         exportBtn:SetText("Export Selected")
         exportBtn:SetFullWidth(true)
         exportBtn:SetCallback("OnClick", function()
-            local exportGroups = {}
+            local exportContainers = {}
             for _, cid in ipairs(multiContainerIds) do
-                for gid, g in pairs(db.groups) do
-                    if g.parentContainerId == cid then
-                        table.insert(exportGroups, BuildGroupExportData(g))
+                local c = db.groupContainers[cid]
+                if c then
+                    local containerData = BuildContainerExportData(c)
+                    local sortedPanels = CooldownCompanion:GetPanels(cid)
+                    local panels = {}
+                    for _, entry in ipairs(sortedPanels) do
+                        panels[#panels + 1] = BuildGroupExportData(entry.group)
                     end
+                    exportContainers[#exportContainers + 1] = { container = containerData, panels = panels }
                 end
             end
-            local payload = { type = "groups", version = 1, groups = exportGroups }
+            local payload = { type = "containers", version = 1, containers = exportContainers }
             local exportString = EncodeExportData(payload)
             ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
         end)
@@ -1339,12 +1345,8 @@ local function RefreshColumn2()
                             info.func = function()
                                 CloseDropDownMenus()
                                 local db = CooldownCompanion.db.profile
-                                local containerData = CopyTable(db.groupContainers[ctxContainerId])
+                                local containerData = BuildContainerExportData(db.groupContainers[ctxContainerId])
                                 containerData.name = ctxPanel.name or "Panel"
-                                containerData.createdBy = nil
-                                containerData.order = nil
-                                containerData.folderId = nil
-                                containerData.isGlobal = nil
                                 local payload = { type = "container", version = 1, container = containerData, panels = { BuildGroupExportData(ctxPanel) } }
                                 local exportString = EncodeExportData(payload)
                                 ShowPopupAboveConfig("CDC_EXPORT_GROUP", nil, { exportString = exportString })
