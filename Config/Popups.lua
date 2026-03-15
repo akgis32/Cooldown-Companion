@@ -559,8 +559,24 @@ local function ApplyProfileImport(data)
         end
     end
 
+    -- Detect legacy (pre-container) profile before sentinels are cleared.
+    local isLegacyProfile = not db.profile.groupContainers or not next(db.profile.groupContainers)
+
     CooldownCompanion:ClearMigrationSentinels()
     CooldownCompanion:RunAllMigrations()
+
+    -- Legacy profiles have folder specs on folders, not containers.
+    -- MigrateGroupsToContainers wraps groups but the folder-spec cascade
+    -- is skipped (ClearMigrationSentinels forces the sentinel to true).
+    -- Cascade manually now that migration has created the containers.
+    if isLegacyProfile and db.profile.folders then
+        for folderId, folder in pairs(db.profile.folders) do
+            if folder.specs and next(folder.specs) then
+                CooldownCompanion:ApplyFolderSpecFilterToChildren(folderId)
+            end
+        end
+    end
+
     CooldownCompanion:RefreshConfigPanel()
     CooldownCompanion:RefreshAllGroups()
 end
