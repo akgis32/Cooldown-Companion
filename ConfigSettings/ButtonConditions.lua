@@ -1522,7 +1522,7 @@ local function BuildLoadConditionsTab(container)
 
     local formInfoBtn = CreateInfoButton(formHeading.frame, formCollapseBtn, "LEFT", "RIGHT", 2, 0, {
         "Form / Stance Filter",
-        {"Click each form to cycle through three states:\n\n|cff00ff00Show|r: panel is visible when in this form.\n|cffff0000Hide|r: panel is hidden when in this form.\nEmpty: this form has no effect.\n\nLeave all unchecked to always show the panel.", 1, 1, 1, true},
+        {"Click to cycle: |cff00ff00Show|r, |cffff0000Hide|r, or empty.\n\n|cff00ff00Show|r: visible in these, hidden otherwise.\n|cffff0000Hide|r: hidden in these, visible otherwise.\n\nMixed: Show takes priority. All empty = always visible.", 1, 1, 1, true},
     }, tabInfoButtons)
     formHeading.right:ClearAllPoints()
     formHeading.right:SetPoint("RIGHT", formHeading.frame, "RIGHT", -3, 0)
