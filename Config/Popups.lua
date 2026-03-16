@@ -1028,8 +1028,14 @@ local function ImportGroupData(text)
                         if containerIdMap[refOldId] then
                             container.anchor.relativeTo = "CooldownCompanionContainer" .. containerIdMap[refOldId]
                             changed = true
-                        elseif not db.groupContainers[refOldId] then
-                            container.anchor.relativeTo = "UIParent"
+                        else
+                            container.anchor = {
+                                point = "CENTER",
+                                relativeTo = "UIParent",
+                                relativePoint = "CENTER",
+                                x = 0,
+                                y = 0,
+                            }
                             changed = true
                         end
                         if changed then
@@ -1050,16 +1056,28 @@ local function ImportGroupData(text)
                     if containerRef then
                         if containerIdMap[containerRef] then
                             panel.anchor.relativeTo = "CooldownCompanionContainer" .. containerIdMap[containerRef]
-                        elseif not db.groupContainers[containerRef] then
-                            panel.anchor.relativeTo = "CooldownCompanionContainer" .. panel.parentContainerId
+                        else
+                            panel.anchor = {
+                                point = "CENTER",
+                                relativeTo = "CooldownCompanionContainer" .. panel.parentContainerId,
+                                relativePoint = "CENTER",
+                                x = 0,
+                                y = 0,
+                            }
                         end
                     else
                         local groupRef = tonumber(rt:match("^CooldownCompanionGroup(%d+)$"))
                         if groupRef then
                             if groupIdMap[groupRef] then
                                 panel.anchor.relativeTo = "CooldownCompanionGroup" .. groupIdMap[groupRef]
-                            elseif not db.groups[groupRef] then
-                                panel.anchor.relativeTo = "CooldownCompanionContainer" .. panel.parentContainerId
+                            else
+                                panel.anchor = {
+                                    point = "CENTER",
+                                    relativeTo = "CooldownCompanionContainer" .. panel.parentContainerId,
+                                    relativePoint = "CENTER",
+                                    x = 0,
+                                    y = 0,
+                                }
                             end
                         end
                     end
@@ -1197,8 +1215,14 @@ local function ImportGroupData(text)
                             if containerIdMap[refOldId] then
                                 container.anchor.relativeTo = "CooldownCompanionContainer" .. containerIdMap[refOldId]
                                 changed = true
-                            elseif not db.groupContainers[refOldId] then
-                                container.anchor.relativeTo = "UIParent"
+                            else
+                                container.anchor = {
+                                    point = "CENTER",
+                                    relativeTo = "UIParent",
+                                    relativePoint = "CENTER",
+                                    x = 0,
+                                    y = 0,
+                                }
                                 changed = true
                             end
                             if changed then
@@ -1219,16 +1243,28 @@ local function ImportGroupData(text)
                         if containerRef then
                             if containerIdMap[containerRef] then
                                 panel.anchor.relativeTo = "CooldownCompanionContainer" .. containerIdMap[containerRef]
-                            elseif not db.groupContainers[containerRef] then
-                                panel.anchor.relativeTo = "CooldownCompanionContainer" .. panel.parentContainerId
+                            else
+                                panel.anchor = {
+                                    point = "CENTER",
+                                    relativeTo = "CooldownCompanionContainer" .. panel.parentContainerId,
+                                    relativePoint = "CENTER",
+                                    x = 0,
+                                    y = 0,
+                                }
                             end
                         else
                             local groupRef = tonumber(rt:match("^CooldownCompanionGroup(%d+)$"))
                             if groupRef then
                                 if groupIdMap[groupRef] then
                                     panel.anchor.relativeTo = "CooldownCompanionGroup" .. groupIdMap[groupRef]
-                                elseif not db.groups[groupRef] then
-                                    panel.anchor.relativeTo = "CooldownCompanionContainer" .. panel.parentContainerId
+                                else
+                                    panel.anchor = {
+                                        point = "CENTER",
+                                        relativeTo = "CooldownCompanionContainer" .. panel.parentContainerId,
+                                        relativePoint = "CENTER",
+                                        x = 0,
+                                        y = 0,
+                                    }
                                 end
                             end
                         end
@@ -1267,6 +1303,24 @@ local function ImportGroupData(text)
         container.locked = true
         db.groupContainers[containerId] = container
         CooldownCompanion:CreateContainerFrame(containerId)
+        -- Clean up stale container anchor reference
+        if container.anchor then
+            local rt = container.anchor.relativeTo
+            if rt then
+                local refId = tonumber(rt:match("^CooldownCompanionContainer(%d+)$"))
+                if refId then
+                    container.anchor = {
+                        point = "CENTER",
+                        relativeTo = "UIParent",
+                        relativePoint = "CENTER",
+                        x = 0,
+                        y = 0,
+                    }
+                    local cf = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[containerId]
+                    if cf then CooldownCompanion:AnchorContainerFrame(cf, container.anchor) end
+                end
+            end
+        end
 
         local count = 0
         local groupIdMap = {}
@@ -1303,7 +1357,7 @@ local function ImportGroupData(text)
                 if rt then
                     local containerRef = tonumber(rt:match("^CooldownCompanionContainer(%d+)$"))
                     if containerRef then
-                        if containerRef ~= containerId and not db.groupContainers[containerRef] then
+                        if containerRef ~= containerId then
                             panel.anchor.relativeTo = "CooldownCompanionContainer" .. containerId
                         end
                     else
@@ -1311,8 +1365,14 @@ local function ImportGroupData(text)
                         if groupRef then
                             if groupIdMap[groupRef] then
                                 panel.anchor.relativeTo = "CooldownCompanionGroup" .. groupIdMap[groupRef]
-                            elseif not db.groups[groupRef] then
-                                panel.anchor.relativeTo = "CooldownCompanionContainer" .. containerId
+                            else
+                                panel.anchor = {
+                                    point = "CENTER",
+                                    relativeTo = "CooldownCompanionContainer" .. containerId,
+                                    relativePoint = "CENTER",
+                                    x = 0,
+                                    y = 0,
+                                }
                             end
                         end
                     end
@@ -1367,10 +1427,19 @@ local function ImportGroupData(text)
                     local rt = ctr.anchor.relativeTo
                     if rt then
                         local refId = tonumber(rt:match("^CooldownCompanionContainer(%d+)$"))
-                        if refId and not db.groupContainers[refId] then
-                            ctr.anchor.relativeTo = "UIParent"
-                            local cf = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[cid]
-                            if cf then CooldownCompanion:AnchorContainerFrame(cf, ctr.anchor) end
+                        if refId then
+                            local ref = db.groupContainers[refId]
+                            if not ref or ref.folderId ~= v1FolderImportId then
+                                ctr.anchor = {
+                                    point = "CENTER",
+                                    relativeTo = "UIParent",
+                                    relativePoint = "CENTER",
+                                    x = 0,
+                                    y = 0,
+                                }
+                                local cf = CooldownCompanion.containerFrames and CooldownCompanion.containerFrames[cid]
+                                if cf then CooldownCompanion:AnchorContainerFrame(cf, ctr.anchor) end
+                            end
                         end
                     end
                 end
