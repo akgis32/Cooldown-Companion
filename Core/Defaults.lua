@@ -52,6 +52,7 @@ local defaults = {
                         borderColor = {0, 0, 0, 1},
                         backgroundColor = {0, 0, 0, 0.5},
                         orientation = "horizontal", -- "horizontal" or "vertical"
+                        growthOrigin = "TOPLEFT", -- "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT"
                         buttonsPerRow = 12,
                         showCooldownText = true,
                         cooldownFontSize = 12,

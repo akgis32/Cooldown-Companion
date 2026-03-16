@@ -288,6 +288,30 @@ local function BuildLayoutTab(container)
         container:AddChild(orientDrop)
     end
 
+    -- Growth Direction (all display modes, 2+ buttons)
+    if #group.buttons > 1 then
+        local isBarMode = group.displayMode == "bars"
+        local orient = style.orientation or (isBarMode and "vertical" or "horizontal")
+        local labels, order
+        if orient == "vertical" then
+            labels = { TOPLEFT = "Down, Right", TOPRIGHT = "Down, Left", BOTTOMLEFT = "Up, Right", BOTTOMRIGHT = "Up, Left" }
+        else
+            labels = { TOPLEFT = "Right, Down", TOPRIGHT = "Left, Down", BOTTOMLEFT = "Right, Up", BOTTOMRIGHT = "Left, Up" }
+        end
+        order = {"TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT"}
+        local growthDrop = AceGUI:Create("Dropdown")
+        growthDrop:SetLabel("Growth Direction")
+        growthDrop:SetList(labels, order)
+        growthDrop:SetValue(style.growthOrigin or "TOPLEFT")
+        growthDrop:SetFullWidth(true)
+        growthDrop:SetCallback("OnValueChanged", function(widget, event, val)
+            style.growthOrigin = val
+            CooldownCompanion:RefreshGroupFrame(CS.selectedGroup)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(growthDrop)
+    end
+
     -- Buttons Per Row/Column (icon/bar modes only; text mode has its own slider)
     if group.displayMode ~= "text" then
         local numButtons = math.max(1, #group.buttons)
