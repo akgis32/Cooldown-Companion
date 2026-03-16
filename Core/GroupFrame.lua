@@ -79,12 +79,33 @@ local function NormalizeCompactGrowthDirection(growthDirection)
     return "center"
 end
 
-local function GetCompactAnchorFixedPoint(orientation, compactGrowthDirection)
+local function GetGrowthMultipliers(growthOrigin)
+    if growthOrigin == "TOPRIGHT" then return -1, -1, "TOPRIGHT" end
+    if growthOrigin == "BOTTOMLEFT" then return 1, 1, "BOTTOMLEFT" end
+    if growthOrigin == "BOTTOMRIGHT" then return -1, 1, "BOTTOMRIGHT" end
+    return 1, -1, "TOPLEFT"
+end
+
+local FLIP_HORIZONTAL = {
+    TOPLEFT = "TOPRIGHT", TOPRIGHT = "TOPLEFT",
+    BOTTOMLEFT = "BOTTOMRIGHT", BOTTOMRIGHT = "BOTTOMLEFT",
+}
+local FLIP_VERTICAL = {
+    TOPLEFT = "BOTTOMLEFT", TOPRIGHT = "BOTTOMRIGHT",
+    BOTTOMLEFT = "TOPLEFT", BOTTOMRIGHT = "TOPRIGHT",
+}
+
+local function GetCompactAnchorFixedPoint(orientation, compactGrowthDirection, growthOrigin)
+    growthOrigin = growthOrigin or "TOPLEFT"
     if compactGrowthDirection == "start" then
-        return (orientation == "horizontal") and "TOPLEFT" or "TOPLEFT"
+        return growthOrigin
     end
     if compactGrowthDirection == "end" then
-        return (orientation == "horizontal") and "TOPRIGHT" or "BOTTOMLEFT"
+        if orientation == "horizontal" then
+            return FLIP_HORIZONTAL[growthOrigin]
+        else
+            return FLIP_VERTICAL[growthOrigin]
+        end
     end
     return nil
 end
@@ -634,10 +655,13 @@ function CooldownCompanion:PopulateGroupButtons(groupId)
         frame.textHeader:SetJustifyH(align)
         frame.textHeader:SetText(group.name or "")
         frame.textHeader:ClearAllPoints()
-        local anchor = align == "RIGHT" and "TOPRIGHT" or align == "CENTER" and "TOP" or "TOPLEFT"
+        local growthOrigin = style.growthOrigin or "TOPLEFT"
+        local vEdge = (growthOrigin == "BOTTOMLEFT" or growthOrigin == "BOTTOMRIGHT") and "BOTTOM" or "TOP"
+        local anchor = align == "RIGHT" and (vEdge .. "RIGHT") or align == "CENTER" and vEdge or (vEdge .. "LEFT")
         local parentAnchor = anchor
         local xOff = (align == "CENTER") and 0 or (align == "RIGHT") and -2 or 2
-        frame.textHeader:SetPoint(anchor, frame, parentAnchor, xOff, -1)
+        local yOff = vEdge == "BOTTOM" and 1 or -1
+        frame.textHeader:SetPoint(anchor, frame, parentAnchor, xOff, yOff)
         frame.textHeader:SetWidth(frame:GetWidth() - 4)
         frame.textHeader:Show()
         headerHeight = fontSize + 4
@@ -647,6 +671,7 @@ function CooldownCompanion:PopulateGroupButtons(groupId)
     frame._textHeaderHeight = headerHeight
 
     -- Create new buttons (skip untalented spells)
+    local xMul, yMul, growthAnchor = GetGrowthMultipliers(style.growthOrigin)
     local visibleIndex = 0
     for i, buttonData in ipairs(group.buttons) do
         if self:IsButtonUsable(buttonData) then
@@ -667,12 +692,11 @@ function CooldownCompanion:PopulateGroupButtons(groupId)
             if orientation == "horizontal" then
                 row = math_floor((visibleIndex - 1) / buttonsPerRow)
                 col = (visibleIndex - 1) % buttonsPerRow
-                button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -(row * (buttonHeight + spacing) + yOffset))
             else
                 col = math_floor((visibleIndex - 1) / buttonsPerRow)
                 row = (visibleIndex - 1) % buttonsPerRow
-                button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -(row * (buttonHeight + spacing) + yOffset))
             end
+            button:SetPoint(growthAnchor, frame, growthAnchor, xMul * col * (buttonWidth + spacing), yMul * (row * (buttonHeight + spacing) + yOffset))
 
             button:Show()
             table_insert(frame.buttons, button)
@@ -762,7 +786,7 @@ function CooldownCompanion:ResizeGroupFrame(groupId)
     frame:SetSize(targetWidth, targetHeight)
 
     local compactGrowthDirection = NormalizeCompactGrowthDirection(group.compactGrowthDirection)
-    local fixedPoint = group.compactLayout and GetCompactAnchorFixedPoint(orientation, compactGrowthDirection) or nil
+    local fixedPoint = group.compactLayout and GetCompactAnchorFixedPoint(orientation, compactGrowthDirection, style.growthOrigin) or nil
     local canCompensateAnchor = frame._hasBeenSized and oldWidth > 0 and oldHeight > 0
     if fixedPoint and canCompensateAnchor then
         local anchorPoint = (group.anchor and group.anchor.point) or "CENTER"
@@ -822,6 +846,7 @@ function CooldownCompanion:UpdateGroupLayout(groupId)
 
     local visibleCount = #visibleButtons
     local headerH = frame._textHeaderHeight or 0
+    local xMul, yMul, growthAnchor = GetGrowthMultipliers(style.growthOrigin)
     for visibleIndex, button in ipairs(visibleButtons) do
         button:ClearAllPoints()
         local row, col = GetCompactSlotForIndex(
@@ -831,7 +856,7 @@ function CooldownCompanion:UpdateGroupLayout(groupId)
             orientation,
             compactGrowthDirection
         )
-        button:SetPoint("TOPLEFT", frame, "TOPLEFT", col * (buttonWidth + spacing), -(row * (buttonHeight + spacing) + headerH))
+        button:SetPoint(growthAnchor, frame, growthAnchor, xMul * col * (buttonWidth + spacing), yMul * (row * (buttonHeight + spacing) + headerH))
     end
 
     if frame.visibleButtonCount ~= visibleCount then

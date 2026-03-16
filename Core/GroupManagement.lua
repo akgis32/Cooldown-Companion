@@ -469,6 +469,7 @@ function CooldownCompanion:CreatePanel(containerId, displayMode)
     -- Style defaults (nil-guard respects user-customized globalStyle)
     local style = db.groups[groupId].style
     style.orientation = "horizontal"
+    style.growthOrigin = "TOPLEFT"
     style.buttonsPerRow = 12
     style.showCooldownText = true
     if style.desaturateOnCooldown == nil then style.desaturateOnCooldown = true end

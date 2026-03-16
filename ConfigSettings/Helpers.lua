@@ -389,17 +389,20 @@ local function GetCompactGrowthDirectionLabels(group)
     local style = group.style or {}
     local isBarMode = group.displayMode == "bars"
     local orientation = style.orientation or (isBarMode and "vertical" or "horizontal")
+    local growthOrigin = style.growthOrigin or "TOPLEFT"
     if orientation == "vertical" then
+        local startIsTop = (growthOrigin == "TOPLEFT" or growthOrigin == "TOPRIGHT")
         return {
-            start = "Top",
+            start = startIsTop and "Top" or "Bottom",
             center = "Center",
-            ["end"] = "Bottom",
+            ["end"] = startIsTop and "Bottom" or "Top",
         }
     end
+    local startIsLeft = (growthOrigin == "TOPLEFT" or growthOrigin == "BOTTOMLEFT")
     return {
-        start = "Left",
+        start = startIsLeft and "Left" or "Right",
         center = "Center",
-        ["end"] = "Right",
+        ["end"] = startIsLeft and "Right" or "Left",
     }
 end
 
