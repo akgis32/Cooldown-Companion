@@ -363,6 +363,9 @@ function CooldownCompanion:UpdateButtonIcon(button)
 
     if buttonData.type == "spell" then
         overrideId = C_Spell.GetOverrideSpell(buttonData.id)
+        if overrideId == buttonData.id or overrideId == 0 then
+            overrideId = nil
+        end
         -- Look up viewer child for current override info (icon, display name).
         -- For override spells (ability→buff mapping), viewerAuraFrames may point
         -- to a BuffIcon/BuffBar child whose spellID is the buff, not the ability.
@@ -410,13 +413,10 @@ function CooldownCompanion:UpdateButtonIcon(button)
                     -- pass it straight through — do not test or branch on it.
                     icon = iconTexture:GetTextureFileID()
                 else
-                    -- No icon widget found — use spell API fallback
-                    local fallbackId = displayId
-                        or child.cooldownInfo.overrideSpellID
-                        or child.cooldownInfo.spellID
-                    if fallbackId then
-                        icon = C_Spell.GetSpellTexture(fallbackId)
-                    end
+                    -- No icon widget found — use spell API fallback.
+                    -- Always use buttonData.id: GetSpellTexture dynamically
+                    -- resolves the current visual (including talent transforms).
+                    icon = C_Spell.GetSpellTexture(buttonData.id)
                 end
             else
                 -- For passive aura-tracked buttons, read the viewer frame's Icon
@@ -437,11 +437,10 @@ function CooldownCompanion:UpdateButtonIcon(button)
                     end
                 end
                 if not hasViewerIcon then
-                    -- Fallback: static spell texture (viewer hidden or unavailable)
-                    local fallbackId = displayId or child.cooldownInfo.spellID
-                    if fallbackId then
-                        icon = C_Spell.GetSpellTexture(fallbackId)
-                    end
+                    -- Fallback: static spell texture (viewer hidden or unavailable).
+                    -- Always use buttonData.id: GetSpellTexture dynamically
+                    -- resolves the current visual (including talent transforms).
+                    icon = C_Spell.GetSpellTexture(buttonData.id)
                 end
             end
         end
@@ -451,7 +450,9 @@ function CooldownCompanion:UpdateButtonIcon(button)
             displayId = overrideId
         end
         if not icon then
-            icon = C_Spell.GetSpellTexture(displayId)
+            -- Always use buttonData.id: GetSpellTexture dynamically
+            -- resolves the current visual (including talent transforms).
+            icon = C_Spell.GetSpellTexture(buttonData.id)
         end
     elseif buttonData.type == "item" then
         icon = C_Item.GetItemIconByID(buttonData.id)
