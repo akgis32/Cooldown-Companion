@@ -951,6 +951,24 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         end
     end
 
+    -- Deferred cooldown stabilization: spells like Nature's Swiftness, Stasis,
+    -- Tip the Scales report a phantom 0.001s cooldown (with isEnabled=false)
+    -- during their "wait" state, causing the swipe to restart every tick.
+    -- Detect via: spell reports active cooldown but IsSpellUsable returns false
+    -- (buff must be consumed first).  Suppress the phantom cooldown data below.
+    if buttonData.type == "spell" and not buttonData.isPassive
+       and not buttonData.hasCharges and not auraOverrideActive
+       and button._desatCooldownActive then
+        local isUsable = C_Spell_IsSpellUsable(cooldownSpellId or buttonData.id)
+        if not isUsable then
+            button._deferredCDWait = true
+        else
+            button._deferredCDWait = nil
+        end
+    else
+        if button._deferredCDWait then button._deferredCDWait = nil end
+    end
+
     -- Track on-CD → off-CD transition for ready glow duration timer.
     -- desatWasActive is true only when the previous tick had an active cooldown,
     -- so nil → false (initial load) does NOT set a start time.
@@ -958,6 +976,14 @@ function CooldownCompanion:UpdateButtonCooldown(button)
         button._readyGlowStartTime = GetTime()
     elseif button._desatCooldownActive == true then
         button._readyGlowStartTime = nil
+    end
+
+    -- During deferred wait, suppress the oscillating cooldown data so
+    -- downstream systems (bar fill, visibility, swipe, time text) see
+    -- a clean "no active cooldown" state while desaturation stays held.
+    if button._deferredCDWait then
+        button._durationObj = nil
+        button.cooldown:SetCooldown(0, 0)
     end
 
     if not button._isBar and not button._isText then
@@ -1150,6 +1176,10 @@ function CooldownCompanion:UpdateButtonCooldown(button)
                     scratchCooldown:Hide()
                 else
                     cooldownActive = false
+                end
+                -- Suppress false "ready" sound during deferred CD wait
+                if button._deferredCDWait then
+                    cooldownActive = true
                 end
             end
 
