@@ -103,7 +103,11 @@ end
 -- Shared by icon-mode and bar-mode display paths.
 local function UpdateIconTint(button, buttonData, style)
     if buttonData.isPassive then
-        local c = style.iconTintColor
+        local c
+        if style.iconAuraTintEnabled and buttonData.auraTracking and button._auraActive then
+            c = style.iconAuraTintColor
+        end
+        c = c or style.iconTintColor
         local r, g, b, a = c and c[1] or 1, c and c[2] or 1, c and c[3] or 1, c and c[4] or 1
         if button._vertexR ~= r or button._vertexG ~= g or button._vertexB ~= b or button._vertexA ~= a then
             button._vertexR, button._vertexG, button._vertexB, button._vertexA = r, g, b, a
