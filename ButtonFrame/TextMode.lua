@@ -664,8 +664,6 @@ local function UpdateTextStyle(button, newStyle)
     -- Install or remove effect animation OnUpdate
     InstallEffectOnUpdate(button)
 
-    -- Invalidate deferred cooldown state (consistent with Icon/Bar style resets)
-    button._deferredCDWait = nil
 end
 
 ------------------------------------------------------------------------

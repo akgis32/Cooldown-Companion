@@ -29,12 +29,6 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
         return
     end
 
-    -- Pre-compute spell cooldown state used by hideWhileOnCooldown / hideWhileNotOnCooldown
-    -- across primary checks and all baseline-alpha fallback blocks.
-    -- _deferredCDWait preserves "on cooldown" semantics while _durationObj is suppressed.
-    local spellOnCD = (button._deferredCDWait or (button._durationObj and not isGCDOnly)) and not auraOverrideActive
-    local spellNotOnCD = not button._deferredCDWait and (not button._durationObj or isGCDOnly) and not auraOverrideActive
-
     local shouldHide = false
     local hidReasonOnCooldown = false
     local hidReasonNotOnCooldown = false
@@ -58,7 +52,8 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
                 hidReasonOnCooldown = true
             end
         else
-            if spellOnCD then
+            -- Non-charged spells: _durationObj non-nil means active CD (secret-safe nil check)
+            if button._durationObj and not isGCDOnly and not auraOverrideActive then
                 shouldHide = true
                 hidReasonOnCooldown = true
             end
@@ -79,7 +74,8 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
                 hidReasonNotOnCooldown = true
             end
         else
-            if spellNotOnCD then
+            -- Non-charged spells: not on cooldown (or only on GCD)
+            if (not button._durationObj or isGCDOnly) and not auraOverrideActive then
                 shouldHide = true
                 hidReasonNotOnCooldown = true
             end
@@ -168,7 +164,9 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
             elseif buttonData.type == "item" then
                 if button._itemCdDuration and button._itemCdDuration > 0 then otherHide = true end
             else
-                if spellOnCD then otherHide = true end
+                if button._durationObj and not isGCDOnly and not auraOverrideActive then
+                    otherHide = true
+                end
             end
         end
         if buttonData.hideWhileNotOnCooldown then
@@ -177,7 +175,7 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
             elseif buttonData.type == "item" then
                 if not button._itemCdDuration or button._itemCdDuration == 0 then otherHide = true end
             else
-                if spellNotOnCD then otherHide = true end
+                if (not button._durationObj or isGCDOnly) and not auraOverrideActive then otherHide = true end
             end
         end
         if buttonData.hideWhileAuraActive and auraOverrideActive then
@@ -209,7 +207,9 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
             elseif buttonData.type == "item" then
                 if button._itemCdDuration and button._itemCdDuration > 0 then otherHide = true end
             else
-                if spellOnCD then otherHide = true end
+                if button._durationObj and not isGCDOnly and not auraOverrideActive then
+                    otherHide = true
+                end
             end
         end
         if buttonData.hideWhileNotOnCooldown then
@@ -218,7 +218,7 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
             elseif buttonData.type == "item" then
                 if not button._itemCdDuration or button._itemCdDuration == 0 then otherHide = true end
             else
-                if spellNotOnCD then otherHide = true end
+                if (not button._durationObj or isGCDOnly) and not auraOverrideActive then otherHide = true end
             end
         end
         if buttonData.hideWhileAuraNotActive and not auraOverrideActive then
@@ -403,7 +403,9 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
             elseif buttonData.type == "item" then
                 if button._itemCdDuration and button._itemCdDuration > 0 then otherHide = true end
             else
-                if spellOnCD then otherHide = true end
+                if button._durationObj and not isGCDOnly and not auraOverrideActive then
+                    otherHide = true
+                end
             end
         end
         if buttonData.hideWhileNotOnCooldown and not button._noCooldown then
@@ -412,7 +414,7 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
             elseif buttonData.type == "item" then
                 if not button._itemCdDuration or button._itemCdDuration == 0 then otherHide = true end
             else
-                if spellNotOnCD then otherHide = true end
+                if (not button._durationObj or isGCDOnly) and not auraOverrideActive then otherHide = true end
             end
         end
         if buttonData.hideWhileAuraNotActive and not auraOverrideActive then otherHide = true end
@@ -444,7 +446,9 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
             elseif buttonData.type == "item" then
                 if button._itemCdDuration and button._itemCdDuration > 0 then otherHide = true end
             else
-                if spellOnCD then otherHide = true end
+                if button._durationObj and not isGCDOnly and not auraOverrideActive then
+                    otherHide = true
+                end
             end
         end
         if buttonData.hideWhileNotOnCooldown and not button._noCooldown then
@@ -453,7 +457,7 @@ local function EvaluateButtonVisibility(button, buttonData, isGCDOnly, auraOverr
             elseif buttonData.type == "item" then
                 if not button._itemCdDuration or button._itemCdDuration == 0 then otherHide = true end
             else
-                if spellNotOnCD then otherHide = true end
+                if (not button._durationObj or isGCDOnly) and not auraOverrideActive then otherHide = true end
             end
         end
         if buttonData.hideWhileAuraNotActive and not auraOverrideActive then otherHide = true end
