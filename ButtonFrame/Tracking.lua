@@ -103,9 +103,11 @@ end
 -- Shared by icon-mode and bar-mode display paths.
 local function UpdateIconTint(button, buttonData, style)
     if buttonData.isPassive then
-        if button._vertexR ~= 1 or button._vertexG ~= 1 or button._vertexB ~= 1 or button._vertexA ~= 1 then
-            button._vertexR, button._vertexG, button._vertexB, button._vertexA = 1, 1, 1, 1
-            button.icon:SetVertexColor(1, 1, 1, 1)
+        local c = style.iconTintColor
+        local r, g, b, a = c and c[1] or 1, c and c[2] or 1, c and c[3] or 1, c and c[4] or 1
+        if button._vertexR ~= r or button._vertexG ~= g or button._vertexB ~= b or button._vertexA ~= a then
+            button._vertexR, button._vertexG, button._vertexB, button._vertexA = r, g, b, a
+            button.icon:SetVertexColor(r, g, b, a)
         end
         return
     end
