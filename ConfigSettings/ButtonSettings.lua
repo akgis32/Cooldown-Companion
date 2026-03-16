@@ -32,6 +32,7 @@ local BuildShowGCDSwipeControls = ST._BuildShowGCDSwipeControls
 local BuildCooldownSwipeControls = ST._BuildCooldownSwipeControls
 local BuildLossOfControlControls = ST._BuildLossOfControlControls
 local BuildUnusableDimmingControls = ST._BuildUnusableDimmingControls
+local BuildIconTintControls = ST._BuildIconTintControls
 local BuildAssistedHighlightControls = ST._BuildAssistedHighlightControls
 local BuildProcGlowControls = ST._BuildProcGlowControls
 local BuildPandemicGlowControls = ST._BuildPandemicGlowControls
@@ -1324,9 +1325,9 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
 
     -- Ordered list of sections to display (maintain consistent ordering)
     local sectionOrder = {
-        "borderSettings", "backgroundColor", "cooldownText", "auraText", "auraStackText",
+        "borderSettings", "cooldownText", "auraText", "auraStackText",
         "keybindText", "chargeText", "desaturation", "cooldownSwipe", "showGCDSwipe", "showOutOfRange", "showTooltips",
-        "lossOfControl", "unusableDimming", "assistedHighlight", "procGlow", "pandemicGlow", "auraIndicator", "readyGlow",
+        "lossOfControl", "unusableDimming", "iconTint", "assistedHighlight", "procGlow", "pandemicGlow", "auraIndicator", "readyGlow",
         "barColors", "barNameText", "barReadyText", "pandemicBar", "barActiveAura",
         "textFont", "textColors", "textBackground",
     }
@@ -1334,7 +1335,6 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
     -- Map of section IDs to builder functions
     local sectionBuilders = {
         borderSettings = BuildBorderControls,
-        backgroundColor = BuildBackgroundColorControls,
         cooldownText = BuildCooldownTextControls,
         auraText = BuildAuraTextControls,
         auraStackText = BuildAuraStackTextControls,
@@ -1347,6 +1347,10 @@ local function BuildOverridesTab(scroll, buttonData, infoButtons)
         showTooltips = BuildShowTooltipsControls,
         lossOfControl = BuildLossOfControlControls,
         unusableDimming = BuildUnusableDimmingControls,
+        iconTint = function(container, styleTable, onChange)
+            BuildIconTintControls(container, styleTable, onChange)
+            BuildBackgroundColorControls(container, styleTable, onChange)
+        end,
         assistedHighlight = BuildAssistedHighlightControls,
         procGlow = BuildProcGlowControls,
         pandemicGlow = BuildPandemicGlowControls,

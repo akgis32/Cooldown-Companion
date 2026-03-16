@@ -694,6 +694,83 @@ local function BuildShowOutOfRangeControls(container, styleTable, refreshCallbac
     return cb
 end
 
+local function BuildIconTintControls(container, styleTable, refreshCallback)
+    local baseTint = AceGUI:Create("ColorPicker")
+    baseTint:SetLabel("Base Icon Color")
+    baseTint:SetHasAlpha(true)
+    local bt = styleTable.iconTintColor or {1, 1, 1, 1}
+    baseTint:SetColor(bt[1], bt[2], bt[3], bt[4])
+    baseTint:SetFullWidth(true)
+    baseTint:SetCallback("OnValueChanged", function(w, e, r, g, b, a)
+        styleTable.iconTintColor = {r, g, b, a}
+        refreshCallback()
+    end)
+    baseTint:SetCallback("OnValueConfirmed", function(w, e, r, g, b, a)
+        styleTable.iconTintColor = {r, g, b, a}
+        refreshCallback()
+    end)
+    container:AddChild(baseTint)
+
+    local cdTintCb = AceGUI:Create("CheckBox")
+    cdTintCb:SetLabel("Use Separate Cooldown Tint")
+    cdTintCb:SetValue(styleTable.iconCooldownTintEnabled or false)
+    cdTintCb:SetFullWidth(true)
+    cdTintCb:SetCallback("OnValueChanged", function(w, e, val)
+        styleTable.iconCooldownTintEnabled = val
+        refreshCallback()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(cdTintCb)
+
+    if styleTable.iconCooldownTintEnabled then
+        local cdTint = AceGUI:Create("ColorPicker")
+        cdTint:SetLabel("Cooldown Icon Color")
+        cdTint:SetHasAlpha(true)
+        local ct = styleTable.iconCooldownTintColor or {1, 0, 0.102, 1}
+        cdTint:SetColor(ct[1], ct[2], ct[3], ct[4])
+        cdTint:SetFullWidth(true)
+        cdTint:SetCallback("OnValueChanged", function(w, e, r, g, b, a)
+            styleTable.iconCooldownTintColor = {r, g, b, a}
+            refreshCallback()
+        end)
+        cdTint:SetCallback("OnValueConfirmed", function(w, e, r, g, b, a)
+            styleTable.iconCooldownTintColor = {r, g, b, a}
+            refreshCallback()
+        end)
+        container:AddChild(cdTint)
+    end
+
+    local auraTintCb = AceGUI:Create("CheckBox")
+    auraTintCb:SetLabel("Use Separate Aura Tint")
+    auraTintCb:SetValue(styleTable.iconAuraTintEnabled or false)
+    auraTintCb:SetFullWidth(true)
+    auraTintCb:SetCallback("OnValueChanged", function(w, e, val)
+        styleTable.iconAuraTintEnabled = val
+        refreshCallback()
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    container:AddChild(auraTintCb)
+
+    if styleTable.iconAuraTintEnabled then
+        local auraTint = AceGUI:Create("ColorPicker")
+        auraTint:SetLabel("Aura Active Icon Color")
+        auraTint:SetHasAlpha(true)
+        local at = styleTable.iconAuraTintColor or {0, 0.925, 1, 1}
+        auraTint:SetColor(at[1], at[2], at[3], at[4])
+        auraTint:SetFullWidth(true)
+        auraTint:SetCallback("OnValueChanged", function(w, e, r, g, b, a)
+            styleTable.iconAuraTintColor = {r, g, b, a}
+            refreshCallback()
+        end)
+        auraTint:SetCallback("OnValueConfirmed", function(w, e, r, g, b, a)
+            styleTable.iconAuraTintColor = {r, g, b, a}
+            refreshCallback()
+        end)
+        container:AddChild(auraTint)
+    end
+
+end
+
 local function BuildShowGCDSwipeControls(container, styleTable, refreshCallback)
     local cb = AceGUI:Create("CheckBox")
     cb:SetLabel("Show GCD Swipe")
@@ -1685,6 +1762,7 @@ ST._BuildShowGCDSwipeControls = BuildShowGCDSwipeControls
 ST._BuildCooldownSwipeControls = BuildCooldownSwipeControls
 ST._BuildLossOfControlControls = BuildLossOfControlControls
 ST._BuildUnusableDimmingControls = BuildUnusableDimmingControls
+ST._BuildIconTintControls = BuildIconTintControls
 ST._BuildAssistedHighlightControls = BuildAssistedHighlightControls
 ST._BuildProcGlowControls = BuildProcGlowControls
 ST._BuildPandemicGlowControls = BuildPandemicGlowControls
