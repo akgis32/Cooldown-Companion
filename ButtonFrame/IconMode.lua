@@ -786,6 +786,7 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
     button._vertexR = nil
     button._vertexG = nil
     button._vertexB = nil
+    button._vertexA = nil
     button._chargeText = nil
     button._chargeCountReadable = nil
     button._zeroChargesConfirmed = nil

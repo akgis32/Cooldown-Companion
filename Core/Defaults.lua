@@ -91,6 +91,11 @@ local defaults = {
                         assistedHighlightProcColor = {1, 1, 1, 1},
                         assistedHighlightCombatOnly = false,
                         showUnusable = true,
+                        iconTintColor = {1, 1, 1, 1},           -- base icon vertex color (RGBA)
+                        iconCooldownTintEnabled = false,         -- apply separate tint when on cooldown
+                        iconCooldownTintColor = {1, 0, 0.102, 1}, -- cooldown tint (default: 60% opacity white)
+                        iconAuraTintEnabled = false,             -- apply separate tint when aura is active
+                        iconAuraTintColor = {0, 0.925, 1, 1},       -- aura tint (default: white full opacity)
                         showLossOfControl = false,
                         procGlowOverhang = 32,
                         procGlowColor = {1, 1, 1, 1},
@@ -225,6 +230,11 @@ local defaults = {
             assistedHighlightProcOverhang = 32,
             assistedHighlightCombatOnly = false,
             showUnusable = false,
+            iconTintColor = {1, 1, 1, 1},
+            iconCooldownTintEnabled = false,
+            iconCooldownTintColor = {1, 0, 0.102, 1},
+            iconAuraTintEnabled = false,
+            iconAuraTintColor = {0, 0.925, 1, 1},
             showLossOfControl = false,
             procGlowOverhang = 32,
             procGlowColor = {1, 1, 1, 1},
@@ -522,6 +532,11 @@ ST.OVERRIDE_SECTIONS = {
     unusableDimming = {
         label = "Unusable Dimming",
         keys = {"showUnusable"},
+        modes = {icons = true, bars = true},
+    },
+    iconTint = {
+        label = "Icon Tint",
+        keys = {"iconTintColor", "iconCooldownTintEnabled", "iconCooldownTintColor", "iconAuraTintEnabled", "iconAuraTintColor"},
         modes = {icons = true, bars = true},
     },
     assistedHighlight = {

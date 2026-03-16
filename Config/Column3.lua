@@ -243,8 +243,33 @@ local function RefreshColumn3()
         -- Migrate stale tab / text-mode redirect
         if isTextMode and CS.panelSettingsTab == "effects" then CS.panelSettingsTab = "appearance" end
 
+        -- Save scroll state before SelectTab releases the old ScrollFrame
+        local savedOffset, savedScrollvalue
+        local prevScroll = col3Normal._panelSettingsScroll
+        if prevScroll then
+            local s = prevScroll.status or prevScroll.localstatus
+            if s and s.offset and s.offset > 0 then
+                savedOffset = s.offset
+                savedScrollvalue = s.scrollvalue
+            end
+        end
+
         col3Normal._panelTabGroup.frame:Show()
         col3Normal._panelTabGroup:SelectTab(CS.panelSettingsTab or "appearance")
+
+        -- Stash a reference on col3 so we can find it next refresh
+        col3Normal._panelSettingsScroll = CS.col4Scroll
+
+        -- Restore scroll state on the new scroll widget.  LayoutFinished has already
+        -- scheduled FixScrollOnUpdate for next frame — it will read these values.
+        if savedOffset and CS.col4Scroll then
+            local s = CS.col4Scroll.status or CS.col4Scroll.localstatus
+            if s then
+                s.offset = savedOffset
+                s.scrollvalue = savedScrollvalue
+            end
+        end
+
         return
     end
 

@@ -29,6 +29,7 @@ local BuildShowGCDSwipeControls = ST._BuildShowGCDSwipeControls
 local BuildCooldownSwipeControls = ST._BuildCooldownSwipeControls
 local BuildLossOfControlControls = ST._BuildLossOfControlControls
 local BuildUnusableDimmingControls = ST._BuildUnusableDimmingControls
+local BuildIconTintControls = ST._BuildIconTintControls
 local BuildAssistedHighlightControls = ST._BuildAssistedHighlightControls
 local BuildProcGlowControls = ST._BuildProcGlowControls
 local BuildPandemicGlowControls = ST._BuildPandemicGlowControls
@@ -1807,6 +1808,60 @@ local function BuildAppearanceTab(container)
     end)
     container:AddChild(borderColor)
     end -- not borderCollapsed
+
+    -- Icon Tint
+    local iconTintHeading = AceGUI:Create("Heading")
+    iconTintHeading:SetText("Icon Tint")
+    ColorHeading(iconTintHeading)
+    iconTintHeading:SetFullWidth(true)
+    container:AddChild(iconTintHeading)
+
+    local iconTintCollapsed = CS.collapsedSections["appearance_iconTint"]
+    AttachCollapseButton(iconTintHeading, iconTintCollapsed, function()
+        CS.collapsedSections["appearance_iconTint"] = not CS.collapsedSections["appearance_iconTint"]
+        CooldownCompanion:RefreshConfigPanel()
+    end)
+    local iconTintPromoteBtn = CreatePromoteButton(iconTintHeading, "iconTint", CS.selectedButton and group.buttons[CS.selectedButton], style)
+
+    local iconTintInfoBtn = CreateInfoButton(iconTintHeading.frame, iconTintPromoteBtn, "LEFT", "RIGHT", 2, 0, {
+        "Icon Tint",
+        {"Recolor or fade icons without affecting cooldown text, glows, or borders.", 1, 1, 1, true},
+        " ",
+        {"Base Icon Color:", 1, 0.82, 0},
+        {"The default color for your icons. Lower the alpha to make icons semi-transparent while everything else stays visible.", 1, 1, 1, true},
+        " ",
+        {"Cooldown Tint:", 1, 0.82, 0},
+        {"A separate color used only while an ability is on cooldown. Great for dimming icons on cooldown while keeping ready abilities bright.", 1, 1, 1, true},
+        " ",
+        {"Aura Tint:", 1, 0.82, 0},
+        {"A separate color applied while an aura-tracked ability's buff or debuff is active. Only affects buttons with aura tracking enabled.", 1, 1, 1, true},
+    }, tabInfoButtons)
+
+    iconTintHeading.right:ClearAllPoints()
+    iconTintHeading.right:SetPoint("RIGHT", iconTintHeading.frame, "RIGHT", -3, 0)
+    iconTintHeading.right:SetPoint("LEFT", iconTintInfoBtn, "RIGHT", 4, 0)
+
+    if not iconTintCollapsed then
+        BuildIconTintControls(container, style, function()
+            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        end)
+        BuildBackgroundColorControls(container, style, function()
+            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+        end)
+
+        local resetTintBtn = AceGUI:Create("Button")
+        resetTintBtn:SetText("Reset Tint Settings to Default")
+        resetTintBtn:SetFullWidth(true)
+        resetTintBtn:SetCallback("OnClick", function()
+            style.iconTintColor = {1, 1, 1, 1}
+            style.iconCooldownTintColor = {1, 0, 0.102, 1}
+            style.iconAuraTintColor = {0, 0.925, 1, 1}
+            style.backgroundColor = {0, 0, 0, 0.5}
+            CooldownCompanion:UpdateGroupStyle(CS.selectedGroup)
+            CooldownCompanion:RefreshConfigPanel()
+        end)
+        container:AddChild(resetTintBtn)
+    end -- not iconTintCollapsed
 
     -- Masque skinning (icon-only)
     if CooldownCompanion.Masque then

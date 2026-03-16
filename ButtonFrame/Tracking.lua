@@ -99,21 +99,23 @@ local function UpdateItemChargeTracking(button, buttonData)
     end
 end
 
--- Icon tinting: out-of-range red > unusable dimming > normal white.
+-- Icon tinting: out-of-range red > unusable dimming > cooldown tint > base tint.
 -- Shared by icon-mode and bar-mode display paths.
 local function UpdateIconTint(button, buttonData, style)
     if buttonData.isPassive then
-        if button._vertexR ~= 1 or button._vertexG ~= 1 or button._vertexB ~= 1 then
-            button._vertexR, button._vertexG, button._vertexB = 1, 1, 1
-            button.icon:SetVertexColor(1, 1, 1)
+        if button._vertexR ~= 1 or button._vertexG ~= 1 or button._vertexB ~= 1 or button._vertexA ~= 1 then
+            button._vertexR, button._vertexG, button._vertexB, button._vertexA = 1, 1, 1, 1
+            button.icon:SetVertexColor(1, 1, 1, 1)
         end
         return
     end
-    local r, g, b = 1, 1, 1
+    local r, g, b, a = 1, 1, 1, 1
+    local stateOverride = false
     if style.showOutOfRange then
         if buttonData.type == "spell" then
             if button._spellOutOfRange then
                 r, g, b = 1, 0.2, 0.2
+                stateOverride = true
             end
         elseif buttonData.type == "item" then
             -- IsItemInRange is protected during combat lockdown; skip range tinting in combat
@@ -122,26 +124,48 @@ local function UpdateIconTint(button, buttonData, style)
                 -- inRange is nil when no target or item has no range; only tint on explicit false
                 if inRange == false then
                     r, g, b = 1, 0.2, 0.2
+                    stateOverride = true
                 end
             end
         end
     end
-    if r == 1 and g == 1 and b == 1 and style.showUnusable then
+    if not stateOverride and style.showUnusable then
         if buttonData.type == "spell" then
             local isUsable = C_Spell.IsSpellUsable(buttonData.id)
             if not isUsable then
                 r, g, b = 0.4, 0.4, 0.4
+                stateOverride = true
             end
         elseif buttonData.type == "item" then
             local usable, noMana = IsUsableItem(buttonData.id)
             if not usable then
                 r, g, b = 0.4, 0.4, 0.4
+                stateOverride = true
             end
         end
     end
-    if button._vertexR ~= r or button._vertexG ~= g or button._vertexB ~= b then
-        button._vertexR, button._vertexG, button._vertexB = r, g, b
-        button.icon:SetVertexColor(r, g, b)
+    -- Apply user-configured icon tint when no state override is active
+    if not stateOverride then
+        if style.iconAuraTintEnabled and buttonData.auraTracking and button._auraActive then
+            local c = style.iconAuraTintColor
+            if c then
+                r, g, b, a = c[1], c[2], c[3], c[4]
+            end
+        elseif style.iconCooldownTintEnabled and button._desatCooldownActive then
+            local c = style.iconCooldownTintColor
+            if c then
+                r, g, b, a = c[1], c[2], c[3], c[4]
+            end
+        else
+            local c = style.iconTintColor
+            if c then
+                r, g, b, a = c[1], c[2], c[3], c[4]
+            end
+        end
+    end
+    if button._vertexR ~= r or button._vertexG ~= g or button._vertexB ~= b or button._vertexA ~= a then
+        button._vertexR, button._vertexG, button._vertexB, button._vertexA = r, g, b, a
+        button.icon:SetVertexColor(r, g, b, a)
     end
 end
 
