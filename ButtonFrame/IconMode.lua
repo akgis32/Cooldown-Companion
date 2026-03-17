@@ -265,6 +265,8 @@ function CooldownCompanion:CreateButtonFrame(parent, index, buttonData, style)
     button._showingAuraIcon = false
     button._auraViewerFrame = nil
     button._lastViewerTexId = nil
+    button._lastSpellTexture = nil
+    button._spellTexBaseline = nil
 
     button._auraInstanceID = nil
     button._viewerAuraVisualsActive = nil
@@ -419,13 +421,41 @@ function CooldownCompanion:UpdateButtonIcon(button)
                     icon = C_Spell.GetSpellTexture(buttonData.id)
                 end
             else
-                -- For non-cdmChildSlot buttons, always use the spell API for
-                -- icon resolution. GetSpellTexture dynamically resolves the
-                -- current visual including buff transforms (e.g. Tiger's Fury
-                -- empowering Rake/Rip). The viewer frame's Icon texture is NOT
-                -- used here — it tracks the aura's fixed icon on the target,
-                -- which doesn't reflect ability-level transforms.
-                icon = C_Spell.GetSpellTexture(buttonData.id)
+                -- For non-cdmChildSlot buttons, read the viewer frame's Icon
+                -- (for stage transitions like Heating Up → Hot Streak) but
+                -- prefer the spell API when it has changed from baseline
+                -- (buff transforms like Tiger's Fury empowering Rake/Rip).
+                local vf = button._auraViewerFrame
+                local hasViewerIcon
+                if vf then
+                    local iconTexture = vf.Icon
+                    if iconTexture and not iconTexture.GetTextureFileID then
+                        iconTexture = iconTexture.Icon
+                    end
+                    if iconTexture and iconTexture.GetTextureFileID then
+                        icon = iconTexture:GetTextureFileID()
+                        hasViewerIcon = true
+                    end
+                end
+                if hasViewerIcon then
+                    -- Disambiguate buff transforms vs stage transitions using
+                    -- _spellTexBaseline (frozen while viewer is active).
+                    -- Buff transform: spell API changed from baseline → use spell.
+                    -- Stage transition: spell API unchanged → keep viewer icon.
+                    -- Baseline only updates when no viewer, so multiple UBI calls
+                    -- in the same tick all detect the transform consistently.
+                    if not issecretvalue(icon) then
+                        local spellIcon = C_Spell.GetSpellTexture(buttonData.id)
+                        if spellIcon and spellIcon ~= button._spellTexBaseline then
+                            icon = spellIcon
+                        end
+                    end
+                else
+                    icon = C_Spell.GetSpellTexture(buttonData.id)
+                    -- Update baseline only when no viewer is active — keeps
+                    -- it frozen during viewer presence to prevent oscillation.
+                    button._spellTexBaseline = icon
+                end
             end
         end
         -- Always validate displayId against the Spell API — the viewer child may
@@ -784,6 +814,8 @@ function CooldownCompanion:UpdateButtonStyle(button, style)
     button._showingAuraIcon = nil
     button._auraViewerFrame = nil
     button._lastViewerTexId = nil
+    button._lastSpellTexture = nil
+    button._spellTexBaseline = nil
 
     button._auraInstanceID = nil
     button._inPandemic = nil
