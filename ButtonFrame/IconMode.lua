@@ -419,29 +419,13 @@ function CooldownCompanion:UpdateButtonIcon(button)
                     icon = C_Spell.GetSpellTexture(buttonData.id)
                 end
             else
-                -- For passive aura-tracked buttons, read the viewer frame's Icon
-                -- widget which updates per-stage (e.g. Heating Up → Hot Streak).
-                -- Same BuffIcon/BuffBar dual-structure handling as cdmChildSlot above.
-                local vf = button._auraViewerFrame
-                local hasViewerIcon
-                if vf then
-                    local iconTexture = vf.Icon
-                    if iconTexture and not iconTexture.GetTextureFileID then
-                        iconTexture = iconTexture.Icon
-                    end
-                    if iconTexture and iconTexture.GetTextureFileID then
-                        -- GetTextureFileID may return a secret value in combat;
-                        -- pass it straight through — do not test or branch on it.
-                        icon = iconTexture:GetTextureFileID()
-                        hasViewerIcon = true
-                    end
-                end
-                if not hasViewerIcon then
-                    -- Fallback: static spell texture (viewer hidden or unavailable).
-                    -- Always use buttonData.id: GetSpellTexture dynamically
-                    -- resolves the current visual (including talent transforms).
-                    icon = C_Spell.GetSpellTexture(buttonData.id)
-                end
+                -- For non-cdmChildSlot buttons, always use the spell API for
+                -- icon resolution. GetSpellTexture dynamically resolves the
+                -- current visual including buff transforms (e.g. Tiger's Fury
+                -- empowering Rake/Rip). The viewer frame's Icon texture is NOT
+                -- used here — it tracks the aura's fixed icon on the target,
+                -- which doesn't reflect ability-level transforms.
+                icon = C_Spell.GetSpellTexture(buttonData.id)
             end
         end
         -- Always validate displayId against the Spell API — the viewer child may
